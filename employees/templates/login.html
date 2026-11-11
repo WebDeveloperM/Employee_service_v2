@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="uz-Cyrl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тизимга кириш</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Manrope', 'system-ui', 'sans-serif'],
+                        display: ['IBM Plex Sans', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Manrope', system-ui, sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(37, 99, 235, 0.18), transparent 24%),
+                radial-gradient(circle at bottom right, rgba(239, 125, 50, 0.18), transparent 22%),
+                linear-gradient(135deg, #eef4fb 0%, #f9fbff 50%, #fff6ef 100%);
+        }
+    </style>
+</head>
+
+<body class="min-h-screen text-slate-900">
+    <div class="mx-auto grid min-h-screen max-w-7xl items-center gap-10 px-6 py-10 lg:grid-cols-[1.1fr_0.9fr]">
+        <section class="hidden rounded-[2rem] bg-slate-900 p-10 text-white shadow-2xl lg:block">
+            <div class="flex h-full flex-col justify-between">
+                <div>
+                    <div class="mb-8 inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-white/10 text-[#ef7d32]">
+                        <i class="fas fa-id-card-clip text-3xl"></i>
+                    </div>
+                    <p class="font-display text-4xl font-bold tracking-wide text-[#ef7d32]">bnpzID</p>
+                    <h1 class="mt-8 max-w-xl font-display text-5xl font-bold leading-tight">Ходимларни бошқариш тизимига хавфсиз кириш</h1>
+                    <p class="mt-5 max-w-lg text-base leading-7 text-slate-300">Цехлар, ходимлар ва фойдаланувчиларни битта панелда бошқариш. Администратор ва HR учун паролдан кейин қўшимча Face ID текшируви ўтказилади.</p>
+                </div>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div class="rounded-3xl border border-white/10 bg-white/5 p-5">
+                        <p class="text-sm uppercase tracking-[0.22em] text-slate-400">Роллар</p>
+                        <p class="mt-3 text-2xl font-bold">Admin, HR</p>
+                    </div>
+                    <div class="rounded-3xl border border-white/10 bg-white/5 p-5">
+                        <p class="text-sm uppercase tracking-[0.22em] text-slate-400">Текширув</p>
+                        <p class="mt-3 text-2xl font-bold">Парол + Face ID</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mx-auto w-full max-w-md">
+            <div class="rounded-[2rem] border border-white/70 bg-white/90 p-8 shadow-[0_30px_80px_rgba(15,23,42,0.12)] backdrop-blur">
+                <div class="mb-8 text-center lg:text-left">
+                    <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-3xl bg-[#fff0e4] text-[#ef7d32] lg:mx-0">
+                        <i class="fas fa-right-to-bracket text-2xl"></i>
+                    </div>
+                    <h2 class="font-display text-3xl font-bold text-slate-900">{% if face_auth_required %}Face ID тасдиғи{% elif bnpzid_request %}bnpzID орқали кириш{% else %}Тизимга кириш{% endif %}</h2>
+                    <p class="mt-2 text-sm text-slate-500">{% if face_auth_required %}Фойдаланувчи {{ pending_username }} ({{ pending_role_display }}) юз текширувидан ўтиши керак{% elif bnpzid_request %}Ягона bnpzID аккаунти орқали {{ bnpzid_request.client_name }} тизимига кириш{% else %}Бошқарув панелига ўз ҳисобингиз орқали киринг{% endif %}</p>
+                </div>
+
+                {% if error_message %}
+                <div class="mb-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                    <i class="fas fa-circle-exclamation mr-2"></i>{{ error_message }}
+                </div>
+                {% endif %}
+
+                {% if face_auth_required %}
+                <div class="space-y-5">
+                    <div id="faceAuthStatus" class="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-700">
+                        Камерага қаранг ва тасдиқлаш тугмасини босинг.
+                    </div>
+
+                    <div id="loginCameraContainer" class="overflow-hidden rounded-3xl border border-slate-200 bg-slate-950">
+                        <video id="loginCameraVideo" autoplay playsinline muted class="h-72 w-full object-cover"></video>
+                    </div>
+                    <canvas id="loginCameraCanvas" class="hidden"></canvas>
+
+                    <div class="flex gap-3">
+                        <button type="button" onclick="openLoginCamera()" class="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700">
+                            <i class="fas fa-camera"></i>
+                            <span>Камерани ёқиш</span>
+                        </button>
+                        <a href="/login/?reset=1" class="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700">
+                            <i class="fas fa-arrow-left"></i>
+                            <span>Орқага</span>
+                        </a>
+                    </div>
+
+                    <button id="verifyFaceButton" type="button" onclick="verifyFaceLogin()"
+                        class="inline-flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-[#ef7d32] to-[#2563eb] px-4 text-sm font-bold text-white shadow-lg shadow-blue-200 transition hover:translate-y-[-1px]">
+                        <i class="fas fa-face-smile"></i>
+                        <span>Face ID ни тасдиқлаш</span>
+                    </button>
+                </div>
+                {% else %}
+                <form method="post" class="space-y-5">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ next_url }}">
+                    {% if bnpzid_request %}
+                    <input type="hidden" name="client_id" value="{{ bnpzid_request.client_id }}">
+                    <input type="hidden" name="redirect_uri" value="{{ bnpzid_request.redirect_uri }}">
+                    <input type="hidden" name="state" value="{{ bnpzid_request.state }}">
+                    <div class="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-700">
+                        Муваффақиятли кирганингиздан сўнг сиз автоматик равишда қуйидаги тизимга қайтарилади: {{ bnpzid_request.client_name }}.
+                    </div>
+                    {% endif %}
+
+                    <div>
+                        <label for="username" class="mb-2 block text-sm font-semibold text-slate-700">Логин</label>
+                        <div class="relative">
+                            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-slate-400">
+                                <i class="fas fa-user"></i>
+                            </span>
+                            <input id="username" name="username" type="text" value="{{ username|default:'' }}" required autofocus
+                                class="h-14 w-full rounded-2xl border border-slate-200 bg-white pl-12 pr-4 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                                placeholder="Логинни киритинг">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label for="password" class="mb-2 block text-sm font-semibold text-slate-700">Парол</label>
+                        <div class="relative">
+                            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-slate-400">
+                                <i class="fas fa-lock"></i>
+                            </span>
+                            <input id="password" name="password" type="password" required
+                                class="h-14 w-full rounded-2xl border border-slate-200 bg-white pl-12 pr-12 text-sm outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                                placeholder="Паролни киритинг">
+                            <button type="button" onclick="togglePassword()" class="absolute inset-y-0 right-0 px-4 text-slate-400 hover:text-slate-700">
+                                <i id="passwordIcon" class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <button type="submit"
+                        class="inline-flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-[#ef7d32] to-[#2563eb] px-4 text-sm font-bold text-white shadow-lg shadow-blue-200 transition hover:translate-y-[-1px]">
+                        <i class="fas fa-arrow-right-to-bracket"></i>
+                        <span>Кириш</span>
+                    </button>
+
+                </form>
+                {% endif %}
+            </div>
+        </section>
+    </div>
+
+    <script>
+        let loginCameraStream = null;
+
+
+        function togglePassword() {
+            const passwordInput = document.getElementById('password');
+            const passwordIcon = document.getElementById('passwordIcon');
+            const isPassword = passwordInput.type === 'password';
+            passwordInput.type = isPassword ? 'text' : 'password';
+            passwordIcon.className = isPassword ? 'fas fa-eye-slash' : 'fas fa-eye';
+        }
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        function escapeHtml(value) {
+            const div = document.createElement('div');
+            div.textContent = value == null ? '' : String(value);
+            return div.innerHTML;
+        }
+
+
+        async function openLoginCamera() {
+            setFaceAuthStatus('Камера ишга туширилмоқда...', false);
+
+            if (!window.isSecureContext) {
+                setFaceAuthStatus('Камера мавжуд эмас: саҳифа хавфсиз контекстда эмас. HTTPS орқали ёки localhost орқали очинг.', true);
+                return;
+            }
+
+            if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+                setFaceAuthStatus('Браузер камерага кириш имконини қўллаб-қувватламайди (mediaDevices мавжуд эмас).', true);
+                return;
+            }
+
+            const video = document.getElementById('loginCameraVideo');
+            if (!video) {
+                setFaceAuthStatus('Саҳифада видео элементи топилмади.', true);
+                return;
+            }
+
+            if (loginCameraStream) {
+                setFaceAuthStatus('Камера аллақачон ёқилган. Тўғридан-тўғри объективга қаранг.', false);
+                return;
+            }
+
+            try {
+                loginCameraStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
+                });
+                video.srcObject = loginCameraStream;
+                await video.play();
+                setFaceAuthStatus('Камера ёқилди. Тўғридан-тўғри объективга қаранг.', false);
+            } catch (error) {
+                loginCameraStream = null;
+                let msg;
+                switch (error.name) {
+                    case 'NotAllowedError':
+                        msg = 'Камерага рухсат берилмаган. Манзил қаторидаги камера белгисини босиб рухсат беринг, сўнгра саҳифани янгиланг.';
+                        break;
+                    case 'NotFoundError':
+                        msg = 'Камера топилмади. Веб-камерани улаб, саҳифани янгиланг.';
+                        break;
+                    case 'NotReadableError':
+                        msg = 'Камера бошқа дастур томонидан банд қилинган. Уни ёпиб, қайта уриниб кўринг.';
+                        break;
+                    case 'OverconstrainedError':
+                        msg = 'Камера сўралган параметрларни қўллаб-қувватламайди.';
+                        break;
+                    case 'AbortError':
+                        msg = 'Камерани сўраш тўхтатилди.';
+                        break;
+                    default:
+                        msg = 'Камерани ёқиб бўлмади: ' + (error.message || error.name || 'Номаълум хато');
+                }
+                setFaceAuthStatus(msg, true);
+                console.error('openLoginCamera error:', error.name, error.message, error);
+            }
+        }
+
+        function closeLoginCamera() {
+            if (loginCameraStream) {
+                loginCameraStream.getTracks().forEach(track => track.stop());
+                loginCameraStream = null;
+            }
+        }
+
+        function setFaceAuthStatus(message, isError = false) {
+            const box = document.getElementById('faceAuthStatus');
+            if (!box) {
+                return;
+            }
+            box.textContent = message;
+            box.className = isError
+                ? 'rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700'
+                : 'rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-700';
+        }
+
+        function captureLoginFrame() {
+            const video = document.getElementById('loginCameraVideo');
+            const canvas = document.getElementById('loginCameraCanvas');
+            if (!video || !canvas || !video.videoWidth || !video.videoHeight) {
+                return null;
+            }
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            return canvas.toDataURL('image/jpeg', 0.92);
+        }
+
+        function wait(ms) {
+            return new Promise(resolve => window.setTimeout(resolve, ms));
+        }
+
+        async function captureLoginSamples() {
+            const samples = [];
+            for (let i = 0; i < 3; i++) {
+                const frame = captureLoginFrame();
+                if (frame) {
+                    samples.push(frame);
+                }
+                if (i < 2) {
+                    await wait(180);
+                }
+            }
+            return samples;
+        }
+
+        async function verifyFaceLogin() {
+            const button = document.getElementById('verifyFaceButton');
+            button.disabled = true;
+            const originalContent = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Текширилмоқда...</span>';
+
+            try {
+                await openLoginCamera();
+                await wait(500);
+                const capturedImages = await captureLoginSamples();
+                if (!capturedImages.length) {
+                    throw new Error('Камерадан тасвирни олиб бўлмади.');
+                }
+
+                const response = await fetch('/api/v1/auth/login-face-verify/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken'),
+                    },
+                    body: JSON.stringify({ captured_images: capturedImages }),
+                });
+
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || data.message || 'Face ID текшируви бажарилмади.');
+                }
+
+                if (!data.verified) {
+                    throw new Error(data.message || 'Face ID тасдиқланмади.');
+                }
+
+                setFaceAuthStatus(`Face ID тасдиқланди. Ўхшашлик: ${data.similarity}%`, false);
+                closeLoginCamera();
+                window.location.href = data.redirect_url || '/';
+            } catch (error) {
+                setFaceAuthStatus(error.message || 'Face ID текширувида хато.', true);
+            } finally {
+                button.disabled = false;
+                button.innerHTML = originalContent;
+            }
+        }
+
+        {% if face_auth_required %}
+        document.addEventListener('DOMContentLoaded', function () {
+            openLoginCamera();
+        });
+        window.addEventListener('beforeunload', closeLoginCamera);
+        {% endif %}
+    </script>
+</body>
+
+</html>

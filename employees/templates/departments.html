@@ -1,0 +1,685 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if page_mode == 'sections' %}Бўлимлар{% else %}Цехлар ва бўлимлар{% endif %} - Ходимлар хизмати{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    {% if page_mode != 'sections' %}
+    <section class="panel-card rounded-[28px] p-6">
+        <div class="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+                <h2 class="font-display text-2xl font-bold text-slate-900">
+                    <i class="fas fa-industry mr-2 text-blue-600"></i>
+                    Цехлар
+                </h2>
+                <p class="mt-1 text-sm text-slate-500">Цехларни бошқариш ва саралашнинг тўғри тартиби.</p>
+            </div>
+            <button onclick="showDepartmentModal()" class="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-700">
+                <i class="fas fa-plus"></i>
+                Цех қўшиш
+            </button>
+        </div>
+
+        <div class="mb-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+            <input type="text" id="departmentSearchInput" placeholder="Цехлар бўйича қидириш..." class="table-filter">
+            <button onclick="loadDepartments(1)" class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50">
+                <i class="fas fa-search mr-2"></i>Қидирув
+            </button>
+        </div>
+
+        <div class="overflow-x-auto rounded-[24px] border border-slate-200 bg-white">
+            <table class="min-w-full border-separate border-spacing-0">
+                <thead class="bg-slate-50 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+                    <tr>
+                        <th class="px-5 py-4 text-left">Тартиб</th>
+                        <th class="px-5 py-4 text-left">Номи</th>
+                        <th class="px-5 py-4 text-left">Раҳбар</th>
+                        <th class="px-5 py-4 text-right">Амаллар</th>
+                    </tr>
+                </thead>
+                <tbody id="departmentsTableBody"></tbody>
+            </table>
+        </div>
+
+        <div id="departmentsLoading" class="hidden px-4 py-8 text-center text-sm text-slate-500">
+            <span class="loading"></span>
+            <span class="ml-2">Цехлар юкланмоқда...</span>
+        </div>
+        <div id="departmentsEmptyState" class="hidden rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm font-semibold text-slate-500">
+            Цехлар топилмади.
+        </div>
+        <div id="departmentsPagination" class="mt-5"></div>
+    </section>
+    {% endif %}
+
+    <section id="sections" class="panel-card rounded-[28px] p-6">
+        <div class="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+                <h2 class="font-display text-2xl font-bold text-slate-900">
+                    <i class="fas fa-diagram-project mr-2 text-emerald-600"></i>
+                    Бўлимлар
+                </h2>
+                <p class="mt-1 text-sm text-slate-500">{% if page_mode == 'sections' %}Барча бўлимларни кўриш ва бошқариш. Керак бўлса, цех бўйича фильтрланг.{% else %}Боғланган бўлимларни кўриш ва бошқариш учун цехни танланг.{% endif %}</p>
+            </div>
+            <button onclick="showSectionModal()" class="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-700">
+                <i class="fas fa-plus"></i>
+                Бўлим қўшиш
+            </button>
+        </div>
+
+        <div class="mb-5 grid gap-3 lg:grid-cols-[280px_minmax(0,1fr)_auto]">
+            <select id="sectionDepartmentFilter" class="table-filter">
+                <option value="">{% if page_mode == 'sections' %}Барча цехлар{% else %}Цехни танланг{% endif %}</option>
+            </select>
+            <input type="text" id="sectionSearchInput" placeholder="Бўлимлар бўйича қидириш..." class="table-filter">
+            <button onclick="loadSections(1)" class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50">
+                <i class="fas fa-search mr-2"></i>Қидирув
+            </button>
+        </div>
+
+        <div class="mb-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+            <span id="selectedDepartmentCaption">{% if page_mode == 'sections' %}Барча цехларнинг бўлимлари кўрсатилган.{% else %}Аввал цехни танланг, шундан сўнг унинг бўлимлари кўринади.{% endif %}</span>
+        </div>
+
+        <div class="overflow-x-auto rounded-[24px] border border-slate-200 bg-white">
+            <table class="min-w-full border-separate border-spacing-0">
+                <thead class="bg-slate-50 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+                    <tr>
+                        <th class="px-5 py-4 text-left">Тартиб</th>
+                        <th class="px-5 py-4 text-left">ID</th>
+                        <th class="px-5 py-4 text-left">Бўлим</th>
+                        <th class="px-5 py-4 text-left">Цех</th>
+                        <th class="px-5 py-4 text-right">Амаллар</th>
+                    </tr>
+                </thead>
+                <tbody id="sectionsTableBody"></tbody>
+            </table>
+        </div>
+
+        <div id="sectionsLoading" class="hidden px-4 py-8 text-center text-sm text-slate-500">
+            <span class="loading"></span>
+            <span class="ml-2">Бўлимлар юкланмоқда...</span>
+        </div>
+        <div id="sectionsEmptyState" class="hidden rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm font-semibold text-slate-500">
+            Бўлимлар топилмади.
+        </div>
+        <div id="sectionsPagination" class="mt-5"></div>
+    </section>
+</div>
+
+{% if page_mode != 'sections' %}
+<div id="departmentModal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-slate-950/40 px-4 py-10">
+    <div class="mx-auto w-full max-w-md rounded-[28px] bg-white p-6 shadow-2xl">
+        <div class="mb-5 flex items-center justify-between">
+            <h3 id="departmentModalTitle" class="font-display text-xl font-bold text-slate-900">Цех қўшиш</h3>
+            <button onclick="hideDepartmentModal()" class="icon-action"><i class="fas fa-xmark"></i></button>
+        </div>
+        <form id="departmentForm" onsubmit="saveDepartment(event)" class="space-y-4">
+            <input type="hidden" id="departmentId">
+            <div>
+                <label class="mb-2 block text-sm font-bold text-slate-700" for="departmentName">Цех номи</label>
+                <input type="text" id="departmentName" required class="table-filter">
+            </div>
+            <div>
+                <label class="mb-2 block text-sm font-bold text-slate-700" for="departmentSortOrder">Цех ID си</label>
+                <input type="number" id="departmentSortOrder" min="0" step="1" value="0" inputmode="numeric" class="table-filter">
+                <p class="mt-2 text-xs text-slate-500">Рўйхат шу рақам бўйича тартибланади. 0 бўлса, цех номидаги рақам (масалан, «20-Цех» — 20) ёки охирги бўш рақам автоматик олинади.</p>
+            </div>
+            <div>
+                <label class="mb-2 block text-sm font-bold text-slate-700" for="departmentBoss">Цех раҳбари</label>
+                <input type="text" id="departmentBoss" class="table-filter">
+            </div>
+            <div class="flex justify-end gap-3 pt-2">
+                <button type="button" onclick="hideDepartmentModal()" class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600">Бекор қилиш</button>
+                <button type="submit" id="departmentSaveButton" class="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-bold text-white">Сақлаш</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<div id="sectionModal" class="fixed inset-0 z-50 hidden overflow-y-auto bg-slate-950/40 px-4 py-10">
+    <div class="mx-auto w-full max-w-md rounded-[28px] bg-white p-6 shadow-2xl">
+        <div class="mb-5 flex items-center justify-between">
+            <h3 id="sectionModalTitle" class="font-display text-xl font-bold text-slate-900">Бўлим қўшиш</h3>
+            <button onclick="hideSectionModal()" class="icon-action"><i class="fas fa-xmark"></i></button>
+        </div>
+        <form id="sectionForm" onsubmit="saveSection(event)" class="space-y-4">
+            <input type="hidden" id="sectionId">
+            <div>
+                <label class="mb-2 block text-sm font-bold text-slate-700" for="sectionDepartmentId">Цех</label>
+                <select id="sectionDepartmentId" required class="table-filter">
+                    <option value="">Цехни танланг</option>
+                </select>
+            </div>
+            <div>
+                <label class="mb-2 block text-sm font-bold text-slate-700" for="sectionParentId">Юқори бўлим</label>
+                <select id="sectionParentId" class="table-filter">
+                    <option value="">— Юқори бўлимсиз (асосий бўлим) —</option>
+                </select>
+                <p class="mt-2 text-xs text-slate-500">Ички бўлим яратиш учун шу цехдаги юқори бўлимни танланг.</p>
+            </div>
+            <div>
+                <label class="mb-2 block text-sm font-bold text-slate-700" for="sectionCode">Бўлим ID си</label>
+                <input type="text" id="sectionCode" maxlength="50" autocomplete="off" class="table-filter" placeholder="Масалан, 101">
+                <p class="mt-2 text-xs text-slate-500">ID фақат бир даражадаги (бир юқори бўлим остидаги) бўлимлар орасида ноёб: асосий бўлимлар цех ичида, ички бўлимлар эса ҳар бир юқори бўлим ичида алоҳида рақамланади.</p>
+            </div>
+            <div>
+                <label class="mb-2 block text-sm font-bold text-slate-700" for="sectionName">Бўлим номи</label>
+                <input type="text" id="sectionName" required class="table-filter">
+            </div>
+            <div class="flex justify-end gap-3 pt-2">
+                <button type="button" onclick="hideSectionModal()" class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600">Бекор қилиш</button>
+                <button type="submit" id="sectionSaveButton" class="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white">Сақлаш</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    // true на странице «Бўлимлар»: там нет таблицы цехов, а бўлимлар показываются сразу все.
+    const SECTIONS_ONLY = {% if page_mode == 'sections' %}true{% else %}false{% endif %};
+    let departmentsCurrentPage = 1;
+    let sectionsCurrentPage = 1;
+    let departmentsCache = [];
+
+    document.addEventListener('DOMContentLoaded', function () {
+        document.getElementById('departmentSearchInput')?.addEventListener('keypress', function (event) {
+            if (event.key === 'Enter') {
+                loadDepartments(1);
+            }
+        });
+
+        document.getElementById('sectionSearchInput').addEventListener('keypress', function (event) {
+            if (event.key === 'Enter') {
+                loadSections(1);
+            }
+        });
+
+        document.getElementById('sectionDepartmentFilter').addEventListener('change', function () {
+            syncSectionDepartmentCaption();
+            loadSections(1);
+        });
+
+        // Юқори бўлим фақат танланган цех ичидан олинади — цех ўзгарса, рўйхат қайта юкланади.
+        document.getElementById('sectionDepartmentId').addEventListener('change', function () {
+            const editingId = document.getElementById('sectionId').value;
+            loadParentOptions(this.value, '', editingId ? Number(editingId) : null).then(suggestSectionCode);
+        });
+        // Юқори бўлим алмашса, ID таклифи ҳам шу бўлимнинг ичидаги рақамларга қараб янгиланади.
+        document.getElementById('sectionParentId').addEventListener('change', suggestSectionCode);
+        // Фойдаланувчи ID ни ўзи ёзса, таклиф уни қайта ёзиб юбормайди.
+        document.getElementById('sectionCode').addEventListener('input', function () { this.dataset.touched = '1'; });
+
+        loadDepartments(1, true);
+        if (window.location.hash === '#sections') {
+            document.getElementById('sections')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    });
+
+    function fillDepartmentSelectOptions(selectId, selectedValue = '') {
+        const select = document.getElementById(selectId);
+        if (!select) return;
+
+        const firstOptionLabel = selectId === 'sectionDepartmentFilter' && SECTIONS_ONLY ? 'Барча цехлар' : 'Цехни танланг';
+        select.innerHTML = `<option value="">${firstOptionLabel}</option>`;
+
+        departmentsCache.forEach((department) => {
+            const option = document.createElement('option');
+            option.value = String(department.id);
+            option.textContent = `${department.sort_order || department.id}. ${department.name}`;
+            select.appendChild(option);
+        });
+
+        if (selectedValue) {
+            select.value = String(selectedValue);
+        }
+    }
+
+    function syncSectionDepartmentCaption() {
+        const selectedDepartmentId = document.getElementById('sectionDepartmentFilter').value;
+        const caption = document.getElementById('selectedDepartmentCaption');
+        const selectedDepartment = departmentsCache.find((department) => String(department.id) === String(selectedDepartmentId));
+
+        if (!selectedDepartmentId) {
+            caption.textContent = SECTIONS_ONLY
+                ? 'Барча цехларнинг бўлимлари кўрсатилган.'
+                : 'Аввал цехни танланг, шундан сўнг унинг бўлимлари кўринади.';
+            return;
+        }
+
+        caption.textContent = `Цех бўлимлари кўрсатилган: ${selectedDepartment ? selectedDepartment.name : 'танланган цех'}`;
+    }
+
+    // Цехи нужны и странице «Бўлимлар» — для фильтра и для формы добавления бўлима.
+    async function loadDepartmentOptions(refreshSections, fallbackDepartments = []) {
+        const fullResponse = await apiRequest('/template/departments/?page_size=100');
+        departmentsCache = Array.isArray(fullResponse.data) ? fullResponse.data : fallbackDepartments;
+        const selectedDepartmentId = document.getElementById('sectionDepartmentFilter').value;
+        fillDepartmentSelectOptions('sectionDepartmentFilter', selectedDepartmentId);
+        fillDepartmentSelectOptions('sectionDepartmentId', document.getElementById('sectionDepartmentId').value);
+        syncSectionDepartmentCaption();
+        if (refreshSections) {
+            loadSections(1);
+        }
+    }
+
+    async function loadDepartments(page = 1, refreshSections = false) {
+        if (SECTIONS_ONLY) {
+            // Таблицы цехов на этой странице нет: подгружаем только список для фильтра и формы.
+            try {
+                await loadDepartmentOptions(refreshSections);
+            } catch (error) {
+                console.error('Цехларни юклашда хато:', error);
+            }
+            return;
+        }
+
+        departmentsCurrentPage = page;
+        const loading = document.getElementById('departmentsLoading');
+        const emptyState = document.getElementById('departmentsEmptyState');
+        const tableBody = document.getElementById('departmentsTableBody');
+
+        loading.classList.remove('hidden');
+        emptyState.classList.add('hidden');
+        tableBody.innerHTML = '';
+
+        try {
+            const params = new URLSearchParams({
+                page: String(page),
+                search: document.getElementById('departmentSearchInput').value.trim(),
+            });
+            const response = await apiRequest(`/template/departments/?${params.toString()}`);
+            const departments = Array.isArray(response.data) ? response.data : [];
+
+            if (departments.length > 0) {
+                renderDepartments(departments);
+                renderPagination('departmentsPagination', response, departmentsCurrentPage, loadDepartments, 'blue');
+            } else {
+                emptyState.classList.remove('hidden');
+                document.getElementById('departmentsPagination').innerHTML = '';
+            }
+
+            if (page === 1 || departmentsCache.length === 0) {
+                await loadDepartmentOptions(refreshSections, departments);
+            }
+        } catch (error) {
+            console.error('Цехларни юклашда хато:', error);
+        } finally {
+            loading.classList.add('hidden');
+        }
+    }
+
+    function renderDepartments(departments) {
+        const tableBody = document.getElementById('departmentsTableBody');
+        tableBody.innerHTML = '';
+
+        departments.forEach((department) => {
+            const row = document.createElement('tr');
+            row.className = 'fade-in border-t border-slate-100 text-sm hover:bg-slate-50/80';
+            row.innerHTML = `
+                <td class="px-5 py-4 font-bold text-slate-900">${department.sort_order || '-'}</td>
+                <td class="px-5 py-4">
+                    <div class="font-semibold text-slate-900">${department.name}</div>
+                    <div class="text-xs text-slate-400">ID: ${department.id}</div>
+                </td>
+                <td class="px-5 py-4 text-slate-600">${department.boss_full_name || '-'}</td>
+                <td class="px-5 py-4 text-right">
+                    <div class="inline-flex items-center gap-2">
+                        <button type="button" onclick="editDepartment(${department.id})" class="icon-action" title="Цехни таҳрирлаш">
+                            <i class="fas fa-pen-to-square"></i>
+                        </button>
+                        <button type="button" onclick="deleteDepartment(${department.id})" class="icon-action danger" title="Цехни ўчириш">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            `;
+            tableBody.appendChild(row);
+        });
+    }
+
+    async function loadSections(page = 1) {
+        sectionsCurrentPage = page;
+        const loading = document.getElementById('sectionsLoading');
+        const emptyState = document.getElementById('sectionsEmptyState');
+        const tableBody = document.getElementById('sectionsTableBody');
+        const selectedDepartmentId = document.getElementById('sectionDepartmentFilter').value;
+
+        // На странице «Бўлимлар» цех не обязателен: без него показываются отделы всех цехов.
+        if (!selectedDepartmentId && !SECTIONS_ONLY) {
+            tableBody.innerHTML = '';
+            loading.classList.add('hidden');
+            emptyState.classList.remove('hidden');
+            emptyState.textContent = 'Бўлимларини кўриш учун цехни танланг.';
+            document.getElementById('sectionsPagination').innerHTML = '';
+            return;
+        }
+
+        loading.classList.remove('hidden');
+        emptyState.classList.add('hidden');
+        tableBody.innerHTML = '';
+
+        try {
+            const params = new URLSearchParams({
+                page: String(page),
+                search: document.getElementById('sectionSearchInput').value.trim(),
+            });
+
+            if (selectedDepartmentId) {
+                params.append('department_id', selectedDepartmentId);
+            }
+
+            const response = await apiRequest(`/template/sections/?${params.toString()}`);
+            const sections = Array.isArray(response.data) ? response.data : [];
+
+            if (sections.length > 0) {
+                renderSections(sections);
+                renderPagination('sectionsPagination', response, sectionsCurrentPage, loadSections, 'emerald');
+            } else {
+                emptyState.classList.remove('hidden');
+                emptyState.textContent = selectedDepartmentId ? 'Танланган цехда бўлимлар топилмади.' : 'Бўлимлар топилмади.';
+                document.getElementById('sectionsPagination').innerHTML = '';
+            }
+        } catch (error) {
+            console.error('Бўлимларни юклашда хато:', error);
+        } finally {
+            loading.classList.add('hidden');
+        }
+    }
+
+    function esc(value) {
+        return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    }
+
+    let sectionsById = new Map();
+
+    function renderSections(sections) {
+        const tableBody = document.getElementById('sectionsTableBody');
+        const pageOffset = (sectionsCurrentPage - 1) * 20;
+        tableBody.innerHTML = '';
+        sectionsById = new Map(sections.map((section) => [section.id, section]));
+
+        sections.forEach((section, index) => {
+            const row = document.createElement('tr');
+            const depth = Number(section.depth || 0);
+            const childrenBadge = section.children_count
+                ? `<span class="ml-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700" title="Ички бўлимлар сони">${section.children_count}</span>`
+                : '';
+            row.className = 'fade-in border-t border-slate-100 text-sm hover:bg-slate-50/80';
+            row.dataset.sectionId = section.id;
+            row.dataset.depth = depth;
+            row.innerHTML = `
+                <td class="px-5 py-4 text-slate-500">${pageOffset + index + 1}</td>
+                <td class="px-5 py-4 text-slate-600">${esc(section.code) || '—'}</td>
+                <td class="px-5 py-4 font-semibold text-slate-900">
+                    <div class="flex items-center gap-2" style="padding-left:${depth * 1.75}rem" title="${esc(section.path || section.name)}">
+                        ${depth > 0 ? '<i class="fas fa-turn-up rotate-90 text-xs text-slate-300"></i>' : ''}
+                        <span>${esc(section.name)}</span>${childrenBadge}
+                    </div>
+                </td>
+                <td class="px-5 py-4 text-slate-600">${section.department ? esc(section.department.name) : '-'}</td>
+                <td class="px-5 py-4 text-right">
+                    <div class="inline-flex items-center gap-2">
+                        <button type="button" onclick="addChildSection(${section.id})" class="icon-action" title="Ички бўлим қўшиш" aria-label="Ички бўлим қўшиш">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                        <button type="button" onclick="editSection(${section.id})" class="icon-action" title="Бўлимни таҳрирлаш">
+                            <i class="fas fa-pen-to-square"></i>
+                        </button>
+                        <button type="button" onclick="deleteSection(${section.id})" class="icon-action danger" title="Бўлимни ўчириш">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            `;
+            tableBody.appendChild(row);
+        });
+    }
+
+    function renderPagination(containerId, response, currentPage, loader, theme) {
+        const pagination = document.getElementById(containerId);
+        const totalCount = Number(response.count || 0);
+        if (!totalCount || totalCount <= 20) {
+            pagination.innerHTML = '';
+            return;
+        }
+
+        const totalPages = Math.ceil(totalCount / 20);
+        const activeClass = theme === 'emerald' ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-blue-600 bg-blue-600 text-white';
+        let html = '<div class="flex flex-wrap items-center justify-center gap-2">';
+
+        html += `<button onclick="${loader.name}(${Math.max(1, currentPage - 1)})" class="h-11 min-w-[44px] rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-600" ${currentPage === 1 ? 'disabled' : ''}><i class="fas fa-angle-left"></i></button>`;
+
+        for (let page = 1; page <= Math.min(totalPages, 5); page++) {
+            html += `<button onclick="${loader.name}(${page})" class="h-11 min-w-[44px] rounded-2xl border px-4 text-sm font-bold ${page === currentPage ? activeClass : 'border-slate-200 bg-white text-slate-600'}">${page}</button>`;
+        }
+
+        html += `<button onclick="${loader.name}(${Math.min(totalPages, currentPage + 1)})" class="h-11 min-w-[44px] rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-600" ${currentPage === totalPages ? 'disabled' : ''}><i class="fas fa-angle-right"></i></button>`;
+        html += '</div>';
+        pagination.innerHTML = html;
+    }
+
+    function showDepartmentModal() {
+        document.getElementById('departmentModalTitle').textContent = 'Цех қўшиш';
+        document.getElementById('departmentForm').reset();   // «Цех ID си» яна 0 бўлади
+        document.getElementById('departmentId').value = '';
+        document.getElementById('departmentModal').classList.remove('hidden');
+    }
+
+    function hideDepartmentModal() {
+        document.getElementById('departmentModal').classList.add('hidden');
+        document.getElementById('departmentForm').reset();
+    }
+
+    async function editDepartment(id) {
+        try {
+            const response = await apiRequest(`/template/departments/${id}/`);
+            const department = response.data;
+            document.getElementById('departmentModalTitle').textContent = 'Цехни таҳрирлаш';
+            document.getElementById('departmentId').value = department.id;
+            document.getElementById('departmentName').value = department.name;
+            document.getElementById('departmentSortOrder').value = department.sort_order ?? 0;
+            document.getElementById('departmentBoss').value = department.boss_full_name || '';
+            document.getElementById('departmentModal').classList.remove('hidden');
+        } catch (error) {
+            console.error('Цехни юклашда хато:', error);
+        }
+    }
+
+    async function saveDepartment(event) {
+        event.preventDefault();
+        const button = document.getElementById('departmentSaveButton');
+        const departmentId = document.getElementById('departmentId').value;
+        const formData = {
+            name: document.getElementById('departmentName').value,
+            boss_full_name: document.getElementById('departmentBoss').value,
+        };
+        // «Цех ID си» — sort_order. Бўш қолса юборилмайди (мавжуд қиймат сақланади ёки автоматик берилади).
+        const sortOrder = document.getElementById('departmentSortOrder').value.trim();
+        if (sortOrder !== '') {
+            formData.sort_order = Number(sortOrder);
+        }
+
+        setLoading(button, true);
+        try {
+            if (departmentId) {
+                await apiRequest(`/template/departments/${departmentId}/`, { method: 'PUT', body: JSON.stringify(formData) });
+                showToast('Цех муваффақиятли янгиланди');
+            } else {
+                await apiRequest('/template/departments/', { method: 'POST', body: JSON.stringify(formData) });
+                showToast('Цех муваффақиятли яратилди');
+            }
+            hideDepartmentModal();
+            await loadDepartments(departmentsCurrentPage, true);
+        } catch (error) {
+            console.error('Цехни сақлашда хато:', error);
+        } finally {
+            setLoading(button, false);
+        }
+    }
+
+    async function deleteDepartment(id) {
+        if (!confirmAction('Ушбу цехни ўчиришни тасдиқлайсизми?')) {
+            return;
+        }
+        try {
+            await apiRequest(`/template/departments/${id}/`, { method: 'DELETE' });
+            showToast('Цех муваффақиятли ўчирилди');
+            await loadDepartments(departmentsCurrentPage, true);
+        } catch (error) {
+            console.error('Цехни ўчиришда хато:', error);
+        }
+    }
+
+    let parentOptionsRequest = 0;
+    let departmentSectionsCache = [];
+
+    // Кейинги бўш ID: шу юқори бўлим остидаги (ёки цехдаги асосий) бўлимларнинг энг катта рақами + 1.
+    // Рақамлар ишлатилмаётган бўлса, таклиф қилинмайди (майдон бўш қолади).
+    function suggestSectionCode() {
+        const input = document.getElementById('sectionCode');
+        if (document.getElementById('sectionId').value || input.dataset.touched === '1') return; // таҳрир ёки қўлда ёзилган
+        const parentValue = document.getElementById('sectionParentId').value;
+        const parentId = parentValue ? Number(parentValue) : null;
+        const numbers = departmentSectionsCache
+            .filter((section) => (section.parent_id || null) === parentId)
+            .map((section) => (/^[0-9]{1,15}$/.test(section.code || '') ? Number(section.code) : null))
+            .filter((number) => number !== null);
+        input.value = numbers.length ? String(Math.max(...numbers) + 1) : '';
+    }
+
+    // Танланган цехдаги барча бўлимлар (барча саҳифалар). Таҳрирда ўзи ва ички бўлимлари чиқарилади:
+    // бўлимни ўз ичига жойлаб бўлмайди.
+    async function loadParentOptions(departmentId, selectedParentId = '', excludeId = null) {
+        const select = document.getElementById('sectionParentId');
+        const token = ++parentOptionsRequest;
+        select.innerHTML = '<option value="">— Юқори бўлимсиз (асосий бўлим) —</option>';
+        if (!departmentId) return;
+
+        let all = [];
+        try {
+            for (let page = 1; page <= 50; page++) {
+                const response = await apiRequest(`/template/sections/?department_id=${departmentId}&page_size=100&page=${page}`);
+                all = all.concat(Array.isArray(response.data) ? response.data : []);
+                if (!response.next) break;
+            }
+        } catch (error) {
+            console.error('Юқори бўлимларни юклашда хато:', error);
+            return;
+        }
+        if (token !== parentOptionsRequest) return; // цех тезда алмаштирилган — эски жавоб керак эмас
+        departmentSectionsCache = all;
+
+        const excluded = new Set();
+        if (excludeId) {
+            excluded.add(Number(excludeId));
+            let grew = true;
+            while (grew) {
+                grew = false;
+                all.forEach((section) => {
+                    if (!excluded.has(section.id) && excluded.has(section.parent_id)) { excluded.add(section.id); grew = true; }
+                });
+            }
+        }
+
+        all.filter((section) => !excluded.has(section.id)).forEach((section) => {
+            const option = document.createElement('option');
+            option.value = String(section.id);
+            option.textContent = '\u00a0\u00a0'.repeat(Number(section.depth || 0)) + (section.depth ? '↳ ' : '') + section.name;
+            select.appendChild(option);
+        });
+        select.value = selectedParentId ? String(selectedParentId) : '';
+    }
+
+    async function showSectionModal() {
+        document.getElementById('sectionModalTitle').textContent = 'Бўлим қўшиш';
+        document.getElementById('sectionForm').reset();
+        document.getElementById('sectionId').value = '';
+        fillDepartmentSelectOptions('sectionDepartmentId', document.getElementById('sectionDepartmentFilter').value);
+        document.getElementById('sectionCode').dataset.touched = '';
+        document.getElementById('sectionModal').classList.remove('hidden');
+        await loadParentOptions(document.getElementById('sectionDepartmentId').value);
+        suggestSectionCode();
+    }
+
+    // «+» тугмаси: шу бўлимнинг ичига янги (ички) бўлим қўшиш.
+    async function addChildSection(parentId) {
+        const parent = sectionsById.get(parentId);
+        if (!parent) return;
+
+        document.getElementById('sectionModalTitle').textContent = 'Ички бўлим қўшиш';
+        document.getElementById('sectionForm').reset();
+        document.getElementById('sectionId').value = '';
+        fillDepartmentSelectOptions('sectionDepartmentId', parent.department ? parent.department.id : '');
+        document.getElementById('sectionCode').dataset.touched = '';
+        document.getElementById('sectionModal').classList.remove('hidden');
+        document.getElementById('sectionName').focus();
+        await loadParentOptions(parent.department ? parent.department.id : '', parentId);
+        suggestSectionCode();
+    }
+
+    function hideSectionModal() {
+        document.getElementById('sectionModal').classList.add('hidden');
+        document.getElementById('sectionForm').reset();
+    }
+
+    async function editSection(id) {
+        try {
+            const response = await apiRequest(`/template/sections/${id}/`);
+            const section = response.data;
+            document.getElementById('sectionModalTitle').textContent = 'Бўлимни таҳрирлаш';
+            document.getElementById('sectionId').value = section.id;
+            document.getElementById('sectionCode').value = section.code || '';
+            document.getElementById('sectionName').value = section.name;
+            fillDepartmentSelectOptions('sectionDepartmentId', section.department ? section.department.id : '');
+            document.getElementById('sectionModal').classList.remove('hidden');
+            await loadParentOptions(section.department ? section.department.id : '', section.parent_id || '', section.id);
+        } catch (error) {
+            console.error('Бўлимни юклашда хато:', error);
+        }
+    }
+
+    async function saveSection(event) {
+        event.preventDefault();
+        const button = document.getElementById('sectionSaveButton');
+        const sectionId = document.getElementById('sectionId').value;
+        const formData = {
+            code: document.getElementById('sectionCode').value.trim(),
+            name: document.getElementById('sectionName').value,
+            department_id: Number(document.getElementById('sectionDepartmentId').value),
+            parent_id: document.getElementById('sectionParentId').value ? Number(document.getElementById('sectionParentId').value) : null,
+        };
+
+        setLoading(button, true);
+        try {
+            if (sectionId) {
+                await apiRequest(`/template/sections/${sectionId}/`, { method: 'PUT', body: JSON.stringify(formData) });
+                showToast('Бўлим муваффақиятли янгиланди');
+            } else {
+                await apiRequest('/template/sections/', { method: 'POST', body: JSON.stringify(formData) });
+                showToast('Бўлим муваффақиятли яратилди');
+            }
+            hideSectionModal();
+            await loadSections(sectionsCurrentPage);
+        } catch (error) {
+            console.error('Бўлимни сақлашда хато:', error);
+        } finally {
+            setLoading(button, false);
+        }
+    }
+
+    async function deleteSection(id) {
+        if (!confirmAction('Ушбу бўлимни ўчиришни тасдиқлайсизми?')) {
+            return;
+        }
+        try {
+            await apiRequest(`/template/sections/${id}/`, { method: 'DELETE' });
+            showToast('Бўлим муваффақиятли ўчирилди');
+            await loadSections(sectionsCurrentPage);
+        } catch (error) {
+            console.error('Бўлимни ўчиришда хато:', error);
+        }
+    }
+</script>
+{% endblock %}

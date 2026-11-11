@@ -1,0 +1,337 @@
+{% extends 'base.html' %}
+
+{% block title %}Бўлимлар - Ходимлар хизмати{% endblock %}
+
+{% block content %}
+<div class="px-4 py-6 sm:px-0">
+    <div class="mb-6">
+        <div class="flex justify-between items-center">
+            <h2 class="text-2xl font-bold text-gray-900">
+                <i class="fas fa-sitemap mr-2 text-green-600"></i>
+                Бўлимлар
+            </h2>
+            <button onclick="showCreateModal()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center">
+                <i class="fas fa-plus mr-2"></i>
+                Бўлим қўшиш
+            </button>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-4 mb-6">
+        <div class="flex flex-col sm:flex-row gap-4">
+            <div class="flex-1">
+                <input type="text" id="searchInput" placeholder="Бўлимлар бўйича қидириш..." 
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
+            </div>
+            <select id="departmentFilter" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500">
+                <option value="">Барча цехлар</option>
+            </select>
+            <button onclick="loadSections()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg">
+                <i class="fas fa-search mr-2"></i>Қидирув
+            </button>
+        </div>
+    </div>
+
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Номи</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Цех</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Амаллар</th>
+                    </tr>
+                </thead>
+                <tbody id="sectionsTableBody" class="bg-white divide-y divide-gray-200">
+                </tbody>
+            </table>
+        </div>
+        
+        <div id="loading" class="hidden p-8 text-center">
+            <div class="inline-block loading"></div>
+            <p class="mt-2 text-gray-600">Бўлимлар юкланмоқда...</p>
+        </div>
+        
+        <div id="emptyState" class="hidden p-8 text-center">
+            <i class="fas fa-sitemap text-gray-400 text-4xl mb-4"></i>
+            <p class="text-gray-600">Бўлимлар топилмади</p>
+        </div>
+    </div>
+
+    <div id="pagination" class="mt-6 flex justify-between items-center">
+    </div>
+</div>
+
+<div id="sectionModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-lg bg-white">
+        <div class="flex justify-between items-center mb-4">
+            <h3 id="modalTitle" class="text-lg font-bold text-gray-900">Бўлим қўшиш</h3>
+            <button onclick="hideModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <form id="sectionForm" onsubmit="saveSection(event)">
+            <input type="hidden" id="sectionId">
+            
+            <div class="mb-4">
+                <label class="block text-gray-700 text-sm font-bold mb-2" for="name">
+                    Бўлим номи *
+                </label>
+                <input type="text" id="name" required
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
+            </div>
+            
+            <div class="mb-4">
+                <label class="block text-gray-700 text-sm font-bold mb-2" for="department_id">
+                    Цех *
+                </label>
+                <select id="department_id" required
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
+                    <option value="">Цехни танланг</option>
+                </select>
+            </div>
+            
+            <div class="flex justify-end space-x-3">
+                <button type="button" onclick="hideModal()" 
+                        class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-lg">
+                    Бекор қилиш
+                </button>
+                <button type="submit" id="saveButton"
+                        class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg">
+                    Сақлаш
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+let currentPage = 1;
+let currentSearch = '';
+let currentDepartment = '';
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadDepartments();
+    loadSections();
+    
+    document.getElementById('searchInput').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            loadSections();
+        }
+    });
+    
+    document.getElementById('departmentFilter').addEventListener('change', function() {
+        loadSections();
+    });
+});
+
+async function loadDepartments() {
+    try {
+        const response = await apiRequest('/template/departments/');
+        const departments = response.data || [];
+        
+        const departmentSelect = document.getElementById('department_id');
+        const departmentFilter = document.getElementById('departmentFilter');
+        
+        departmentSelect.innerHTML = '<option value="">Цехни танланг</option>';
+        departmentFilter.innerHTML = '<option value="">Барча цехлар</option>';
+        
+        departments.forEach(dept => {
+            departmentSelect.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
+            departmentFilter.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
+        });
+    } catch (error) {
+        console.error('Цехларни юклашда хато:', error);
+    }
+}
+
+async function loadSections(page = 1) {
+    currentPage = page;
+    const loading = document.getElementById('loading');
+    const emptyState = document.getElementById('emptyState');
+    const tableBody = document.getElementById('sectionsTableBody');
+    
+    loading.classList.remove('hidden');
+    emptyState.classList.add('hidden');
+    tableBody.innerHTML = '';
+    
+    try {
+        const search = document.getElementById('searchInput').value.trim();
+        const department = document.getElementById('departmentFilter').value;
+        
+        const params = new URLSearchParams({
+            page: page,
+            search: search
+        });
+        
+        if (department) {
+            params.append('department_id', department);
+        }
+        
+        const response = await apiRequest(`/template/sections/?${params}`);
+        
+        if (response.data && response.data.length > 0) {
+            renderSections(response.data);
+            renderPagination(response);
+        } else {
+            emptyState.classList.remove('hidden');
+        }
+    } catch (error) {
+        console.error('Бўлимларни юклашда хато:', error);
+    } finally {
+        loading.classList.add('hidden');
+    }
+}
+
+function renderSections(sections) {
+    const tableBody = document.getElementById('sectionsTableBody');
+    
+    sections.forEach(section => {
+        const row = document.createElement('tr');
+        row.className = 'hover:bg-gray-50 fade-in';
+        row.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${section.id}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${section.name}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                ${section.department ? section.department.name : '-'}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <button onclick="editSection(${section.id})" 
+                        class="text-green-600 hover:text-green-900 mr-3">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button onclick="deleteSection(${section.id})" 
+                        class="text-red-600 hover:text-red-900">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        `;
+        tableBody.appendChild(row);
+    });
+}
+
+function renderPagination(response) {
+    const pagination = document.getElementById('pagination');
+    
+    if (response.count && response.count > 20) {
+        const totalPages = Math.ceil(response.count / 20);
+        let paginationHTML = '<div class="flex justify-center space-x-2">';
+        
+        if (response.previous) {
+            paginationHTML += `
+                <button onclick="loadSections(${currentPage - 1})" 
+                        class="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+            `;
+        }
+        
+        for (let i = 1; i <= Math.min(totalPages, 5); i++) {
+            const isActive = i === currentPage;
+            paginationHTML += `
+                <button onclick="loadSections(${i})" 
+                        class="px-3 py-1 ${isActive ? 'bg-green-600 text-white' : 'bg-gray-200 hover:bg-gray-300'} rounded">
+                    ${i}
+                </button>
+            `;
+        }
+        
+        if (response.next) {
+            paginationHTML += `
+                <button onclick="loadSections(${currentPage + 1})" 
+                        class="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            `;
+        }
+        
+        paginationHTML += '</div>';
+        pagination.innerHTML = paginationHTML;
+    } else {
+        pagination.innerHTML = '';
+    }
+}
+
+function showCreateModal() {
+    document.getElementById('modalTitle').textContent = 'Бўлим қўшиш';
+    document.getElementById('sectionForm').reset();
+    document.getElementById('sectionId').value = '';
+    document.getElementById('sectionModal').classList.remove('hidden');
+}
+
+async function editSection(id) {
+    try {
+        const response = await apiRequest(`/template/sections/${id}/`);
+        const section = response.data;
+        
+        document.getElementById('modalTitle').textContent = 'Бўлимни таҳрирлаш';
+        document.getElementById('sectionId').value = section.id;
+        document.getElementById('name').value = section.name;
+        document.getElementById('department_id').value = section.department ? section.department.id : '';
+        document.getElementById('sectionModal').classList.remove('hidden');
+    } catch (error) {
+        console.error('Бўлимни юклашда хато:', error);
+    }
+}
+
+async function saveSection(event) {
+    event.preventDefault();
+    
+    const saveButton = document.getElementById('saveButton');
+    const sectionId = document.getElementById('sectionId').value;
+    
+    setLoading(saveButton, true);
+    
+    const formData = {
+        name: document.getElementById('name').value,
+        department_id: parseInt(document.getElementById('department_id').value)
+    };
+    
+    try {
+        if (sectionId) {
+            await apiRequest(`/template/sections/${sectionId}/`, {
+                method: 'PUT',
+                body: JSON.stringify(formData)
+            });
+            showToast('Бўлим муваффақиятли янгиланди');
+        } else {
+            await apiRequest('/template/sections/', {
+                method: 'POST',
+                body: JSON.stringify(formData)
+            });
+            showToast('Бўлим муваффақиятли яратилди');
+        }
+        
+        hideModal();
+        loadSections(currentPage);
+    } catch (error) {
+        console.error('Бўлимни сақлашда хато:', error);
+    } finally {
+        setLoading(saveButton, false);
+    }
+}
+
+async function deleteSection(id) {
+    if (!confirmAction('Ушбу бўлимни ўчиришни тасдиқлайсизми?')) {
+        return;
+    }
+    
+    try {
+        await apiRequest(`/template/sections/${id}/`, {
+            method: 'DELETE'
+        });
+        showToast('Бўлим муваффақиятли ўчирилди');
+        loadSections(currentPage);
+    } catch (error) {
+        console.error('Бўлимни ўчиришда хато:', error);
+    }
+}
+
+function hideModal() {
+    document.getElementById('sectionModal').classList.add('hidden');
+    document.getElementById('sectionForm').reset();
+}
+</script>
+{% endblock %}

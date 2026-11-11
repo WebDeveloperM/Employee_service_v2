@@ -1,0 +1,27 @@
+{
+  "id": "5e0d6e6c-9c3b-4b10-87cf-employee-service-env",
+  "name": "employee_service local env",
+  "values": [
+    {
+      "key": "employee_service_base_url",
+      "value": "https://192.168.2.72:8010/api/v1",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "employee_service_api_key",
+      "value": "dev-employee-service-key",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "employee_slug",
+      "value": "default-9112-maruf-shabonov",
+      "type": "default",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment",
+  "_postman_exported_at": "2026-04-07T08:25:00.000Z",
+  "_postman_exported_using": "GitHub Copilot GPT-5.4"
+}

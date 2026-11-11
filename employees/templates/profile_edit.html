@@ -1,0 +1,433 @@
+{% extends 'base.html' %}
+
+{% block title %}Профилни таҳрирлаш - Ходимлар хизмати{% endblock %}
+
+{% block content %}
+<div class="px-4 py-6 sm:px-0 max-w-2xl mx-auto">
+    <div class="mb-6">
+        <h2 class="text-2xl font-bold text-gray-900">
+            <i class="fas fa-user-edit mr-2 text-blue-600"></i>
+            Профилни таҳрирлаш
+        </h2>
+        <p class="mt-2 text-gray-600">Шахсий маълумотларингизни бошқариш</p>
+    </div>
+
+    <div class="bg-white shadow rounded-lg">
+        <form id="profileForm" class="p-6 space-y-6">
+            {% csrf_token %}
+            
+            <div class="text-center">
+                <div class="mb-4 relative inline-block">
+                    {% if employee %}
+                    <input type="file" id="avatarImageInput" accept="image/*" class="hidden">
+                    {% endif %}
+                    {% if request.user.profile.avatar_image %}
+                    <div class="relative">
+                        <img id="currentAvatar" src="{{ request.user.profile.avatar_image.url }}" 
+                             alt="Жорий аватар" 
+                             class="mx-auto h-24 w-24 rounded-full object-cover border-4 border-gray-200 shadow-lg">
+                        {% if employee %}
+                        <button type="button"
+                           id="avatarEditButton"
+                           class="absolute -left-1 bottom-0 flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-blue-600 text-white shadow-md transition hover:bg-blue-700"
+                           title="Фотосуратни ўзгартириш"
+                           aria-label="Фотосуратни ўзгартириш">
+                            <i class="fas fa-pen text-sm"></i>
+                        </button>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <div class="relative">
+                        <div id="currentAvatar" 
+                             class="mx-auto h-24 w-24 rounded-full bg-gray-200 flex items-center justify-center border-4 border-gray-200">
+                            <i class="fas fa-user text-3xl text-gray-400"></i>
+                        </div>
+                        {% if employee %}
+                        <button type="button"
+                           id="avatarEditButton"
+                           class="absolute -left-1 bottom-0 flex h-9 w-9 items-center justify-center rounded-full border-2 border-white bg-blue-600 text-white shadow-md transition hover:bg-blue-700"
+                           title="Фотосуратни ўзгартириш"
+                           aria-label="Фотосуратни ўзгартириш">
+                            <i class="fas fa-pen text-sm"></i>
+                        </button>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+                <p class="text-sm text-gray-600">Жорий аватар</p>
+                <p class="mt-2 text-xs text-gray-500">{% if employee %}Фақат тасвирни ўзгартириш учун аватар ёнидаги қалам белгисини босинг.{% else %}Ходим фотосуратини ушбу профилдан ўзгартириб бўлмайди.{% endif %}</p>
+            </div>
+
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="firstName">
+                        Исм
+                    </label>
+                    <input type="text" id="firstName" value="{{ request.user.first_name }}"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="lastName">
+                        Фамилия
+                    </label>
+                    <input type="text" id="lastName" value="{{ request.user.last_name }}"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-gray-700 text-sm font-bold mb-2">
+                    Рол
+                </label>
+                <input type="text" value="{{ request.user.profile.get_role_display }}" readonly
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600">
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t">
+                <button type="button" onclick="window.history.back()"
+                    class="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition">
+                    <i class="fas fa-arrow-left mr-2"></i>Бекор қилиш
+                </button>
+                <button type="submit"
+                    class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition">
+                    <i class="fas fa-save mr-2"></i>Ўзгаришларни сақлаш
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    const avatarImageInput = document.getElementById('avatarImageInput');
+    const avatarEditButton = document.getElementById('avatarEditButton');
+
+    if (avatarEditButton && avatarImageInput) {
+        avatarEditButton.addEventListener('click', () => {
+            avatarImageInput.click();
+        });
+
+        avatarImageInput.addEventListener('change', async function(event) {
+            const imageFile = event.target.files[0];
+            if (!imageFile) {
+                return;
+            }
+
+            const originalContent = avatarEditButton.innerHTML;
+            avatarEditButton.disabled = true;
+            avatarEditButton.innerHTML = '<i class="fas fa-spinner fa-spin text-sm"></i>';
+
+            try {
+                const formData = new FormData();
+                formData.append('base_image', imageFile);
+
+                const response = await fetch('/api/v1/employees/{{ employee.slug }}/', {
+                    method: 'PATCH',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken'),
+                    },
+                    body: formData,
+                });
+
+                const responseText = await response.text();
+                let responseData = {};
+                try {
+                    responseData = responseText ? JSON.parse(responseText) : {};
+                } catch (parseError) {
+                    if (!response.ok) {
+                        throw new Error('Тасвирни янгилашда сервер нотўғри жавоб қайтарди');
+                    }
+                }
+
+                if (!response.ok) {
+                    throw new Error(responseData.detail || responseData.error || 'Тасвирни янгилашда хато');
+                }
+
+                showToast('Аватар муваффақиятли янгиланди', 'success');
+                window.location.reload();
+            } catch (error) {
+                showToast(error.message, 'error');
+            } finally {
+                avatarImageInput.value = '';
+                avatarEditButton.disabled = false;
+                avatarEditButton.innerHTML = originalContent;
+            }
+        });
+    }
+
+    document.getElementById('profileForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const submitButton = e.target.querySelector('button[type="submit"]');
+        setLoading(submitButton, true, 'Сақланмоқда...');
+        
+        try {
+            const formData = new FormData();
+            formData.append('csrfmiddlewaretoken', getCookie('csrftoken'));
+            
+            const firstName = document.getElementById('firstName').value.trim();
+            const lastName = document.getElementById('lastName').value.trim();
+            const loginField = document.getElementById('login');
+            const login = loginField ? loginField.value.trim() : '';
+            const passwordField = document.getElementById('password');
+            const password = passwordField ? passwordField.value : '';
+            
+            if (firstName) formData.append('first_name', firstName);
+            if (lastName) formData.append('last_name', lastName);
+            if (loginField && login) {
+                formData.append('username', login);
+            }
+            if (passwordField && password && passwordField.dataset.userEdited === 'true') {
+                formData.append('password', password);
+            }
+            
+            const response = await fetch('/api/template/users/{{ request.user.profile.id }}/', {
+                method: 'PATCH',
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken'),
+                },
+                body: formData
+            });
+            
+            if (!response.ok) {
+                const responseText = await response.text();
+                let errorData = {};
+
+                try {
+                    errorData = responseText ? JSON.parse(responseText) : {};
+                } catch (parseError) {
+                    throw new Error('Профилни янгилашда сервер нотўғри жавоб қайтарди');
+                }
+
+                const normalizedErrors = errorData.errors || errorData.data || errorData;
+                const errorMessage = extractProfileErrorMessage(normalizedErrors) || errorData.detail || errorData.message || 'Профилни янгилашда хато';
+                throw new Error(errorMessage);
+            }
+            
+            showToast('Профиль муваффақиятли янгиланди!', 'success');
+            if (passwordField) {
+                passwordField.value = '';
+            }
+            
+        } catch (error) {
+            showToast(error.message, 'error');
+        } finally {
+            setLoading(submitButton, false);
+        }
+    });
+
+    function extractProfileErrorMessage(payload) {
+        if (!payload) {
+            return '';
+        }
+
+        if (typeof payload === 'string') {
+            return payload;
+        }
+
+        if (Array.isArray(payload)) {
+            return payload.map(extractProfileErrorMessage).find(Boolean) || '';
+        }
+
+        if (typeof payload === 'object') {
+            return Object.values(payload).map(extractProfileErrorMessage).find(Boolean) || '';
+        }
+
+        return '';
+    }
+
+    const profilePasswordField = document.getElementById('password');
+    if (profilePasswordField) {
+        profilePasswordField.value = '';
+        profilePasswordField.dataset.userEdited = 'false';
+        profilePasswordField.addEventListener('input', () => {
+            profilePasswordField.dataset.userEdited = 'true';
+        });
+    }
+
+    let faceIdStream = null;
+    let passwordRevealExpiresAt = 0;
+
+    function setPasswordVisibility(isVisible) {
+        const passField = document.getElementById('password');
+        const eyeIcon = document.getElementById('eyeIcon');
+
+        if (!passField || !eyeIcon) {
+            return;
+        }
+
+        passField.type = isVisible ? 'text' : 'password';
+        eyeIcon.classList.toggle('fa-eye', !isVisible);
+        eyeIcon.classList.toggle('fa-eye-slash', isVisible);
+    }
+
+    function handlePasswordVisibilityRequest() {
+        const passField = document.getElementById('password');
+        if (!passField) {
+            return;
+        }
+        const hasRevealAccess = passwordRevealExpiresAt > Date.now();
+
+        if (hasRevealAccess && passField.value) {
+            setPasswordVisibility(passField.type === 'password');
+            return;
+        }
+
+        requestFaceIdToShowPassword();
+    }
+
+    function requestFaceIdToShowPassword() {
+        const modal = document.getElementById('faceIdModal');
+        if (!modal) {
+            return;
+        }
+        modal.classList.remove('hidden');
+        startFaceIdCamera();
+    }
+
+    function closeFaceIdModal() {
+        const modal = document.getElementById('faceIdModal');
+        const statusEl = document.getElementById('faceIdStatus');
+        const verifyBtn = document.getElementById('faceIdVerifyBtn');
+
+        if (!modal || !statusEl || !verifyBtn) {
+            return;
+        }
+
+        modal.classList.add('hidden');
+        stopFaceIdCamera();
+        statusEl.textContent = '';
+        verifyBtn.disabled = false;
+    }
+
+    async function startFaceIdCamera() {
+        const video = document.getElementById('faceIdVideo');
+        const statusEl = document.getElementById('faceIdStatus');
+        if (!video || !statusEl) {
+            return;
+        }
+        try {
+            faceIdStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 480 } });
+            video.srcObject = faceIdStream;
+            video.muted = true;
+            await video.play();
+        } catch (err) {
+            statusEl.textContent = 'Камерани очиб бўлмади: ' + err.message;
+        }
+    }
+
+    function stopFaceIdCamera() {
+        if (faceIdStream) {
+            faceIdStream.getTracks().forEach(t => t.stop());
+            faceIdStream = null;
+        }
+        const video = document.getElementById('faceIdVideo');
+        if (video) {
+            video.srcObject = null;
+        }
+    }
+
+    async function verifyFaceId() {
+        const video = document.getElementById('faceIdVideo');
+        const statusEl = document.getElementById('faceIdStatus');
+        const btn = document.getElementById('faceIdVerifyBtn');
+        if (!video || !statusEl || !btn) {
+            return;
+        }
+        btn.disabled = true;
+        statusEl.textContent = 'Текширилмоқда...';
+        statusEl.className = 'mt-3 text-sm text-center text-gray-500';
+
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        const imageData = canvas.toDataURL('image/jpeg', 0.9);
+
+        try {
+            const response = await fetch('/api/v1/auth/profile-face-verify/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken'),
+                },
+                body: JSON.stringify({ captured_image: imageData }),
+            });
+            const data = await response.json();
+            if (data.verified) {
+                statusEl.textContent = 'Шахс тасдиқланди!';
+                statusEl.className = 'mt-3 text-sm text-center text-green-600 font-bold';
+                closeFaceIdModal();
+                const passField = document.getElementById('password');
+                if (!passField) {
+                    showToast('Шахс тасдиқланди.', 'success');
+                    return;
+                }
+                passwordRevealExpiresAt = Date.now() + 30000;
+
+                if (passField.value) {
+                    setPasswordVisibility(true);
+                    showToast('Шахс тасдиқланди. Янги паролни 30 сония давомида кўриш мумкин.', 'success');
+                } else {
+                    setPasswordVisibility(true);
+                    passField.focus();
+                    showToast('Шахс тасдиқланди. Янги паролни киритинг: жорий паролни кўрсатиб бўлмайди, у фақат хеш кўринишида сақланади.', 'success');
+                }
+
+                window.setTimeout(() => {
+                    if (Date.now() >= passwordRevealExpiresAt) {
+                        setPasswordVisibility(false);
+                    }
+                }, 30000);
+            } else {
+                statusEl.textContent = 'Шахс тасдиқланмади. Яна бир бор уриниб кўринг.';
+                statusEl.className = 'mt-3 text-sm text-center text-red-600 font-bold';
+                btn.disabled = false;
+            }
+        } catch (err) {
+            statusEl.textContent = 'Хато: ' + err.message;
+            statusEl.className = 'mt-3 text-sm text-center text-red-600';
+            btn.disabled = false;
+        }
+    }
+</script>
+
+<div id="faceIdModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4">
+        <div class="text-center mb-4">
+            <div class="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-100 mb-3">
+                <i class="fas fa-user-shield text-2xl text-blue-600"></i>
+            </div>
+            <h3 class="text-lg font-bold text-gray-900">Шахсингизни Face ID орқали тасдиқланг</h3>
+            <p class="text-sm text-gray-500 mt-1">Тасдиқлаш учун камерага қаранг</p>
+        </div>
+        <div class="rounded-xl overflow-hidden border border-gray-200 bg-black">
+            <video id="faceIdVideo" autoplay playsinline muted class="w-full"></video>
+        </div>
+        <div id="faceIdStatus" class="mt-3 text-sm text-center"></div>
+        <div class="mt-4 flex gap-3">
+            <button type="button" onclick="closeFaceIdModal()" class="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl font-bold transition">
+                Бекор қилиш
+            </button>
+            <button type="button" id="faceIdVerifyBtn" onclick="verifyFaceId()" class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition">
+                <i class="fas fa-camera mr-1"></i> Тасдиқлаш
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}

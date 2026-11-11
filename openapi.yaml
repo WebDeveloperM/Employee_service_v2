@@ -1,0 +1,455 @@
+openapi: 3.0.3
+info:
+  title: API сервиса сотрудников
+  version: 1.0.0
+  description: Переиспользуемый серверный сервис для сотрудников и проверки по лицу.
+paths:
+  /api/v1/departments/:
+    get:
+      operationId: departments_list
+      tags:
+      - departments
+      security:
+      - EmployeeServiceApiKeyHeader: []
+      - tokenAuth: []
+      - cookieAuth: []
+      - EmployeeServiceApiKeyHeader: []
+      - EmployeeServiceBearerToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Department'
+          description: ''
+  /api/v1/departments/{id}/:
+    get:
+      operationId: departments_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - departments
+      security:
+      - EmployeeServiceApiKeyHeader: []
+      - tokenAuth: []
+      - cookieAuth: []
+      - EmployeeServiceApiKeyHeader: []
+      - EmployeeServiceBearerToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Department'
+          description: ''
+  /api/v1/employees/:
+    get:
+      operationId: employees_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - employees
+      security:
+      - EmployeeServiceApiKeyHeader: []
+      - tokenAuth: []
+      - cookieAuth: []
+      - EmployeeServiceApiKeyHeader: []
+      - EmployeeServiceBearerToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEmployeeList'
+          description: ''
+  /api/v1/employees/{slug}/:
+    get:
+      operationId: employees_retrieve
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - employees
+      security:
+      - EmployeeServiceApiKeyHeader: []
+      - tokenAuth: []
+      - cookieAuth: []
+      - EmployeeServiceApiKeyHeader: []
+      - EmployeeServiceBearerToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+          description: ''
+  /api/v1/sections/:
+    get:
+      operationId: sections_list
+      tags:
+      - sections
+      security:
+      - EmployeeServiceApiKeyHeader: []
+      - tokenAuth: []
+      - cookieAuth: []
+      - EmployeeServiceApiKeyHeader: []
+      - EmployeeServiceBearerToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Section'
+          description: ''
+  /api/v1/sections/{id}/:
+    get:
+      operationId: sections_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - sections
+      security:
+      - EmployeeServiceApiKeyHeader: []
+      - tokenAuth: []
+      - cookieAuth: []
+      - EmployeeServiceApiKeyHeader: []
+      - EmployeeServiceBearerToken: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Section'
+          description: ''
+components:
+  schemas:
+    BlankEnum:
+      enum:
+      - ''
+    Department:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          title: Название цеха
+          maxLength: 255
+        boss_full_name:
+          type: string
+          title: Руководитель цеха
+          maxLength: 255
+        sort_order:
+          type: integer
+          minimum: 0
+          description: «ID цеха» в форме — порядок сортировки цехов. 0 или не указан — выбирается автоматически (число из названия или следующий свободный номер).
+      required:
+      - id
+      - name
+    Employee:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        source_system:
+          type: string
+          default: default
+          title: Источник системы
+          maxLength: 100
+        external_id:
+          type: string
+          default: ''
+          title: Внешний ID
+          maxLength: 100
+        first_name:
+          type: string
+          title: Имя
+          maxLength: 255
+        last_name:
+          type: string
+          title: Фамилия
+          maxLength: 255
+        surname:
+          type: string
+          title: Отчество
+          maxLength: 255
+        full_name:
+          type: string
+          readOnly: true
+        tabel_number:
+          type: string
+          title: Табельный номер
+          maxLength: 255
+        gender:
+          title: Пол
+          oneOf:
+          - $ref: '#/components/schemas/GenderEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        date_of_birth:
+          type: string
+          format: date
+          nullable: true
+          title: Дата рождения
+        height:
+          type: string
+          maxLength: 255
+        clothe_size:
+          type: string
+          maxLength: 255
+        shoe_size:
+          type: string
+          maxLength: 255
+        phone_number_1:
+          type: string
+          title: Телефон 1
+          maxLength: 20
+        phone_number_2:
+          type: string
+          title: Телефон 2
+          maxLength: 20
+        login:
+          type: string
+          title: Логин
+          maxLength: 150
+        password:
+          type: string
+          writeOnly: true
+        password_confirm:
+          type: string
+          writeOnly: true
+        role:
+          allOf:
+          - $ref: '#/components/schemas/RoleEnum'
+          writeOnly: true
+          default: user
+        passport_series:
+          type: string
+          title: Серия паспорта
+          maxLength: 2
+        passport_number:
+          type: string
+          title: Номер паспорта
+          maxLength: 7
+        jshshir:
+          type: string
+          title: ЖШШИР
+          maxLength: 14
+        base_image:
+          type: string
+          format: uri
+          nullable: true
+          title: Базовое изображение
+        base_image_url:
+          type: string
+          readOnly: true
+        department:
+          allOf:
+          - $ref: '#/components/schemas/Department'
+          readOnly: true
+        section:
+          allOf:
+          - $ref: '#/components/schemas/Section'
+          readOnly: true
+        department_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        section_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        department_name:
+          type: string
+          writeOnly: true
+        section_name:
+          type: string
+          writeOnly: true
+        boss_full_name:
+          type: string
+          writeOnly: true
+        position:
+          type: string
+          title: Должность
+        date_of_employment:
+          type: string
+          format: date
+          nullable: true
+          title: Дата приема на работу
+        date_of_change_position:
+          type: string
+          format: date
+          nullable: true
+          title: Дата изменения должности
+        slug:
+          type: string
+          readOnly: true
+          title: Слаг
+          pattern: ^[-a-zA-Z0-9_]+$
+        is_active:
+          type: boolean
+          title: Активен
+        is_deleted:
+          type: boolean
+          title: Удален
+        requires_face_id_checkout:
+          type: boolean
+          title: Требует проверку по лицу
+        metadata:
+          title: Метаданные
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          title: Создан
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          title: Обновлен
+      required:
+      - base_image_url
+      - created_at
+      - department
+      - first_name
+      - full_name
+      - id
+      - last_name
+      - section
+      - slug
+      - tabel_number
+      - updated_at
+    GenderEnum:
+      enum:
+      - M
+      - F
+      type: string
+      description: |-
+        * `M` - Мужской
+        * `F` - Женский
+    PaginatedEmployeeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Employee'
+    RoleEnum:
+      enum:
+      - admin
+      - hr
+      - user
+      type: string
+      description: |-
+        * `admin` - Администратор
+        * `hr` - HR менеджер
+        * `user` - Пользователь
+    Section:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          title: Название отдела
+          maxLength: 255
+        department:
+          allOf:
+          - $ref: '#/components/schemas/Department'
+          readOnly: true
+        department_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        code:
+          type: string
+          title: ID отдела
+          maxLength: 50
+          description: Уникален в пределах цеха; может быть пустым.
+        parent_id:
+          type: integer
+          nullable: true
+          description: Родительский отдел (того же цеха). null — отдел верхнего уровня.
+        path:
+          type: string
+          readOnly: true
+          description: Путь от отдела верхнего уровня («Родитель / Вложенный»).
+        depth:
+          type: integer
+          readOnly: true
+          description: Уровень вложенности (0 — верхний уровень).
+        children_count:
+          type: integer
+          readOnly: true
+          description: Количество непосредственно вложенных отделов.
+      required:
+      - children_count
+      - department
+      - depth
+      - id
+      - name
+      - path
+  securitySchemes:
+    EmployeeServiceApiKeyHeader:
+      type: apiKey
+      in: header
+      name: X-Employee-Service-Key
+      description: API key for cross-project integration with employee_service.
+    EmployeeServiceBearerToken:
+      type: http
+      scheme: bearer
+      bearerFormat: API key
+      description: 'Alternative auth format: Authorization: Bearer <api-key>.'
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+    tokenAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Token-based authentication with required prefix "Token"

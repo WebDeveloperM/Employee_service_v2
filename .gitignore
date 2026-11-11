@@ -1,0 +1,6 @@
+.venv
+.media
+
+# Root CA + employee client-certificate private keys (employees/pki.py).
+# Never commit these - anyone with ca.key can mint a valid login cert.
+pki/

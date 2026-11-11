@@ -1,0 +1,1159 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if page_mode == 'edit' %}Ходимни таҳрирлаш{% else %}Ходимни кўриш{% endif %} - Ходимлар хизмати{% endblock %}
+
+{% block content %}
+<section class="space-y-6">
+    <div class="panel-card rounded-[28px] p-6 lg:p-8">
+        <div class="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+            <div>
+                <p class="mb-2 text-sm font-bold uppercase tracking-[0.22em] text-slate-400">Ходим карточкаси</p>
+                <h2 class="font-display text-3xl font-bold text-slate-900">
+                    {% if page_mode == 'edit' %}Ходимни таҳрирлаш{% else %}Ходимни кўриш{% endif %}
+                </h2>
+                <p class="mt-2 text-sm text-slate-500">{{ employee }}</p>
+            </div>
+            <div class="flex flex-wrap gap-3">
+                <a href="/"
+                    class="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700">
+                    <i class="fas fa-arrow-left"></i>
+                    Рўйхатга
+                </a>
+                {% if page_mode == 'view' and request.user.profile.role != 'user' %}
+                <a href="/employees/{{ employee.slug }}/edit/"
+                    class="inline-flex items-center gap-2 rounded-2xl bg-[var(--info)] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-500/20">
+                    <i class="fas fa-pen"></i>
+                    Таҳрирлаш
+                </a>
+                <a href="/employees/{{ employee.slug }}/delete/"
+                    class="inline-flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-5 py-3 text-sm font-bold text-red-600">
+                    <i class="fas fa-trash"></i>
+                    Ўчириш
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <form id="employeePageForm" onsubmit="saveEmployeePage(event)" class="space-y-6">
+        <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <div class="panel-card rounded-[28px] p-6">
+                <div class="mb-5 flex items-start gap-4">
+                    {% if employee.base_image %}
+                    <img src="{{ employee.base_image.url }}" alt="{{ employee }}"
+                        class="h-20 w-20 rounded-[24px] object-cover shadow-sm">
+                    {% else %}
+                    <div class="flex h-20 w-20 items-center justify-center rounded-[24px] bg-slate-100 text-2xl text-slate-400">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    {% endif %}
+                    <div>
+                        <h3 class="font-display text-xl font-bold text-slate-900">Шахсий маълумотлар</h3>
+                        <p class="mt-1 text-sm text-slate-500">Ходимнинг асосий маълумотлари ва фотосурати.</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div>
+                        <label class="mb-2 block text-sm font-bold text-slate-700">Исм</label>
+                        <input type="text" id="first_name" value="{{ employee.first_name|default_if_none:'' }}" required class="table-filter" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
+                    </div>
+                    <div>
+                        <label class="mb-2 block text-sm font-bold text-slate-700">Фамилия</label>
+                        <input type="text" id="last_name" value="{{ employee.last_name|default_if_none:'' }}" required class="table-filter" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
+                    </div>
+                    <div>
+                        <label class="mb-2 block text-sm font-bold text-slate-700">Отасининг исми</label>
+                        <input type="text" id="surname" value="{{ employee.surname|default_if_none:'' }}" class="table-filter" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
+                    </div>
+                    <div>
+                        <label class="mb-2 block text-sm font-bold text-slate-700">Табель рақами</label>
+                        <input type="text" id="tabel_number" value="{{ employee.tabel_number|default_if_none:'' }}" required class="table-filter" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
+                    </div>
+                    <div>
+                        <label class="mb-2 block text-sm font-bold text-slate-700">Жинси</label>
+                        <select id="gender" class="table-filter" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
+                            <option value="" {% if not employee.gender %}selected{% endif %}>Танланг</option>
+                            <option value="M" {% if employee.gender == 'M' %}selected{% endif %}>Эркак</option>
+                            <option value="F" {% if employee.gender == 'F' %}selected{% endif %}>Аёл</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="mb-2 block text-sm font-bold text-slate-700">Туғилган сана</label>
+                        <input type="text" id="date_of_birth" value="{{ employee.date_of_birth|date:'d/m/Y'|default_if_none:'' }}" class="table-filter" placeholder="dd/mm/yyyy" inputmode="numeric" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
+                    </div>
+                    <div>
+                        <label class="mb-2 block text-sm font-bold text-slate-700">Телефон 1</label>
+                        <input type="tel" id="phone_number_1" value="{{ employee.phone_number_1|default_if_none:'' }}" class="table-filter" placeholder="+998 00 000 00 00" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
+                    </div>
+                    <div>
+                        <label class="mb-2 block text-sm font-bold text-slate-700">Телефон 2</label>
+                        <input type="tel" id="phone_number_2" value="{{ employee.phone_number_2|default_if_none:'' }}" class="table-filter" placeholder="+998 XX XXX XX XX" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
+                    </div>
+                </div>
+                {% if page_mode == 'edit' %}
+                <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
+                    <h4 class="mb-2 text-sm font-bold uppercase tracking-wider text-slate-700"><i class="fas fa-image mr-2 text-[var(--info)]"></i>Фотосурат</h4>
+                    <p class="text-sm text-slate-500">Янги файл юкланг ёки суратга олинг. Расм «Сақлаш» тугмаси босилгандан кейин янгиланади.</p>
+
+                    <div class="mt-4 flex items-start gap-4">
+                        <div id="photoPreviewWrapper" class="flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                            {% if employee.base_image %}
+                            <img id="photoPreviewImage" src="{{ employee.base_image.url }}" alt="Ходим фотосурати" class="h-full w-full object-cover">
+                            {% else %}
+                            <div id="photoPreviewPlaceholder" class="flex h-full w-full items-center justify-center text-2xl text-slate-300">
+                                <i class="fas fa-user"></i>
+                            </div>
+                            <img id="photoPreviewImage" src="" alt="Ходим фотосурати" class="hidden h-full w-full object-cover">
+                            {% endif %}
+                        </div>
+                        <div class="flex-1 space-y-3">
+                            <input type="file" id="base_image" accept="image/*" class="table-filter w-full">
+                            <div class="flex flex-wrap gap-2">
+                                <button type="button" onclick="openCameraSession('photo')" class="rounded-xl bg-slate-100 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200">
+                                    <i class="fas fa-camera mr-2"></i>Суратга олиш
+                                </button>
+                                <button type="button" onclick="clearPendingEmployeeImage()" class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">
+                                    Янги расмни олиб ташлаш
+                                </button>
+                            </div>
+                            <p id="photoChangeHint" class="text-xs text-slate-500">
+                                {% if employee.base_image %}Ҳозир ходимнинг жорий фотосурати ишлатилмоқда.{% else %}Фотосурат ҳали юкланмаган.{% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+               
+                {% endif %}
+            </div>
+
+            <div class="panel-card rounded-[28px] p-6">
+                <h3 class="font-display text-xl font-bold text-slate-900">Иш</h3>
+                <p class="mt-1 text-sm text-slate-500">Ходимнинг бўлинмаси, лавозими ва ҳолати.</p>
+
+                <div class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div class="grid grid-cols-1 gap-4 md:col-span-2 md:grid-cols-[1fr_9rem]">
+                        <div>
+                            <label class="mb-2 block text-sm font-bold text-slate-700">Лавозим</label>
+                            <input type="text" id="position" value="{{ employee.position|default_if_none:'' }}" class="table-filter" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
+                        </div>
+                        <div>
+                            <label class="mb-2 block text-sm font-bold text-slate-700">Даража (разряд)</label>
+                            <input type="number" id="grade" min="0" max="99" step="1" inputmode="numeric" value="{{ employee.grade|default_if_none:'' }}" class="table-filter" placeholder="№" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="mb-2 flex items-center justify-between gap-3">
+                            <label class="block text-sm font-bold text-slate-700">Цех</label>
+                            {% if page_mode == 'edit' and not can_edit_sizes_only %}
+                            <button type="button" id="openDepartmentInlineModalButton" onclick="openInlineOrgModal('department')"
+                                class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-[var(--info)] transition hover:border-blue-300 hover:bg-blue-100"
+                                title="Цех қўшиш" aria-label="Цех қўшиш">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                        <select id="department_id" class="table-filter" onchange="refreshSectionOptions(); syncClotheSizeVisibility()" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
+                            <option value="">Цехни танланг</option>
+                            {% for department in departments %}
+                            <option value="{{ department.id }}" data-boss-full-name="{{ department.boss_full_name|default_if_none:'' }}" data-sort-order="{{ department.sort_order }}" {% if employee.department_id == department.id %}selected{% endif %}>{{ department.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <div class="mb-2 flex items-center justify-between gap-3">
+                            <label class="block text-sm font-bold text-slate-700">Бўлим</label>
+                            {% if page_mode == 'edit' and not can_edit_sizes_only %}
+                            <button type="button" id="openSectionInlineModalButton" onclick="openInlineOrgModal('section')"
+                                class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
+                                title="Бўлим қўшиш" aria-label="Бўлим қўшиш">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                        <select id="section_id" class="table-filter" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
+                            <option value="">Бўлимни танланг</option>
+                            {% for section in sections %}
+                            <option value="{{ section.id }}" data-department-id="{{ section.department_id }}" {% if employee.section_id == section.id %}selected{% endif %}>{{ section.path_label|default:section.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="mb-2 block text-sm font-bold text-slate-700">Цех раҳбари</label>
+                        <input type="text" id="boss_full_name" value="{{ employee.department.boss_full_name|default_if_none:'' }}" class="table-filter" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
+                    </div>
+                    <div>
+                        <label class="mb-2 block text-sm font-bold text-slate-700">Ишга қабул қилинган сана</label>
+                        <input type="text" id="date_of_employment" value="{{ employee.date_of_employment|date:'d/m/Y' }}" class="table-filter" placeholder="dd/mm/yyyy" inputmode="numeric" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
+                    </div>
+                    <div>
+                        <label class="mb-2 block text-sm font-bold text-slate-700">Ҳолати</label>
+                        <select id="is_active" class="table-filter" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
+                            <option value="true" {% if employee.is_active %}selected{% endif %}>Фаол</option>
+                            <option value="false" {% if not employee.is_active %}selected{% endif %}>Фаол эмас</option>
+                        </select>
+                    </div>
+
+                </div>
+
+                {% if request.user.profile.role != 'user' %}
+                <div class="mt-6 rounded-2xl border border-blue-200 bg-blue-50/30 p-5">
+                    <h4 class="mb-4 text-sm font-bold uppercase tracking-wider text-blue-600"><i class="fas fa-key mr-2"></i>Ҳисоб маълумотлари</h4>
+                    <div class="grid grid-cols-1 gap-4">
+                        <div>
+                            <label class="mb-2 block text-sm font-bold text-slate-700">Логин</label>
+                            <div class="flex items-center gap-3">
+                                <input type="text" id="login" value="{{ employee.login|default_if_none:'' }}" class="table-filter" placeholder="Логинни киритинг" {% if page_mode == 'view' %}disabled{% endif %}>
+                                {% if request.user.profile.role == 'admin' and employee.user_id %}
+                                <button type="button" id="downloadKeyButton" onclick="downloadEmployeeCertificate()"
+                                    class="inline-flex shrink-0 items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-[var(--info)] transition hover:bg-blue-100"
+                                    title="Тизимга кириш учун кириш калити (.pfx) яратиш ва юклаб олиш">
+                                    <i class="fas fa-key"></i>
+                                    <span class="hidden sm:inline">Калитни юклаб олиш</span>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if page_mode == 'edit' %}
+                        <div>
+                            <label class="mb-2 block text-sm font-bold text-slate-700">Парол</label>
+                            <input type="password" id="password" class="table-filter" placeholder="Янги парол">
+                        </div>
+                        <div>
+                            <label class="mb-2 block text-sm font-bold text-slate-700">Парол (такрор)</label>
+                            <input type="password" id="password_confirm" class="table-filter" placeholder="Паролни такрорланг">
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+             
+                {% endif %}
+
+                {% if request.user.profile.role == 'user' %}
+                <div class="mt-6 rounded-2xl border border-slate-200 bg-slate-50/30 p-5">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <h4 class="text-sm font-bold uppercase tracking-wider text-slate-700">Ўлчамлар</h4>
+                            <p class="mt-1 text-sm text-slate-500">
+                                {% if can_edit_sizes_only %}Оддий ходим фақат шу бўлимни ўзгартира олади.{% else %}Кийим ва ШҲВ учун хизмат ўлчамлари.{% endif %}
+                            </p>
+                        </div>
+                        {% if can_edit_sizes_only %}
+                        <button type="button" onclick="openSizeEditModal()" class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-[var(--info)] shadow-sm transition hover:border-blue-200 hover:bg-blue-50" title="Ўлчамларни таҳрирлаш" aria-label="Ўлчамларни таҳрирлаш">
+                            <i class="fas fa-pen"></i>
+                        </button>
+                        {% endif %}
+                    </div>
+
+                    <div class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div>
+                            <label class="mb-2 block text-sm font-bold text-slate-700">Махсус кийим</label>
+                            <input type="text" id="special_clothing_size" value="{{ employee.special_clothing_size|default_if_none:'' }}" class="table-filter" disabled>
+                        </div>
+                        <div>
+                            <label class="mb-2 block text-sm font-bold text-slate-700">Оёқ кийим</label>
+                            <input type="text" id="shoe_size" value="{{ employee.shoe_size|default_if_none:'' }}" class="table-filter" disabled>
+                        </div>
+                        <div>
+                            <label class="mb-2 block text-sm font-bold text-slate-700">Куртка</label>
+                            <input type="text" id="jacket_size" value="{{ employee.jacket_size|default_if_none:'' }}" class="table-filter" disabled>
+                        </div>
+                        <div>
+                            <label class="mb-2 block text-sm font-bold text-slate-700">Футболка</label>
+                            <input type="text" id="tshirt_size" value="{{ employee.tshirt_size|default_if_none:'' }}" class="table-filter" disabled>
+                        </div>
+                        <div id="clotheSizeFieldUser" class="{% if employee.department and employee.department.sort_order == 11 or employee.department.sort_order == 13 or employee.department.sort_order == 24 %}{% else %}hidden{% endif %}">
+                            <label class="mb-2 block text-sm font-bold text-slate-700">Халат</label>
+                            <input type="text" id="clothe_size" value="{{ employee.clothe_size|default_if_none:'' }}" class="table-filter" disabled>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if request.user.profile.role != 'user' %}
+        <div class="panel-card rounded-[28px] p-6">
+            <h3 class="font-display text-xl font-bold text-slate-900">Ўлчамлар</h3>
+            <p class="mt-1 text-sm text-slate-500">Кийим ва ШҲВ учун хизмат ўлчамлари.</p>
+
+            <div class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                    <label class="mb-2 block text-sm font-bold text-slate-700">Махсус кийим</label>
+                    <input type="text" id="special_clothing_size" value="{{ employee.special_clothing_size|default_if_none:'' }}" class="table-filter" {% if page_mode == 'view' %}disabled{% endif %}>
+                </div>
+                <div>
+                    <label class="mb-2 block text-sm font-bold text-slate-700">Оёқ кийим</label>
+                    <input type="text" id="shoe_size" value="{{ employee.shoe_size|default_if_none:'' }}" class="table-filter" {% if page_mode == 'view' %}disabled{% endif %}>
+                </div>
+                <div>
+                    <label class="mb-2 block text-sm font-bold text-slate-700">Куртка</label>
+                    <input type="text" id="jacket_size" value="{{ employee.jacket_size|default_if_none:'' }}" class="table-filter" {% if page_mode == 'view' %}disabled{% endif %}>
+                </div>
+                <div>
+                    <label class="mb-2 block text-sm font-bold text-slate-700">Футболка</label>
+                    <input type="text" id="tshirt_size" value="{{ employee.tshirt_size|default_if_none:'' }}" class="table-filter" {% if page_mode == 'view' %}disabled{% endif %}>
+                </div>
+                <div id="clotheSizeFieldAdmin" class="{% if employee.department and employee.department.sort_order == 11 or employee.department.sort_order == 13 or employee.department.sort_order == 24 %}{% else %}hidden{% endif %}">
+                    <label class="mb-2 block text-sm font-bold text-slate-700">Халат</label>
+                    <input type="text" id="clothe_size_admin" value="{{ employee.clothe_size|default_if_none:'' }}" class="table-filter" {% if page_mode == 'view' %}disabled{% endif %}>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="flex flex-wrap justify-end gap-3">
+            {% if page_mode == 'edit' %}
+            <a href="/employees/{{ employee.slug }}/"
+                class="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700">Бекор қилиш</a>
+            <button type="submit" id="saveButton"
+                class="rounded-2xl bg-[var(--info)] px-5 py-3 text-sm font-bold text-white">Сақлаш</button>
+            {% elif request.user.profile.role != 'user' %}
+            <a href="/employees/{{ employee.slug }}/edit/"
+                class="rounded-2xl bg-[var(--info)] px-5 py-3 text-sm font-bold text-white">Таҳрирлаш</a>
+            {% endif %}
+        </div>
+    </form>
+
+    {% if page_mode == 'edit' %}
+    <div id="cameraModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/75 px-4">
+        <div class="w-full max-w-2xl rounded-[28px] bg-white p-6 shadow-2xl">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <h3 id="cameraModalTitle" class="font-display text-2xl font-bold text-slate-900">Суратга олиш</h3>
+                    <p id="cameraModalHint" class="mt-1 text-sm text-slate-500">Камерага рухсат беринг ва суратга олинг.</p>
+                </div>
+                <button type="button" onclick="closeCameraSession()" class="rounded-xl border border-slate-200 px-3 py-2 text-slate-500 hover:bg-slate-50">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div class="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-slate-950">
+                <video id="cameraVideo" autoplay playsinline class="aspect-video w-full object-cover"></video>
+            </div>
+            <canvas id="cameraCanvas" class="hidden"></canvas>
+
+            <div class="mt-5 flex flex-wrap justify-end gap-3">
+                <button type="button" onclick="closeCameraSession()" class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">Бекор қилиш</button>
+                <button type="button" id="cameraCaptureButton" onclick="captureCameraFrame()" class="rounded-xl bg-[var(--info)] px-4 py-2 text-sm font-bold text-white">
+                    <i class="fas fa-camera mr-2"></i>Суратга олиш
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="inlineDepartmentModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/75 px-4">
+        <div class="w-full max-w-lg rounded-[28px] bg-white p-6 shadow-2xl">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <h3 class="font-display text-2xl font-bold text-slate-900">Цех қўшиш</h3>
+                    <p class="mt-1 text-sm text-slate-500">Ходимни таҳрирлашни ёпмасдан янги цех яратинг.</p>
+                </div>
+                <button type="button" onclick="closeInlineOrgModal('department')" class="rounded-xl border border-slate-200 px-3 py-2 text-slate-500 hover:bg-slate-50">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <form class="mt-5 space-y-4" onsubmit="saveInlineDepartment(event)">
+                <div>
+                    <label class="mb-2 block text-sm font-bold text-slate-700" for="inlineDepartmentName">Цех номи</label>
+                    <input type="text" id="inlineDepartmentName" required class="table-filter" placeholder="Масалан, 1-Цех. Технология">
+                </div>
+                <div>
+                    <label class="mb-2 block text-sm font-bold text-slate-700" for="inlineDepartmentBoss">Цех раҳбари</label>
+                    <input type="text" id="inlineDepartmentBoss" class="table-filter" placeholder="Раҳбарнинг Ф.И.Ш.">
+                </div>
+                <div class="flex justify-end gap-3">
+                    <button type="button" onclick="closeInlineOrgModal('department')" class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">Бекор қилиш</button>
+                    <button type="submit" id="inlineDepartmentSaveButton" class="rounded-xl bg-[var(--info)] px-4 py-2 text-sm font-bold text-white">Сақлаш</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="inlineSectionModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/75 px-4">
+        <div class="w-full max-w-lg rounded-[28px] bg-white p-6 shadow-2xl">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <h3 class="font-display text-2xl font-bold text-slate-900">Бўлим қўшиш</h3>
+                    <p class="mt-1 text-sm text-slate-500">Янги бўлим яратинг ва уни дарҳол ходимга бириктиринг.</p>
+                </div>
+                <button type="button" onclick="closeInlineOrgModal('section')" class="rounded-xl border border-slate-200 px-3 py-2 text-slate-500 hover:bg-slate-50">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <form class="mt-5 space-y-4" onsubmit="saveInlineSection(event)">
+                <div>
+                    <label class="mb-2 block text-sm font-bold text-slate-700" for="inlineSectionCode">Бўлим ID си</label>
+                    <input type="text" id="inlineSectionCode" maxlength="50" autocomplete="off" class="table-filter" placeholder="Масалан, 101">
+                </div>
+                <div>
+                    <label class="mb-2 block text-sm font-bold text-slate-700" for="inlineSectionName">Бўлим номи</label>
+                    <input type="text" id="inlineSectionName" required class="table-filter" placeholder="Масалан, Смена A">
+                </div>
+                <div>
+                    <label class="mb-2 block text-sm font-bold text-slate-700" for="inlineSectionDepartment">Цех</label>
+                    <select id="inlineSectionDepartment" required class="table-filter">
+                        <option value="">Цехни танланг</option>
+                    </select>
+                </div>
+                <div class="flex justify-end gap-3">
+                    <button type="button" onclick="closeInlineOrgModal('section')" class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">Бекор қилиш</button>
+                    <button type="submit" id="inlineSectionSaveButton" class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white">Сақлаш</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if can_edit_sizes_only %}
+    <div id="sizeEditModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/75 px-4">
+        <div class="w-full max-w-lg rounded-[28px] bg-white p-6 shadow-2xl">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <h3 class="font-display text-2xl font-bold text-slate-900">Ўлчамларни таҳрирлаш</h3>
+                    <p class="mt-1 text-sm text-slate-500">Керакли қийматларни ўзгартиринг ва уларни алоҳида сақланг.</p>
+                </div>
+                <button type="button" onclick="closeSizeEditModal()" class="rounded-xl border border-slate-200 px-3 py-2 text-slate-500 hover:bg-slate-50">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                    <label class="mb-2 block text-sm font-bold text-slate-700" for="sizeModalSpecialClothing">Махсус кийим</label>
+                    <input type="text" id="sizeModalSpecialClothing" class="table-filter" value="{{ employee.special_clothing_size|default_if_none:'' }}">
+                </div>
+                <div>
+                    <label class="mb-2 block text-sm font-bold text-slate-700" for="sizeModalShoe">Оёқ кийим</label>
+                    <input type="text" id="sizeModalShoe" class="table-filter" value="{{ employee.shoe_size|default_if_none:'' }}">
+                </div>
+                <div>
+                    <label class="mb-2 block text-sm font-bold text-slate-700" for="sizeModalJacket">Куртка</label>
+                    <input type="text" id="sizeModalJacket" class="table-filter" value="{{ employee.jacket_size|default_if_none:'' }}">
+                </div>
+                <div>
+                    <label class="mb-2 block text-sm font-bold text-slate-700" for="sizeModalTshirt">Футболка</label>
+                    <input type="text" id="sizeModalTshirt" class="table-filter" value="{{ employee.tshirt_size|default_if_none:'' }}">
+                </div>
+                <div id="clotheSizeModalField" class="{% if employee.department and employee.department.sort_order == 11 or employee.department.sort_order == 13 or employee.department.sort_order == 24 %}{% else %}hidden{% endif %}">
+                    <label class="mb-2 block text-sm font-bold text-slate-700" for="sizeModalClothe">Халат</label>
+                    <input type="text" id="sizeModalClothe" class="table-filter" value="{{ employee.clothe_size|default_if_none:'' }}">
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end gap-3">
+                <button type="button" onclick="closeSizeEditModal()" class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">Бекор қилиш</button>
+                <button type="button" id="sizeModalSaveButton" onclick="saveSizeModal()" class="rounded-xl bg-[var(--info)] px-4 py-2 text-sm font-bold text-white">Сақлаш</button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</section>
+
+<script>
+    const employeeSlug = '{{ employee.slug }}';
+    const employeeId = {{ employee.pk }};
+    const employeeTabelNumber = '{{ employee.tabel_number }}';
+    const pageMode = '{{ page_mode }}';
+    const canEditSizesOnly = '{{ can_edit_sizes_only|default_if_none:False|yesno:"true,false" }}' === 'true';
+    const currentEmployeeImageUrl = '{% if employee.base_image %}{{ employee.base_image.url }}{% endif %}';
+    const clotheSizeDepartmentSortOrders = new Set(['11', '13', '24']);
+
+    document.addEventListener('DOMContentLoaded', function () {
+        refreshSectionOptions('{{ employee.section_id|default_if_none:"" }}');
+        if (pageMode === 'edit') {
+            syncInlineDepartmentSelect('{{ employee.department_id|default_if_none:"" }}');
+        }
+        syncClotheSizeVisibility();
+
+        const passwordField = document.getElementById('password');
+        const passwordConfirmField = document.getElementById('password_confirm');
+        if (passwordField) {
+            passwordField.value = '';
+        }
+        if (passwordConfirmField) {
+            passwordConfirmField.value = '';
+        }
+
+        IMask(document.getElementById('phone_number_1'), { mask: '+{998} 00 000 00 00' });
+        IMask(document.getElementById('phone_number_2'), { mask: '+{998} 00 000 00 00' });
+        IMask(document.getElementById('date_of_birth'), { mask: '00/00/0000' });
+        IMask(document.getElementById('date_of_employment'), { mask: '00/00/0000' });
+
+        if (pageMode === 'edit') {
+            const baseImageField = document.getElementById('base_image');
+            if (baseImageField) {
+                baseImageField.addEventListener('change', handleEmployeePhotoSelection);
+            }
+        }
+    });
+
+    function shouldShowClotheSizeField() {
+        const departmentSelect = document.getElementById('department_id');
+        const selectedOption = departmentSelect ? departmentSelect.options[departmentSelect.selectedIndex] : null;
+        return clotheSizeDepartmentSortOrders.has(String(selectedOption?.dataset?.sortOrder || ''));
+    }
+
+    function syncClotheSizeVisibility() {
+        const shouldShow = shouldShowClotheSizeField();
+        ['clotheSizeFieldUser', 'clotheSizeFieldAdmin', 'clotheSizeModalField'].forEach(id => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.classList.toggle('hidden', !shouldShow);
+            }
+        });
+
+        if (!shouldShow) {
+            ['clothe_size', 'clothe_size_admin', 'sizeModalClothe'].forEach(id => {
+                const input = document.getElementById(id);
+                if (input) {
+                    input.value = '';
+                }
+            });
+        }
+    }
+
+    function refreshSectionOptions(selectedId = '') {
+        const departmentSelect = document.getElementById('department_id');
+        const sectionSelect = document.getElementById('section_id');
+        const bossField = document.getElementById('boss_full_name');
+
+        if (!departmentSelect || !sectionSelect || !bossField) {
+            return;
+        }
+
+        const departmentId = departmentSelect.value;
+        const selectedDepartmentOption = departmentSelect.options[departmentSelect.selectedIndex];
+        bossField.value = departmentId ? (selectedDepartmentOption?.dataset?.bossFullName || '') : '';
+
+        if (!window._allSectionOptions) {
+            window._allSectionOptions = Array.from(sectionSelect.querySelectorAll('option[data-department-id]')).map(opt => ({
+                value: opt.value,
+                text: opt.textContent,
+                departmentId: opt.dataset.departmentId,
+            }));
+        }
+
+        sectionSelect.innerHTML = '<option value="">Бўлимни танланг</option>';
+        window._allSectionOptions.forEach(opt => {
+            if (!departmentId || opt.departmentId === String(departmentId)) {
+                const option = document.createElement('option');
+                option.value = opt.value;
+                option.textContent = opt.text;
+                option.dataset.departmentId = opt.departmentId;
+                sectionSelect.appendChild(option);
+            }
+        });
+
+        if (selectedId) {
+            sectionSelect.value = String(selectedId);
+        }
+    }
+
+    function openInlineOrgModal(type) {
+        if (pageMode !== 'edit' || canEditSizesOnly) {
+            return;
+        }
+
+        if (type === 'section') {
+            syncInlineDepartmentSelect(document.getElementById('department_id').value);
+        }
+
+        const modal = document.getElementById(type === 'department' ? 'inlineDepartmentModal' : 'inlineSectionModal');
+        if (!modal) {
+            return;
+        }
+
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+
+        const firstField = type === 'department'
+            ? document.getElementById('inlineDepartmentName')
+            : document.getElementById('inlineSectionName');
+        if (firstField) {
+            window.setTimeout(() => firstField.focus(), 0);
+        }
+    }
+
+    function closeInlineOrgModal(type) {
+        const modal = document.getElementById(type === 'department' ? 'inlineDepartmentModal' : 'inlineSectionModal');
+        if (!modal) {
+            return;
+        }
+
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+
+        if (type === 'department') {
+            document.getElementById('inlineDepartmentName').value = '';
+            document.getElementById('inlineDepartmentBoss').value = '';
+        } else {
+            document.getElementById('inlineSectionCode').value = '';
+            document.getElementById('inlineSectionName').value = '';
+        }
+    }
+
+    function syncInlineDepartmentSelect(selectedDepartmentId = '') {
+        const departmentSelect = document.getElementById('department_id');
+        const modalDepartmentSelect = document.getElementById('inlineSectionDepartment');
+        if (!departmentSelect || !modalDepartmentSelect) {
+            return;
+        }
+
+        const currentValue = String(selectedDepartmentId || modalDepartmentSelect.value || departmentSelect.value || '');
+        modalDepartmentSelect.innerHTML = '<option value="">Цехни танланг</option>';
+
+        Array.from(departmentSelect.querySelectorAll('option[value]:not([value=""])')).forEach(option => {
+            const modalOption = document.createElement('option');
+            modalOption.value = option.value;
+            modalOption.textContent = option.textContent;
+            modalDepartmentSelect.appendChild(modalOption);
+        });
+
+        if (currentValue) {
+            modalDepartmentSelect.value = currentValue;
+        }
+    }
+
+    function appendDepartmentOption(department, selected = false) {
+        const departmentSelect = document.getElementById('department_id');
+        if (!departmentSelect) {
+            return;
+        }
+
+        const existingOption = Array.from(departmentSelect.options).find(option => option.value === String(department.id));
+        if (existingOption) {
+            existingOption.textContent = department.name;
+            existingOption.dataset.bossFullName = department.boss_full_name || '';
+            if (selected) {
+                departmentSelect.value = String(department.id);
+            }
+            syncInlineDepartmentSelect(department.id);
+            refreshSectionOptions();
+            syncClotheSizeVisibility();
+            return;
+        }
+
+        const option = document.createElement('option');
+        option.value = department.id;
+        option.textContent = department.name;
+        option.dataset.bossFullName = department.boss_full_name || '';
+        departmentSelect.appendChild(option);
+        departmentSelect.value = String(department.id);
+        syncInlineDepartmentSelect(department.id);
+        refreshSectionOptions();
+        syncClotheSizeVisibility();
+    }
+
+    function appendSectionOption(section, selected = false) {
+        const sectionSelect = document.getElementById('section_id');
+        if (!sectionSelect) {
+            return;
+        }
+
+        if (!window._allSectionOptions) {
+            window._allSectionOptions = [];
+        }
+
+        const normalizedSection = {
+            value: String(section.id),
+            text: section.name,
+            departmentId: String(section.department?.id || section.department_id || ''),
+        };
+
+        const existingIndex = window._allSectionOptions.findIndex(option => option.value === normalizedSection.value);
+        if (existingIndex >= 0) {
+            window._allSectionOptions[existingIndex] = normalizedSection;
+        } else {
+            window._allSectionOptions.push(normalizedSection);
+        }
+
+        refreshSectionOptions(selected ? normalizedSection.value : '');
+        if (selected) {
+            sectionSelect.value = normalizedSection.value;
+        }
+    }
+
+    async function saveInlineDepartment(event) {
+        event.preventDefault();
+
+        const saveButton = document.getElementById('inlineDepartmentSaveButton');
+        setLoading(saveButton, true, 'Сақланмоқда...');
+
+        try {
+            const response = await fetch(`${API_BASE}/template/departments/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken'),
+                },
+                body: JSON.stringify({
+                    name: document.getElementById('inlineDepartmentName').value.trim(),
+                    boss_full_name: document.getElementById('inlineDepartmentBoss').value.trim(),
+                }),
+            });
+
+            const payload = await response.json().catch(() => null);   // JSON бўлмаган жавобда (масалан, сервер хатоси) умумий хабар чиқади
+            if (!response.ok) {
+                throw new Error(extractApiErrorMessage(payload) || 'Цех яратилмади');
+            }
+
+            appendDepartmentOption(payload.data, true);
+            closeInlineOrgModal('department');
+            showToast('Цех муваффақиятли яратилди');
+        } catch (error) {
+            showToast(error.message, 'error');
+        } finally {
+            setLoading(saveButton, false);
+        }
+    }
+
+    async function saveInlineSection(event) {
+        event.preventDefault();
+
+        const departmentId = document.getElementById('inlineSectionDepartment').value;
+        if (!departmentId) {
+            showToast('Аввал бўлим учун цехни танланг', 'error');
+            return;
+        }
+
+        const saveButton = document.getElementById('inlineSectionSaveButton');
+        setLoading(saveButton, true, 'Сақланмоқда...');
+
+        try {
+            const response = await fetch(`${API_BASE}/template/sections/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken'),
+                },
+                body: JSON.stringify({
+                    code: document.getElementById('inlineSectionCode').value.trim(),
+                    name: document.getElementById('inlineSectionName').value.trim(),
+                    department_id: Number(departmentId),
+                }),
+            });
+
+            const payload = await response.json().catch(() => null);   // JSON бўлмаган жавобда (масалан, сервер хатоси) умумий хабар чиқади
+            if (!response.ok) {
+                throw new Error(extractApiErrorMessage(payload) || 'Бўлим яратилмади');
+            }
+
+            document.getElementById('department_id').value = String(departmentId);
+            appendSectionOption(payload.data, true);
+            closeInlineOrgModal('section');
+            showToast('Бўлим муваффақиятли яратилди');
+        } catch (error) {
+            showToast(error.message, 'error');
+        } finally {
+            setLoading(saveButton, false);
+        }
+    }
+
+    async function saveEmployeePage(event) {
+        event.preventDefault();
+        if (pageMode !== 'edit') {
+            return;
+        }
+
+        const saveButton = document.getElementById('saveButton');
+        setLoading(saveButton, true, 'Сақланмоқда...');
+
+        const formData = new FormData();
+        ['first_name', 'last_name', 'surname', 'tabel_number', 'gender', 'date_of_birth', 'position', 'grade', 'boss_full_name', 'special_clothing_size', 'shoe_size', 'jacket_size', 'tshirt_size', 'date_of_employment', 'phone_number_1', 'phone_number_2', 'login'].forEach(id => {
+            formData.append(id, document.getElementById(id).value);
+        });
+        const adminClotheInput = document.getElementById('clothe_size_admin');
+        if (adminClotheInput) {
+            formData.append('clothe_size', adminClotheInput.value);
+        }
+
+        const passwordVal = document.getElementById('password') ? document.getElementById('password').value : '';
+        const passwordConfirmVal = document.getElementById('password_confirm') ? document.getElementById('password_confirm').value : '';
+        if (passwordVal) {
+            if (passwordVal !== passwordConfirmVal) {
+                showToast('Пароллар мос келмайди', 'error');
+                setLoading(saveButton, false);
+                return;
+            }
+            formData.append('password', passwordVal);
+            formData.append('password_confirm', passwordConfirmVal);
+        }
+
+        formData.append('is_active', document.getElementById('is_active').value === 'true');
+
+        const faceIdCheckoutField = document.getElementById('requires_face_id_checkout');
+        if (faceIdCheckoutField) {
+            formData.append('requires_face_id_checkout', faceIdCheckoutField.value === 'true');
+        }
+
+        const departmentId = document.getElementById('department_id').value;
+        const sectionId = document.getElementById('section_id').value;
+        if (departmentId) {
+            formData.append('department_id', departmentId);
+        }
+        // Бўлим ихтиёрий: бўш қолдирилса, бўш қиймат юборилади — сервер эски бўлимни олиб ташлайди
+        // (юборилмаса, ходим бошқа цехга ўтганда эски бўлим қолиб, «Бўлим танланган цехга тегишли эмас» хатоси чиқарди).
+        formData.append('section_id', sectionId);
+
+        const baseImageField = document.getElementById('base_image');
+        const imageFile = baseImageField ? baseImageField.files[0] : null;
+        if (imageFile) {
+            formData.append('base_image', imageFile);
+        } else if (window._capturedBlob) {
+            formData.append('base_image', window._capturedBlob, 'camera_photo.jpg');
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}/employees/${employeeSlug}/`, {
+                method: 'PATCH',
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken'),
+                },
+                body: formData,
+            });
+
+            const payload = await response.json().catch(() => null);   // JSON бўлмаган жавобда (масалан, сервер хатоси) умумий хабар чиқади
+            if (!response.ok) {
+                throw new Error(extractApiErrorMessage(payload) || 'Сўров бажарилмади');
+            }
+
+            showToast('Ходим муваффақиятли янгиланди');
+            window.setTimeout(() => {
+                window.location.href = `/employees/${payload.slug || employeeSlug}/`;
+            }, 300);
+        } catch (error) {
+            showToast(error.message, 'error');
+        } finally {
+            setLoading(saveButton, false);
+        }
+    }
+
+    function openSizeEditModal() {
+        const modal = document.getElementById('sizeEditModal');
+        if (!modal) {
+            return;
+        }
+
+        document.getElementById('sizeModalSpecialClothing').value = document.getElementById('special_clothing_size').value;
+        document.getElementById('sizeModalShoe').value = document.getElementById('shoe_size').value;
+        document.getElementById('sizeModalJacket').value = document.getElementById('jacket_size').value;
+        document.getElementById('sizeModalTshirt').value = document.getElementById('tshirt_size').value;
+        const clotheInput = document.getElementById('clothe_size');
+        const modalClotheInput = document.getElementById('sizeModalClothe');
+        if (clotheInput && modalClotheInput) {
+            modalClotheInput.value = clotheInput.value;
+        }
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+
+    function closeSizeEditModal() {
+        const modal = document.getElementById('sizeEditModal');
+        if (!modal) {
+            return;
+        }
+
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+
+    async function saveSizeModal() {
+        const saveButton = document.getElementById('sizeModalSaveButton');
+        setLoading(saveButton, true, 'Сақланмоқда...');
+
+        const formData = new FormData();
+        formData.append('special_clothing_size', document.getElementById('sizeModalSpecialClothing').value.trim());
+        formData.append('shoe_size', document.getElementById('sizeModalShoe').value.trim());
+        formData.append('jacket_size', document.getElementById('sizeModalJacket').value.trim());
+        formData.append('tshirt_size', document.getElementById('sizeModalTshirt').value.trim());
+        const modalClotheInput = document.getElementById('sizeModalClothe');
+        if (modalClotheInput) {
+            formData.append('clothe_size', modalClotheInput.value.trim());
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}/employees/${employeeSlug}/`, {
+                method: 'PATCH',
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken'),
+                },
+                body: formData,
+            });
+
+            const payload = await response.json().catch(() => null);   // JSON бўлмаган жавобда (масалан, сервер хатоси) умумий хабар чиқади
+            if (!response.ok) {
+                throw new Error(extractApiErrorMessage(payload) || 'Ўлчамлар янгиланмади');
+            }
+
+            document.getElementById('special_clothing_size').value = payload.special_clothing_size || '';
+            document.getElementById('shoe_size').value = payload.shoe_size || '';
+            document.getElementById('jacket_size').value = payload.jacket_size || '';
+            document.getElementById('tshirt_size').value = payload.tshirt_size || '';
+            const clotheInput = document.getElementById('clothe_size');
+            if (clotheInput) {
+                clotheInput.value = payload.clothe_size || '';
+            }
+            const adminClotheInput = document.getElementById('clothe_size_admin');
+            if (adminClotheInput) {
+                adminClotheInput.value = payload.clothe_size || '';
+            }
+            closeSizeEditModal();
+            showToast('Ўлчамлар муваффақиятли янгиланди');
+        } catch (error) {
+            showToast(error.message, 'error');
+        } finally {
+            setLoading(saveButton, false);
+        }
+    }
+
+    let cameraStream = null;
+    window._capturedBlob = null;
+    window._cameraMode = null;
+
+    function handleEmployeePhotoSelection(event) {
+        const [file] = event.target.files || [];
+        if (!file) {
+            return;
+        }
+
+        window._capturedBlob = null;
+        const previewUrl = URL.createObjectURL(file);
+        updateEmployeeImagePreview(
+            previewUrl,
+            'Янги файл танланди. Фотосурат ва Face ID ни янгилаш учун «Сақлаш» ни босинг.',
+            'Сақлангандан кейин Face ID танланган янги фотосуратдан фойдаланади.'
+        );
+    }
+
+    function updateEmployeeImagePreview(imageUrl, hintText, faceStatusText) {
+        const photoPreviewImage = document.getElementById('photoPreviewImage');
+        const photoPreviewPlaceholder = document.getElementById('photoPreviewPlaceholder');
+        const faceIdPreviewImage = document.getElementById('faceIdPreviewImage');
+        const faceIdPreviewPlaceholder = document.getElementById('faceIdPreviewPlaceholder');
+
+        [photoPreviewImage, faceIdPreviewImage].forEach(imageEl => {
+            if (!imageEl) {
+                return;
+            }
+            imageEl.src = imageUrl || '';
+            imageEl.classList.toggle('hidden', !imageUrl);
+        });
+
+        [photoPreviewPlaceholder, faceIdPreviewPlaceholder].forEach(placeholderEl => {
+            if (!placeholderEl) {
+                return;
+            }
+            placeholderEl.classList.toggle('hidden', Boolean(imageUrl));
+        });
+
+        const photoChangeHint = document.getElementById('photoChangeHint');
+        if (photoChangeHint && hintText) {
+            photoChangeHint.textContent = hintText;
+        }
+
+        const faceIdStatus = document.getElementById('faceIdStatus');
+        if (faceIdStatus && faceStatusText) {
+            faceIdStatus.textContent = faceStatusText;
+        }
+    }
+
+    function clearPendingEmployeeImage() {
+        const baseImageField = document.getElementById('base_image');
+        if (baseImageField) {
+            baseImageField.value = '';
+        }
+
+        window._capturedBlob = null;
+        updateEmployeeImagePreview(
+            currentEmployeeImageUrl || '',
+            currentEmployeeImageUrl ? 'Ҳозир ходимнинг жорий фотосурати ишлатилмоқда.' : 'Фотосурат ҳали юкланмаган.',
+            currentEmployeeImageUrl ? 'Face ID ҳозир ходимнинг жорий асосий тасвиридан фойдаланмоқда.' : 'Face ID учун ҳали асосий тасвир йўқ.'
+        );
+        showToast('Янги тасвир бекор қилинди', 'success');
+    }
+
+    function openCameraSession(mode) {
+        const modal = document.getElementById('cameraModal');
+        const video = document.getElementById('cameraVideo');
+        const title = document.getElementById('cameraModalTitle');
+        const hint = document.getElementById('cameraModalHint');
+        const captureButton = document.getElementById('cameraCaptureButton');
+
+        if (!modal || !video) {
+            return;
+        }
+
+        window._cameraMode = mode;
+        title.textContent = mode === 'face-id' ? 'Face ID ни янгилаш' : 'Фотосуратни алмаштириш';
+        hint.textContent = mode === 'face-id'
+            ? 'Юзингизни суратга олинг. Сақлашдан олдин кадр юз борлигига текширилади.'
+            : 'Ходимнинг янги фотосуратини олинг.';
+        captureButton.innerHTML = mode === 'face-id'
+            ? '<i class="fas fa-face-smile mr-2"></i>Face ID учун суратга олиш'
+            : '<i class="fas fa-camera mr-2"></i>Суратга олиш';
+
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+            .then(stream => {
+                cameraStream = stream;
+                video.srcObject = stream;
+            })
+            .catch(() => {
+                showToast('Камерага кириб бўлмади', 'error');
+                closeCameraSession();
+            });
+    }
+
+    function closeCameraSession() {
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(track => track.stop());
+            cameraStream = null;
+        }
+
+        const video = document.getElementById('cameraVideo');
+        if (video) {
+            video.srcObject = null;
+        }
+
+        const modal = document.getElementById('cameraModal');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        window._cameraMode = null;
+    }
+
+    async function captureCameraFrame() {
+        const video = document.getElementById('cameraVideo');
+        const canvas = document.getElementById('cameraCanvas');
+        const captureMode = window._cameraMode;
+
+        if (!video || !video.videoWidth || !video.videoHeight) {
+            showToast('Камера ҳали тайёр эмас. Бир сониядан кейин такрорланг.', 'error');
+            return;
+        }
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+        if (!blob) {
+            showToast('Тасвирни тайёрлаб бўлмади', 'error');
+            return;
+        }
+
+        if (captureMode === 'face-id') {
+            const verificationOk = await validateFaceIdCapture(dataUrl);
+            if (!verificationOk) {
+                return;
+            }
+        }
+
+        const baseImageField = document.getElementById('base_image');
+        if (baseImageField) {
+            baseImageField.value = '';
+        }
+
+        window._capturedBlob = blob;
+        const previewUrl = URL.createObjectURL(blob);
+        const hintText = captureMode === 'face-id'
+            ? 'Face ID учун янги сурат тайёрланди. Ходим тасвирини янгилаш учун «Сақлаш» ни босинг.'
+            : 'Ходимнинг янги сурати тайёрланди. Фотосуратни янгилаш учун «Сақлаш» ни босинг.';
+        const faceStatusText = captureMode === 'face-id'
+            ? 'Янги Face ID сурати тайёрланди ва сақланишини кутмоқда.'
+            : 'Face ID сақлангандан кейин янги фотосуратдан фойдаланади.';
+
+        updateEmployeeImagePreview(previewUrl, hintText, faceStatusText);
+        closeCameraSession();
+        showToast(captureMode === 'face-id' ? 'Face ID сурати тайёрланди' : 'Янги фотосурат тайёрланди');
+    }
+
+    async function downloadEmployeeCertificate() {
+        const button = document.getElementById('downloadKeyButton');
+        if (!confirmAction('Ушбу ходим учун янги кириш калити (.pfx) яратилсинми? Агар унда аввал калит бўлган бўлса, у ишламай қолади.')) {
+            return;
+        }
+
+        setLoading(button, true, 'Яратилмоқда...');
+
+        try {
+            const response = await fetch(`${API_BASE}/template/employees/${employeeId}/certificate/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken'),
+                },
+            });
+
+            if (!response.ok) {
+                let message = 'Кириш калитини яратиб бўлмади';
+                try {
+                    const payload = await response.json();
+                    message = extractApiErrorMessage(payload) || message;
+                } catch (error) {
+                    // Response body was a file, not JSON - keep default message.
+                }
+                throw new Error(message);
+            }
+
+            const password = response.headers.get('X-Pfx-Password');
+            const blob = await response.blob();
+            const downloadUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = `${employeeTabelNumber}.pfx`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(downloadUrl);
+
+            if (password) {
+                window.prompt('Калит пароли (сақлаб қўйинг — у фақат бир марта кўрсатилади):', password);
+            }
+
+            showToast('Кириш калити яратилди ва юклаб олинди');
+        } catch (error) {
+            showToast(error.message, 'error');
+        } finally {
+            setLoading(button, false);
+        }
+    }
+
+    async function validateFaceIdCapture(capturedImage) {
+        try {
+            const response = await fetch(`${API_BASE}/face/detect-boxes/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken'),
+                },
+                body: JSON.stringify({ captured_image: capturedImage }),
+            });
+
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload?.error || payload?.message || 'Face ID текшируви бажарилмади');
+            }
+
+            if (!payload.count) {
+                showToast('Юз топилмади. Face ID учун суратни қайта олинг.', 'error');
+                return false;
+            }
+
+            return true;
+        } catch (error) {
+            showToast(error.message || 'Face ID текширувида хато', 'error');
+            return false;
+        }
+    }
+</script>
+{% endblock %}

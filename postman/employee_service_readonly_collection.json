@@ -1,0 +1,191 @@
+{
+  "info": {
+    "_postman_id": "a1d4f6d2-8c2a-4d66-9f84-employee-service-readonly",
+    "name": "employee_service Read-Only API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Read-only Postman collection for external integration with employee_service."
+  },
+  "item": [
+    {
+      "name": "Employees List",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-Employee-Service-Key",
+            "value": "{{employee_service_api_key}}",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{employee_service_base_url}}/employees/?no_pagination=true",
+          "host": [
+            "{{employee_service_base_url}}"
+          ],
+          "path": [
+            "employees",
+            ""
+          ],
+          "query": [
+            {
+              "key": "no_pagination",
+              "value": "true"
+            }
+          ]
+        },
+        "description": "Returns the full employee list without pagination."
+      },
+      "response": []
+    },
+    {
+      "name": "Employees Filtered By Source",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-Employee-Service-Key",
+            "value": "{{employee_service_api_key}}",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{employee_service_base_url}}/employees/?source_system=default&no_pagination=true",
+          "host": [
+            "{{employee_service_base_url}}"
+          ],
+          "path": [
+            "employees",
+            ""
+          ],
+          "query": [
+            {
+              "key": "source_system",
+              "value": "default"
+            },
+            {
+              "key": "no_pagination",
+              "value": "true"
+            }
+          ]
+        },
+        "description": "Returns employees filtered by source_system."
+      },
+      "response": []
+    },
+    {
+      "name": "Employee Detail",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-Employee-Service-Key",
+            "value": "{{employee_service_api_key}}",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{employee_service_base_url}}/employees/{{employee_slug}}/",
+          "host": [
+            "{{employee_service_base_url}}"
+          ],
+          "path": [
+            "employees",
+            "{{employee_slug}}",
+            ""
+          ]
+        },
+        "description": "Returns a single employee by slug."
+      },
+      "response": []
+    },
+    {
+      "name": "Departments List",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-Employee-Service-Key",
+            "value": "{{employee_service_api_key}}",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{employee_service_base_url}}/departments/",
+          "host": [
+            "{{employee_service_base_url}}"
+          ],
+          "path": [
+            "departments",
+            ""
+          ]
+        },
+        "description": "Returns department catalog."
+      },
+      "response": []
+    },
+    {
+      "name": "Sections List",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-Employee-Service-Key",
+            "value": "{{employee_service_api_key}}",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{employee_service_base_url}}/sections/",
+          "host": [
+            "{{employee_service_base_url}}"
+          ],
+          "path": [
+            "sections",
+            ""
+          ]
+        },
+        "description": "Returns section catalog."
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "employee_service_base_url",
+      "value": "https://192.168.2.72:8010/api/v1"
+    },
+    {
+      "key": "employee_service_api_key",
+      "value": "dev-employee-service-key"
+    },
+    {
+      "key": "employee_slug",
+      "value": "default-9112-maruf-shabonov"
+    }
+  ]
+}

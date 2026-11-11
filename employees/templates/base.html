@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="uz-Cyrl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Ходимлар хизмати{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Manrope', 'system-ui', 'sans-serif'],
+                        display: ['IBM Plex Sans', 'system-ui', 'sans-serif'],
+                    },
+                    colors: {
+                        ink: '#1e293b',
+                        shell: '#f3f6fb',
+                        accent: '#ef7d32',
+                        cobalt: '#2563eb',
+                        panel: '#ffffff',
+                    },
+                    boxShadow: {
+                        panel: '0 24px 60px rgba(15, 23, 42, 0.08)',
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/imask@7.6.0/dist/imask.min.js"></script>
+    <style>
+        :root {
+            --sidebar: #1d2636;
+            --sidebar-soft: #2b3548;
+            --surface: #ffffff;
+            --shell: #f3f6fb;
+            --line: #dbe3f0;
+            --text: #192434;
+            --muted: #72819a;
+            --accent: #ef7d32;
+            --accent-soft: #fff0e4;
+            --info: #2563eb;
+            --success: #19a56f;
+            --danger: #ef4444;
+            --shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
+        }
+
+        html,
+        body {
+            min-height: 100%;
+        }
+
+        body {
+            font-family: 'Manrope', system-ui, sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 22%),
+                radial-gradient(circle at top right, rgba(239, 125, 50, 0.10), transparent 18%),
+                var(--shell);
+            color: var(--text);
+        }
+
+        .app-shell {
+            min-height: 100vh;
+        }
+
+        .sidebar-link {
+            display: flex;
+            align-items: center;
+            gap: 0.85rem;
+            padding: 0.85rem 1rem;
+            border-radius: 0.95rem;
+            color: rgba(255, 255, 255, 0.82);
+            transition: background-color 0.2s ease, transform 0.2s ease, color 0.2s ease;
+        }
+
+        .sidebar-link:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: #fff;
+            transform: translateX(2px);
+        }
+
+        .sidebar-link.active {
+            background: linear-gradient(135deg, rgba(239, 125, 50, 0.18), rgba(37, 99, 235, 0.2));
+            color: #fff;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+        }
+
+        .panel-card {
+            background: var(--surface);
+            border: 1px solid rgba(219, 227, 240, 0.9);
+            box-shadow: var(--shadow);
+        }
+
+        .stat-card {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            inset: auto -24px -24px auto;
+            width: 88px;
+            height: 88px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.16), rgba(239, 125, 50, 0.08));
+        }
+
+        .table-filter {
+            width: 100%;
+            border: 1px solid var(--line);
+            border-radius: 0.8rem;
+            padding: 0.55rem 0.8rem;
+            font-size: 0.85rem;
+            background: #fff;
+        }
+
+        .table-filter:focus {
+            outline: none;
+            border-color: rgba(37, 99, 235, 0.45);
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.08);
+        }
+
+        .icon-action {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.2rem;
+            height: 2.2rem;
+            border-radius: 0.8rem;
+            border: 1px solid var(--line);
+            background: #fff;
+            color: #60708a;
+            transition: all 0.2s ease;
+        }
+
+        .icon-action:hover {
+            transform: translateY(-1px);
+            color: var(--info);
+            border-color: rgba(37, 99, 235, 0.32);
+            box-shadow: 0 10px 25px rgba(37, 99, 235, 0.10);
+        }
+
+        .icon-action.danger:hover {
+            color: var(--danger);
+            border-color: rgba(239, 68, 68, 0.28);
+            box-shadow: 0 10px 25px rgba(239, 68, 68, 0.12);
+        }
+
+        .fade-in {
+            animation: fadeIn 0.25s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .loading {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 3px solid rgba(37, 99, 235, 0.18);
+            border-radius: 50%;
+            border-top-color: var(--info);
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @media (max-width: 1023px) {
+            .mobile-sidebar-hidden {
+                transform: translateX(-100%);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-shell lg:grid lg:grid-cols-[260px_minmax(0,1fr)]">
+        <aside id="appSidebar"
+            class="fixed inset-y-0 left-0 z-40 w-[260px] bg-[var(--sidebar)] px-6 py-6 text-white transition-transform duration-300 lg:static lg:translate-x-0 mobile-sidebar-hidden">
+            <div class="mb-8 flex items-center justify-between">
+                <a href="/" class="flex items-center gap-3">
+                    <div
+                        class="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 text-[var(--accent)]">
+                        <i class="fas fa-id-card-clip text-2xl"></i>
+                    </div>
+                    <div>
+                        <p class="font-display text-2xl font-bold leading-none tracking-wide text-[var(--accent)]">bnpzID
+                        </p>
+                        <p class="mt-1 text-xs uppercase tracking-[0.25em] text-white/70">Ходимларни бошқариш</p>
+                    </div>
+                </a>
+                <button class="lg:hidden text-white/70" onclick="toggleSidebar()">
+                    <i class="fas fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <div class="mb-6 text-xs font-semibold uppercase tracking-[0.22em] text-white/35">Меню</div>
+            <nav class="space-y-2 text-sm font-semibold">
+                <a href="/" class="sidebar-link {% if request.path == '/' %}active{% endif %}">
+                    <i class="fas fa-house w-4"></i>
+                    <span>Бош саҳифа</span>
+                </a>
+
+                {% if request.user.profile.role != 'user' %}
+                <div>
+                    <button onclick="toggleSettingsMenu()" class="sidebar-link w-full justify-between {% if '/staff/' in request.path or '/departments/' in request.path or '/sections/' in request.path or '/settings/access/' in request.path %}active{% endif %}">
+                        <span class="flex items-center gap-[0.85rem]">
+                            <i class="fas fa-sliders w-4"></i>
+                            <span>Созламалар</span>
+                        </span>
+                        <i id="settingsChevron" class="fas fa-chevron-down text-xs transition-transform duration-200 {% if '/staff/' in request.path or '/departments/' in request.path or '/sections/' in request.path or '/settings/access/' in request.path %}rotate-180{% endif %}"></i>
+                    </button>
+                    <div id="settingsSubmenu" class="mt-1 ml-5 space-y-1 overflow-hidden transition-all duration-200 {% if '/staff/' in request.path or '/departments/' in request.path or '/sections/' in request.path or '/settings/access/' in request.path %}max-h-56{% else %}max-h-0{% endif %}">
+                        <a href="/staff/" class="sidebar-link text-xs py-2 {% if '/staff/' in request.path %}active{% endif %}">
+                            <i class="fas fa-sitemap w-4"></i>
+                            <span>Штат бирлиги ва лавозим</span>
+                        </a>
+                        <a href="/departments/" class="sidebar-link text-xs py-2 {% if '/departments/' in request.path %}active{% endif %}">
+                            <i class="fas fa-industry w-4"></i>
+                            <span>Цехлар</span>
+                        </a>
+                        <a href="/sections/" class="sidebar-link text-xs py-2 {% if '/sections/' in request.path %}active{% endif %}">
+                            <i class="fas fa-diagram-project w-4"></i>
+                            <span>Бўлимлар</span>
+                        </a>
+                        {% if request.user.profile.role == 'admin' %}
+                        <a href="/settings/access/" class="sidebar-link text-xs py-2 {% if '/settings/access/' in request.path %}active{% endif %}">
+                            <i class="fas fa-user-lock w-4"></i>
+                            <span>Фойдаланувчилар рухсатлари</span>
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </nav>
+
+        </aside>
+
+        <div class="relative min-w-0 lg:pl-0">
+            <div id="sidebarOverlay" class="fixed inset-0 z-30 hidden bg-slate-950/30 lg:hidden"
+                onclick="toggleSidebar()"></div>
+
+            <header
+                class="sticky top-0 z-20 border-b border-slate-200/70 bg-white/85 px-4 py-4 backdrop-blur sm:px-6 lg:px-8">
+                <div class="flex items-center justify-between gap-4">
+                    <div class="flex items-center gap-3">
+                        <button
+                            class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 text-slate-600 lg:hidden"
+                            onclick="toggleSidebar()">
+                            <i class="fas fa-bars"></i>
+                        </button>
+                        <div>
+                            <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400"></p>
+                            <h1 class="font-display text-xl font-bold text-slate-900"></h1>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-3">
+                        <a href="/profile/edit/" 
+                           class="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm hover:bg-slate-50 transition">
+                            <div class="hidden text-right sm:block">
+                                <p class="text-sm font-bold text-slate-900">{% if request.user.employee %}{{ request.user.employee }}{% else %}{% firstof request.user.get_full_name request.user.username "Оператор" %}{% endif %}</p>
+                                <p class="text-xs text-slate-500">{% firstof request.user.profile.get_role_display "Оператор" %}</p>
+                            </div>
+                               {% if request.user.profile.avatar_image %}
+                               <img src="{{ request.user.profile.avatar_image.url }}" 
+                                 alt="Аватар" 
+                                 class="h-11 w-11 rounded-2xl object-cover border-2 border-white shadow-sm">
+                            {% else %}
+                            <div
+                                class="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]">
+                                <i class="fas fa-user"></i>
+                            </div>
+                            {% endif %}
+                        </a>
+                        <form method="post" action="/logout/" class="m-0">
+                            {% csrf_token %}
+                            <button type="submit"
+                                class="inline-flex h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 transition hover:border-red-200 hover:text-red-600">
+                                <i class="fas fa-right-from-bracket"></i>
+                                <span class="hidden sm:inline">Чиқиш</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </header>
+
+            <main class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed bottom-4 right-4 z-50 hidden fade-in">
+        <div
+            class="flex min-w-[280px] max-w-[460px] items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-2xl">
+            <div id="toast-icon"></div>
+            <p id="toast-message" class="whitespace-pre-line break-words text-sm font-semibold text-slate-800"></p>
+            <button onclick="hideToast()" class="ml-auto text-slate-400 hover:text-slate-600">
+                <i class="fas fa-xmark"></i>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('appSidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            sidebar.classList.toggle('mobile-sidebar-hidden');
+            overlay.classList.toggle('hidden');
+        }
+
+        function toggleSettingsMenu() {
+            const submenu = document.getElementById('settingsSubmenu');
+            const chevron = document.getElementById('settingsChevron');
+            if (submenu.classList.contains('max-h-0')) {
+                submenu.classList.remove('max-h-0');
+                submenu.classList.add('max-h-56');
+                chevron.classList.add('rotate-180');
+            } else {
+                submenu.classList.remove('max-h-56');
+                submenu.classList.add('max-h-0');
+                chevron.classList.remove('rotate-180');
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toast-message');
+            const toastIcon = document.getElementById('toast-icon');
+
+            toastMessage.textContent = message;
+
+            if (type === 'success') {
+                toastIcon.innerHTML = '<i class="fas fa-circle-check text-lg text-emerald-500"></i>';
+            } else if (type === 'error') {
+                toastIcon.innerHTML = '<i class="fas fa-circle-exclamation text-lg text-red-500"></i>';
+            } else {
+                toastIcon.innerHTML = '<i class="fas fa-circle-info text-lg text-blue-500"></i>';
+            }
+
+            toast.classList.remove('hidden');
+            window.clearTimeout(window.__toastTimer);
+            // Хато матнини ўқиб улгуриш учун узоқроқ туради.
+            window.__toastTimer = window.setTimeout(hideToast, type === 'error' ? 6500 : 3200);
+        }
+
+        function hideToast() {
+            document.getElementById('toast').classList.add('hidden');
+        }
+
+        // ---- Сервер хатоларини (масалан, {"section_id": ["…"]}) огоҳлантириш матнига айлантириш ----
+        const API_FIELD_LABELS = {
+            first_name: 'Исм', last_name: 'Фамилия', surname: 'Отасининг исми', tabel_number: 'Табель рақами',
+            gender: 'Жинси', date_of_birth: 'Туғилган сана', date_of_employment: 'Ишга қабул қилинган сана',
+            date_of_change_position: 'Лавозим ўзгарган сана', phone_number_1: 'Телефон 1', phone_number_2: 'Телефон 2',
+            position: 'Лавозим', grade: 'Даража (разряд)', department_id: 'Цех', section_id: 'Бўлим',
+            department_name: 'Цех', section_name: 'Бўлим', boss_full_name: 'Цех раҳбари', login: 'Логин',
+            password: 'Парол', password_confirm: 'Парол (такрор)', base_image: 'Фотосурат',
+            special_clothing_size: 'Махсус кийим', clothe_size: 'Кийим', shoe_size: 'Оёқ кийим',
+            jacket_size: 'Куртка', tshirt_size: 'Футболка', role: 'Рол', username: 'Логин',
+        };
+        const API_MESSAGE_KEYS = ['message', 'detail', 'error'];   // шу калитлардаги матн биринчи ўринда
+        const API_SKIPPED_KEYS = new Set(['success', 'non_field_errors', 'errors']);
+
+        // DRF нинг инглизча стандарт хабарлари — ўзбекчага.
+        function translateApiMessage(text) {
+            const rules = [
+                [/^This field is required\.?$/i, 'Бу майдонни тўлдириш мажбурий'],
+                [/^This field may not be (blank|null)\.?$/i, 'Бу майдонни тўлдириш мажбурий'],
+                [/^A valid integer is required\.?$/i, 'Бутун сон киритинг'],
+                [/^A valid number is required\.?$/i, 'Сон киритинг'],
+                [/^Enter a valid email address\.?$/i, 'Тўғри электрон почта манзилини киритинг'],
+                [/^Date has wrong format\./i, 'Сана нотўғри форматда киритилган (кк/оо/йййй)'],
+                [/^Invalid pk .* object does not exist\.?$/i, 'Танланган қиймат топилмади'],
+                [/^Upload a valid image/i, 'Тўғри тасвир файлини юкланг'],
+                [/^Ensure this field has no more than (\d+) characters\.?$/i, (match, count) => `Максимал узунлик — ${count} белги`],
+            ];
+            for (const [pattern, replacement] of rules) {
+                if (pattern.test(text)) {
+                    return typeof replacement === 'function' ? text.replace(pattern, replacement) : replacement;
+                }
+            }
+            return text;
+        }
+
+        // Хато бўлмаса бўш матн қайтаради (чақирувчи ўз матнини қўяди). Энг кўпи билан 4 та қатор.
+        function extractApiErrorMessage(data) {
+            if (typeof data === 'string') {
+                return translateApiMessage(data.trim());
+            }
+            if (!data || typeof data !== 'object') {
+                return '';
+            }
+
+            const lines = [];
+            const collect = (value, key) => {
+                if (value === null || value === undefined || value === '') {
+                    return;
+                }
+                if (Array.isArray(value)) {
+                    value.forEach(item => collect(item, key));
+                    return;
+                }
+                if (typeof value === 'object') {
+                    Object.entries(value).forEach(([childKey, childValue]) => collect(childValue, API_SKIPPED_KEYS.has(childKey) ? key : childKey));
+                    return;
+                }
+                const text = translateApiMessage(String(value).trim());
+                const label = API_FIELD_LABELS[key];
+                // «Бўлим: Бўлим танланган цехга…» каби такрорни олдини оламиз.
+                lines.push(label && !text.toLowerCase().startsWith(label.toLowerCase()) ? `${label}: ${text}` : text);
+            };
+
+            for (const key of API_MESSAGE_KEYS) {
+                collect(data[key], '');
+                if (lines.length) {
+                    return [...new Set(lines)].slice(0, 4).join('\n');
+                }
+            }
+            Object.entries(data).forEach(([key, value]) => {
+                if (!API_MESSAGE_KEYS.includes(key) && key !== 'success') {
+                    collect(value, API_SKIPPED_KEYS.has(key) ? '' : key);
+                }
+            });
+            return [...new Set(lines)].slice(0, 4).join('\n');
+        }
+
+        async function apiRequest(url, options = {}) {
+            const defaultOptions = {
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken'),
+                },
+            };
+
+            if (!(options.body instanceof FormData)) {
+                defaultOptions.headers['Content-Type'] = 'application/json';
+            }
+
+            const finalOptions = {
+                ...defaultOptions,
+                ...options,
+                headers: {
+                    ...defaultOptions.headers,
+                    ...(options.headers || {}),
+                },
+            };
+
+            const response = await fetch(API_BASE + url, finalOptions);
+            let data = null;
+
+            try {
+                data = await response.json();
+            } catch (error) {
+                data = null;
+            }
+
+            if (!response.ok) {
+                const message = extractApiErrorMessage(data) || 'Сўров бажарилмади';
+                showToast(message, 'error');
+                const error = new Error(message);
+                error.responseData = data;
+                error.status = response.status;
+                throw error;
+            }
+
+            return data;
+        }
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        function setLoading(button, loading = true, loadingText = 'Юкланмоқда...') {
+            if (!button) {
+                return;
+            }
+            if (loading) {
+                if (!button.dataset.originalText) {
+                    button.dataset.originalText = button.innerHTML;
+                }
+                button.disabled = true;
+                button.innerHTML = `<span class="loading mr-2"></span>${loadingText}`;
+            } else {
+                button.disabled = false;
+                button.innerHTML = button.dataset.originalText || button.innerHTML;
+            }
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) {
+                return '—';
+            }
+            const date = new Date(dateString);
+            if (Number.isNaN(date.getTime())) {
+                return dateString;
+            }
+            return date.toLocaleDateString('ru-RU');
+        }
+
+        function confirmAction(message) {
+            return window.confirm(message);
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,366 @@
+{% extends 'base.html' %}
+
+{% block title %}Фойдаланувчилар рухсатлари - Ходимлар хизмати{% endblock %}
+
+{% block content %}
+<div class="px-4 py-6 sm:px-0">
+    <div class="mb-6">
+        <h2 class="text-2xl font-bold text-gray-900">
+            <i class="fas fa-user-lock mr-2 text-blue-600"></i>
+            Фойдаланувчилар рухсатлари
+        </h2>
+        <p class="mt-2 text-gray-600">Ходимлар роллари бошқаруви</p>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-4 mb-6">
+        <div class="flex flex-col sm:flex-row gap-4">
+            <div class="flex-1">
+                <input type="text" id="searchInput" placeholder="Ф.И.Ш, табель рақами бўйича қидириш..."
+                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    oninput="scheduleAccessReload()">
+            </div>
+            <select id="roleFilter" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" onchange="loadEmployees(1)">
+                <option value="">Барча роллар</option>
+                <option value="admin">Администратор</option>
+                <option value="hr">HR менежер</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">№</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ходим</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Табель рақами</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Логин</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Цех / Бўлим</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Жорий рол</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Амаллар</th>
+                    </tr>
+                </thead>
+                <tbody id="accessTableBody" class="bg-white divide-y divide-gray-200">
+                    <tr>
+                        <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                            <i class="fas fa-spinner fa-spin mr-2"></i>Юкланмоқда...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div id="accessPagination" class="border-t border-gray-200 px-6 py-4"></div>
+    </div>
+</div>
+
+<div id="userAccessModal" class="fixed inset-0 z-50 hidden h-full w-full overflow-y-auto bg-gray-600 bg-opacity-50">
+    <div class="relative top-20 mx-auto w-full max-w-md rounded-lg border bg-white p-5 shadow-lg">
+        <div class="mb-4 flex items-center justify-between">
+            <h3 class="text-lg font-bold text-gray-900">Рухсатни таҳрирлаш</h3>
+            <button type="button" onclick="hideAccessModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <form id="userAccessForm" onsubmit="saveAccessUser(event)" novalidate>
+            <input type="hidden" id="accessUserId">
+            <div class="mb-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                <p class="text-xs font-semibold uppercase tracking-wide text-gray-500">Ходим</p>
+                <p id="accessEmployeeName" class="mt-1 text-sm font-bold text-gray-900">—</p>
+            </div>
+
+            <div class="mb-4">
+                <label class="mb-2 block text-sm font-bold text-gray-700" for="accessRole">
+                    Рол <span class="text-red-500">*</span>
+                </label>
+                <select id="accessRole"
+                    class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500">
+                    {% for value, label in role_choices %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                <p class="font-semibold">Face ID учун фотосурат ходим карточкасидан олинади.</p>
+                <p class="mt-1 text-xs text-blue-600">Ходимнинг "Асосий тасвир"майдони ишлатилади. Бу саҳифада алоҳида юклаш ўчирилган.</p>
+                <div id="accessFacePreview" class="mt-3 hidden">
+                    <img id="accessFacePreviewImage" src="" alt="Face ID preview" data-has-image="false" class="h-24 w-24 rounded-2xl border border-gray-200 object-cover">
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3">
+                <button type="button" onclick="hideAccessModal()" class="rounded-lg bg-gray-300 px-4 py-2 text-gray-800 hover:bg-gray-400">
+                    Бекор қилиш
+                </button>
+                <button type="submit" class="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
+                    Сақлаш
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    let allEmployees = [];
+    let currentPage = 1;
+    let pageSize = 50;
+    let totalEmployees = 0;
+    let accessReloadTimer = null;
+    const currentUsername = '{{ request.user.username|escapejs }}';
+
+    const roleLabels = {
+        'admin': 'Администратор',
+        'hr': 'HR менежер',
+    };
+
+    const roleBadgeClasses = {
+        'admin': 'bg-red-100 text-red-800',
+        'hr': 'bg-blue-100 text-blue-800',
+    };
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text || '';
+        return div.innerHTML;
+    }
+
+    function unwrapResponse(payload) {
+        return payload.data || payload.results || payload;
+    }
+
+    function scheduleAccessReload() {
+        if (accessReloadTimer) {
+            clearTimeout(accessReloadTimer);
+        }
+        accessReloadTimer = setTimeout(() => loadEmployees(1), 250);
+    }
+
+    async function loadEmployees(page = 1) {
+        try {
+            currentPage = page;
+            document.getElementById('accessTableBody').innerHTML = `
+                <tr><td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                    <i class="fas fa-spinner fa-spin mr-2"></i>Юкланмоқда...
+                </td></tr>`;
+            const params = new URLSearchParams({
+                page: String(page),
+                page_size: String(pageSize),
+            });
+            const search = document.getElementById('searchInput').value.trim();
+            const role = document.getElementById('roleFilter').value;
+            if (search) {
+                params.set('search', search);
+            }
+            if (role) {
+                params.set('role', role);
+            }
+
+            const response = await apiRequest(`/template/user-access/?${params.toString()}`);
+            allEmployees = unwrapResponse(response);
+            totalEmployees = Number(response.count || allEmployees.length || 0);
+            renderTable(allEmployees);
+            renderPagination(response);
+        } catch (err) {
+            document.getElementById('accessTableBody').innerHTML = `
+                <tr><td colspan="7" class="px-6 py-8 text-center text-red-500">
+                    <i class="fas fa-exclamation-triangle mr-2"></i>Юклашда хато: ${escapeHtml(err.message)}
+                </td></tr>`;
+            document.getElementById('accessPagination').innerHTML = '';
+        }
+    }
+
+    function filterTable() {
+        loadEmployees(1);
+    }
+
+    function renderTable(employees) {
+        const tbody = document.getElementById('accessTableBody');
+        const pageOffset = (currentPage - 1) * pageSize;
+        
+        if (employees.length === 0) {
+            tbody.innerHTML = `
+                <tr><td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                    <i class="fas fa-inbox mr-2"></i>Ходимлар топилмади
+                </td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = employees.map((emp, idx) => {
+            const role = emp.role || '';
+            const hasDisplayRole = role === 'admin' || role === 'hr';
+            const hasAccess = Boolean(emp.has_access && emp.profile_id);
+            const isSelf = emp.login === currentUsername;
+            const badgeClass = roleBadgeClasses[role] || 'bg-gray-100 text-gray-800';
+            const deptSection = [emp.department_name, emp.section_name].filter(Boolean).join(' / ') || '—';
+            const fullName = `${emp.last_name} ${emp.first_name} ${emp.surname || ''}`.trim();
+            const safeFullName = escapeHtml(fullName);
+            const safeLogin = escapeHtml(emp.login || 'Логин йўқ');
+            const safeTabelNumber = escapeHtml(emp.tabel_number || '');
+            const safeDeptSection = escapeHtml(deptSection);
+
+            return `
+                <tr class="hover:bg-gray-50 transition" id="row-${emp.login}">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${pageOffset + idx + 1}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            <div class="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden mr-3">
+                                ${emp.base_image_url 
+                                    ? `<img src="${emp.base_image_url}" class="h-8 w-8 object-cover">` 
+                                    : `<i class="fas fa-user text-gray-400 text-xs"></i>`}
+                            </div>
+                            <span class="text-sm font-medium text-gray-900">${safeFullName}</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${safeTabelNumber}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm ${emp.login ? 'text-gray-600 font-mono' : 'text-gray-400 italic'}">${safeLogin}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">${safeDeptSection}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        ${hasDisplayRole ? `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badgeClass}" id="badge-${emp.login}">
+                            ${roleLabels[role] || role}
+                        </span>` : `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-400">Рухсат йўқ</span>`}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        ${hasAccess ? `<div class="flex items-center justify-end gap-2">
+                            <button type="button" onclick="editAccess(${emp.profile_id})" class="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-blue-700 hover:bg-blue-100" title="Рухсатни таҳрирлаш">
+                                <i class="fas fa-pen mr-1"></i>Таҳрирлаш
+                            </button>
+                            <button type="button" onclick="deleteAccess(${emp.profile_id})" class="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-red-600 hover:bg-red-100 ${isSelf ? 'opacity-50 cursor-not-allowed' : ''}" title="Рухсатни ўчириш" ${isSelf ? 'disabled' : ''}>
+                                <i class="fas fa-trash mr-1"></i>Ўчириш
+                            </button>
+                        </div>` : `<span class="text-sm text-gray-400">—</span>`}
+                    </td>
+                </tr>`;
+        }).join('');
+    }
+
+    function renderPagination(response) {
+        const pagination = document.getElementById('accessPagination');
+        if (!pagination) {
+            return;
+        }
+
+        if (!totalEmployees) {
+            pagination.innerHTML = '';
+            return;
+        }
+
+        const totalPages = Math.max(1, Math.ceil(totalEmployees / pageSize));
+        const from = totalEmployees ? ((currentPage - 1) * pageSize) + 1 : 0;
+        const to = Math.min(currentPage * pageSize, totalEmployees);
+        pagination.innerHTML = `
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div class="text-sm text-gray-600">Кўрсатилган: ${from}-${to} / ${totalEmployees}</div>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="loadEmployees(${Math.max(1, currentPage - 1)})" class="rounded border border-gray-300 px-3 py-1.5 text-sm ${currentPage <= 1 ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-50'}" ${currentPage <= 1 ? 'disabled' : ''}>Орқага</button>
+                    <span class="text-sm text-gray-600">${currentPage} / ${totalPages}</span>
+                    <button type="button" onclick="loadEmployees(${Math.min(totalPages, currentPage + 1)})" class="rounded border border-gray-300 px-3 py-1.5 text-sm ${currentPage >= totalPages ? 'cursor-not-allowed opacity-50' : 'hover:bg-gray-50'}" ${currentPage >= totalPages ? 'disabled' : ''}>Олдинга</button>
+                </div>
+            </div>`;
+    }
+
+    async function editAccess(profileId) {
+        try {
+            const selectedEmployee = allEmployees.find(item => item.profile_id === profileId);
+            const response = await apiRequest(`/template/users/${profileId}/`);
+            const user = response.data;
+
+            document.getElementById('accessUserId').value = user.id;
+            document.getElementById('accessEmployeeName').textContent = selectedEmployee?.full_name || `${user.last_name || ''} ${user.first_name || ''}`.trim() || user.username || '—';
+            document.getElementById('accessRole').value = user.role || 'user';
+            setAccessFacePreview(user.face_image_url, user.has_face_image);
+            document.getElementById('userAccessModal').classList.remove('hidden');
+        } catch (error) {
+            showToast('Фойдаланувчи маълумотларини юклашда хато', 'error');
+        }
+    }
+
+    function hideAccessModal() {
+        document.getElementById('accessEmployeeName').textContent = '—';
+        document.getElementById('userAccessModal').classList.add('hidden');
+    }
+
+    function setAccessFacePreview(imageUrl, hasImage = false) {
+        const preview = document.getElementById('accessFacePreview');
+        const previewImage = document.getElementById('accessFacePreviewImage');
+        if (imageUrl) {
+            previewImage.src = imageUrl;
+            previewImage.dataset.hasImage = 'true';
+            preview.classList.remove('hidden');
+            return;
+        }
+        previewImage.src = '';
+        previewImage.dataset.hasImage = hasImage ? 'true' : 'false';
+        preview.classList.toggle('hidden', !hasImage);
+    }
+
+    async function saveAccessUser(event) {
+        event.preventDefault();
+
+        const profileId = document.getElementById('accessUserId').value;
+        const role = document.getElementById('accessRole').value;
+        const hasExistingFaceImage = document.getElementById('accessFacePreviewImage').dataset.hasImage === 'true';
+
+        if ((role === 'admin' || role === 'hr') && !hasExistingFaceImage) {
+            showToast('Администратор ва HR менежер роллари учун ходим карточкасида асосий тасвир бўлиши керак', 'error');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('role', role);
+
+        try {
+            await apiRequest(`/template/users/${profileId}/`, {
+                method: 'PATCH',
+                body: formData,
+            });
+            hideAccessModal();
+            await loadEmployees(currentPage);
+            showToast('Фойдаланувчи рухсати янгиланди', 'success');
+        } catch (error) {
+            let message = 'Фойдаланувчини сақлашда хато';
+            if (error.responseData) {
+                const responsePayload = error.responseData.errors || error.responseData;
+                if (typeof responsePayload === 'object') {
+                    message = Object.entries(responsePayload).map(([field, messages]) => {
+                        if (Array.isArray(messages)) {
+                            return `${field}: ${messages.join(', ')}`;
+                        }
+                        return `${field}: ${messages}`;
+                    }).join('; ');
+                }
+            } else if (error.message) {
+                message = error.message;
+            }
+            showToast(message, 'error');
+        }
+    }
+
+    async function deleteAccess(profileId) {
+        const employee = allEmployees.find(item => item.profile_id === profileId);
+        const login = employee?.login || 'фойдаланувчи';
+        const isSelf = login === currentUsername;
+
+        if (isSelf) {
+            showToast('Жорий фойдаланувчининг рухсатини ўчириб бўлмайди', 'error');
+            return;
+        }
+
+        const confirmed = window.confirm(`Фойдаланувчи рухсати ўчирилсинми: ${login}?`);
+        if (!confirmed) {
+            return;
+        }
+
+        try {
+            await apiRequest(`/template/users/${profileId}/`, { method: 'DELETE' });
+            await loadEmployees(currentPage);
+            showToast(`${login} учун рухсат ўчирилди`, 'success');
+        } catch (error) {
+            showToast(error.message || 'Рухсатни ўчиришда хато', 'error');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => loadEmployees(1));
+</script>
+{% endblock %}

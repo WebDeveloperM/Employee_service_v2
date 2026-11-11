@@ -1,0 +1,1121 @@
+{% extends 'base.html' %}
+
+{% block title %}Штат бирлиги ва лавозим - Сервис сотрудников{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <section class="panel-card rounded-[28px] p-6">
+        <div class="mb-6">
+            <h2 class="font-display text-2xl font-bold text-slate-900">
+                <i class="fas fa-sitemap mr-2 text-blue-600"></i>
+                Штат бирлиги ва лавозим
+            </h2>
+            <p class="mt-1 text-sm text-slate-500">Цех ёки бўлимни танланг — ўнг томонда унинг штат лавозимлари очилади.</p>
+        </div>
+
+        <div class="max-w-3xl">
+            <label class="mb-2 block text-sm font-bold text-slate-700">Цех ёки бўлим</label>
+
+            <!-- Дерево-выбор: «поле» с выбранным значением + раскрывающееся дерево -->
+            <button type="button" id="treeSelectButton" onclick="toggleTreePanel()" aria-haspopup="tree" aria-expanded="true"
+                class="flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-sm transition hover:border-blue-300">
+                <span id="treeSelectLabel" class="truncate text-slate-400">Цех ёки бўлимни танланг</span>
+                <i id="treeSelectChevron" class="fas fa-chevron-down text-xs text-slate-400 transition-transform duration-200 rotate-180"></i>
+            </button>
+
+            <div id="treePanel" class="mt-2 rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div class="border-b border-slate-100 p-3">
+                    <input type="text" id="treeSearchInput" class="table-filter" placeholder="Қидирув..." autocomplete="off">
+                </div>
+                <div id="staffTree" role="tree" class="max-h-[60vh] overflow-y-auto p-2">
+                    <div class="px-4 py-6 text-center text-sm text-slate-500">
+                        <span class="loading"></span>
+                        <span class="ml-2">Юкланмоқда...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<!-- Правая панель выбранной единицы -->
+<div id="staffDrawerOverlay" class="fixed inset-0 z-40 hidden bg-slate-950/30" onclick="closeStaffDrawer()"></div>
+<aside id="staffDrawer" aria-hidden="true" aria-labelledby="drawerTitle"
+    class="fixed inset-y-0 right-0 z-50 flex w-full max-w-[880px] translate-x-full flex-col bg-white shadow-2xl transition-transform duration-300">
+    <div class="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+        <div class="min-w-0">
+            <p id="drawerCaption" class="mb-1 hidden truncate text-xs font-semibold uppercase tracking-[0.18em] text-slate-400"></p>
+            <h3 id="drawerTitle" class="font-display text-xl font-bold leading-snug text-slate-900"></h3>
+            <p id="drawerBoss" class="mt-1 hidden text-sm text-slate-500"></p>
+            <div class="mt-3 flex flex-wrap gap-2 text-sm">
+                <span class="rounded-xl bg-blue-50 px-3 py-1.5 font-bold text-blue-700">
+                    Умумий штат: <span id="drawerTotalStaff">0</span>
+                </span>
+                <span class="rounded-xl bg-amber-50 px-3 py-1.5 font-bold text-amber-700">
+                    Умумий бўш иш ўрни: <span id="drawerTotalVacant">0</span>
+                </span>
+            </div>
+        </div>
+        <button type="button" onclick="closeStaffDrawer()" class="icon-action shrink-0" aria-label="Ёпиш">
+            <i class="fas fa-xmark"></i>
+        </button>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-3 border-b border-slate-100 px-6 py-4">
+        <div class="min-w-[180px] flex-1">
+            <input type="text" id="positionSearchInput" class="table-filter" placeholder="Қидирув" autocomplete="off">
+        </div>
+        <div class="w-24 shrink-0">
+            <select id="positionPageSize" class="table-filter" aria-label="Саҳифадаги сатрлар сони">
+                <option value="10">10</option>
+                <option value="20" selected>20</option>
+                <option value="50">50</option>
+            </select>
+        </div>
+        <button type="button" onclick="showPositionModal()"
+            class="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-700">
+            <i class="fas fa-plus"></i>
+            Қўшиш
+        </button>
+    </div>
+
+    <div id="staffDrawerBody" class="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+        <div class="overflow-x-auto rounded-[24px] border border-slate-200 bg-white">
+            <table class="min-w-full border-separate border-spacing-0">
+                <thead class="bg-slate-50 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                        <th class="px-5 py-4 text-left">№</th>
+                        <th class="px-5 py-4 text-left">Лавозим</th>
+                        <th class="px-5 py-4 text-left whitespace-nowrap">Штатлар сони (<span id="tableTotalStaff">0</span>)</th>
+                        <th class="px-5 py-4 text-left whitespace-nowrap">Бўш иш ўрни (<span id="tableTotalVacant">0</span>)</th>
+                        <th class="px-5 py-4 text-right">Амаллар</th>
+                    </tr>
+                </thead>
+                <tbody id="positionsTableBody"></tbody>
+            </table>
+        </div>
+
+        <div id="positionsLoading" class="hidden px-4 py-8 text-center text-sm text-slate-500">
+            <span class="loading"></span>
+            <span class="ml-2">Юкланмоқда...</span>
+        </div>
+        <div id="positionsEmptyState" class="hidden mt-4 rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm font-semibold text-slate-500"></div>
+        <div id="positionsPagination" class="mt-5"></div>
+    </div>
+</aside>
+
+<!-- Добавление / редактирование должности -->
+<div id="positionModal" class="fixed inset-0 z-[60] hidden overflow-y-auto bg-slate-950/40 px-4 py-10">
+    <div class="mx-auto w-full max-w-md rounded-[28px] bg-white p-6 shadow-2xl">
+        <div class="mb-1 flex items-center justify-between">
+            <h3 id="positionModalTitle" class="font-display text-xl font-bold text-slate-900">Лавозим қўшиш</h3>
+            <button type="button" onclick="hidePositionModal()" class="icon-action" aria-label="Ёпиш"><i class="fas fa-xmark"></i></button>
+        </div>
+        <p id="positionModalUnit" class="mb-5 truncate text-sm text-slate-500"></p>
+        <form id="positionForm" onsubmit="savePosition(event)" class="space-y-4">
+            <input type="hidden" id="positionId">
+            <div>
+                <label class="mb-2 block text-sm font-bold text-slate-700" for="positionName">Лавозим</label>
+                <input type="text" id="positionName" required maxlength="255" autocomplete="off" class="table-filter">
+            </div>
+            <div>
+                <label class="mb-2 block text-sm font-bold text-slate-700" for="positionStaffCount">Штатлар сони</label>
+                <input type="number" id="positionStaffCount" required min="1" step="1" inputmode="numeric" value="1" class="table-filter">
+            </div>
+            <div class="flex justify-end gap-3 pt-2">
+                <button type="button" onclick="hidePositionModal()" class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600">Бекор қилиш</button>
+                <button type="submit" id="positionSaveButton" class="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white">Сақлаш</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Меню «Амаллар» строки должности. position: fixed, чтобы не обрезаться прокруткой таблицы -->
+<div id="positionMenu" role="menu" aria-label="Амаллар" class="fixed z-[65] hidden w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white py-2 shadow-2xl">
+    <button type="button" role="menuitem" data-menu-action="edit" class="menu-item"><i class="fas fa-pen-to-square text-blue-600"></i><span>Таҳрирлаш</span></button>
+    <button type="button" role="menuitem" data-menu-action="delete" class="menu-item"><i class="fas fa-trash text-red-500"></i><span>Ўчириш</span></button>
+    <div class="my-2 border-t border-slate-100"></div>
+    <button type="button" role="menuitem" data-menu-action="employees" class="menu-item"><i class="fas fa-users text-slate-600"></i><span>Ходимлар</span></button>
+    <button type="button" role="menuitem" class="menu-item" disabled title="Тез орада"><i class="fas fa-screwdriver-wrench"></i><span>Лавозимга қўйилган талаблар</span></button>
+    <button type="button" role="menuitem" class="menu-item" disabled title="Тез орада"><i class="fas fa-list-ul"></i><span>Лавозим йўриқномаси</span></button>
+    <button type="button" role="menuitem" class="menu-item" disabled title="Тез орада"><i class="fas fa-circle-question"></i><span>Соҳалар</span></button>
+    <button type="button" role="menuitem" class="menu-item" disabled title="Тез орада"><i class="fas fa-people-group"></i><span>Кадрлар заҳираси</span></button>
+    <button type="button" role="menuitem" class="menu-item" disabled title="Тез орада"><i class="fas fa-user-gear"></i><span>Вазифасини бажарувчи</span></button>
+</div>
+
+<!-- Ходимлар должности + добавление по табельному номеру -->
+<div id="employeesModal" class="fixed inset-0 z-[70] hidden overflow-y-auto bg-slate-950/40 px-4 py-8">
+    <div class="mx-auto w-full max-w-4xl rounded-[28px] bg-white p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="employeesModalTitle">
+        <div class="mb-4 flex items-start justify-between gap-4">
+            <div class="min-w-0">
+                <h3 id="employeesModalTitle" class="font-display text-xl font-bold leading-snug text-slate-900"></h3>
+                <p id="employeesModalMeta" class="mt-1 text-sm text-slate-500"></p>
+            </div>
+            <div class="flex shrink-0 items-center gap-2">
+                <button type="button" id="employeesAddToggle" onclick="toggleEmployeeAdd()" aria-expanded="false"
+                    class="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-700">
+                    <i class="fas fa-plus"></i>
+                    Қўшиш
+                </button>
+                <button type="button" onclick="hideEmployeesModal()" class="icon-action" aria-label="Ёпиш"><i class="fas fa-xmark"></i></button>
+            </div>
+        </div>
+
+        <div id="employeeAddPanel" class="mb-4 hidden rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4">
+            <label for="employeeTabelSearch" class="mb-2 block text-sm font-bold text-slate-700">Табель рақами бўйича қидириш</label>
+            <div class="flex items-center gap-3">
+                <div class="min-w-0 flex-1">
+                    <input type="text" id="employeeTabelSearch" class="table-filter" placeholder="Табель рақамини киритинг" autocomplete="off">
+                </div>
+                <button type="button" onclick="searchEmployees()" class="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50">
+                    <i class="fas fa-search"></i>
+                    Қидириш
+                </button>
+            </div>
+            <p id="employeeAddNote" class="mt-3 hidden rounded-xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700"></p>
+            <div id="employeeSearchResults" class="mt-3 space-y-2"></div>
+        </div>
+
+        <div class="overflow-x-auto rounded-[24px] border border-slate-200 bg-white">
+            <table class="min-w-full border-separate border-spacing-0">
+                <thead class="bg-slate-50 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                    <tr>
+                        <th class="px-4 py-4 text-left">№</th>
+                        <th class="px-4 py-4 text-left">Ф.И.Ш</th>
+                        <th class="px-4 py-4 text-left whitespace-nowrap">Табель рақами</th>
+                        <th class="px-4 py-4 text-left">Фойдаланувчи номи (логин)</th>
+                        <th class="px-4 py-4 text-right">Амаллар</th>
+                    </tr>
+                </thead>
+                <tbody id="employeesTableBody"></tbody>
+            </table>
+        </div>
+        <div id="employeesLoading" class="hidden px-4 py-8 text-center text-sm text-slate-500">
+            <span class="loading"></span>
+            <span class="ml-2">Юкланмоқда...</span>
+        </div>
+        <div id="employeesEmptyState" class="hidden mt-4 rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm font-semibold text-slate-500"></div>
+
+        <div class="mt-5">
+            <button type="button" onclick="hideEmployeesModal()" class="rounded-2xl bg-emerald-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-emerald-700">Ёпиш</button>
+        </div>
+    </div>
+</div>
+
+<!-- Перевод сотрудника на другую должность той же единицы (кнопка «Таҳрирлаш» в окне «Ходимлар») -->
+<div id="employeeEditModal" class="fixed inset-0 z-[75] hidden overflow-y-auto bg-slate-950/40 px-4 py-10">
+    <div class="mx-auto w-full max-w-md rounded-[28px] bg-white p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="employeeEditTitle">
+        <div class="mb-1 flex items-center justify-between">
+            <h3 id="employeeEditTitle" class="font-display text-xl font-bold text-slate-900">Ходимни таҳрирлаш</h3>
+            <button type="button" onclick="hideEmployeeEdit()" class="icon-action" aria-label="Ёпиш"><i class="fas fa-xmark"></i></button>
+        </div>
+        <p id="employeeEditName" class="mb-5 truncate text-sm font-semibold text-slate-600"></p>
+        <form id="employeeEditForm" onsubmit="saveEmployeeEdit(event)" class="space-y-4">
+            <input type="hidden" id="employeeEditId">
+            <div>
+                <label class="mb-2 block text-sm font-bold text-slate-700" for="employeeEditPosition">Лавозим</label>
+                <select id="employeeEditPosition" class="table-filter"></select>
+                <p id="employeeEditHint" class="mt-2 text-xs text-slate-500">Ходим шу цех ёки бўлимнинг танланган лавозимига ўтказилади.</p>
+            </div>
+            <div class="flex justify-end gap-3 pt-2">
+                <button type="button" onclick="hideEmployeeEdit()" class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600">Бекор қилиш</button>
+                <button type="submit" id="employeeEditSave" class="rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white">Сақлаш</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    .menu-item { display: flex; width: 100%; align-items: center; gap: 0.75rem; padding: 0.6rem 1rem; text-align: left; font-size: 0.875rem; font-weight: 600; color: #334155; }
+    .menu-item i { width: 1.25rem; text-align: center; }
+    .menu-item:hover:not(:disabled), .menu-item:focus-visible { background: #f1f5f9; outline: none; }
+    .menu-item:disabled { color: #94a3b8; cursor: not-allowed; }
+</style>
+
+<script>
+    const staffState = {
+        tree: [],
+        expanded: new Set(),      // ключи раскрытых узлов дерева: «department:1», «section:5»
+        selected: null,           // { type: 'department' | 'section', id }
+        treeFilter: '',
+        page: 1,
+        pageSize: 20,
+        positionSearch: '',
+        positions: new Map(),     // id -> должность текущей страницы (для формы редактирования)
+        requestId: 0,             // отбрасывает устаревшие ответы при быстром переключении
+        searchTimer: null,
+        menuPositionId: null,     // должность, для которой открыто меню «Амаллар»
+        menuButton: null,
+        employeesPosition: null,  // { id, name } должности в окне «Ходимлар»
+        employeesMeta: null,      // штат / занято / вакансии из последнего ответа
+        employeesRequestId: 0,
+        employeeResults: new Map(),
+        employeeSearchRequestId: 0,
+        employeeSearchTimer: null,
+        employeeMembers: new Map(), // id -> сотрудник текущей должности (для «Таҳрирлаш» / «Чиқариш»)
+        unitPositions: [],          // должности той же единицы с вакансиями — для выбора при переводе
+    };
+
+    document.addEventListener('DOMContentLoaded', async function () {
+        const tree = document.getElementById('staffTree');
+        tree.addEventListener('click', onTreeClick);
+        tree.addEventListener('keydown', onTreeKeydown);
+
+        document.getElementById('treeSearchInput').addEventListener('input', function (event) {
+            staffState.treeFilter = event.target.value;
+            renderTree();
+        });
+
+        document.getElementById('positionSearchInput').addEventListener('input', function (event) {
+            window.clearTimeout(staffState.searchTimer);
+            staffState.searchTimer = window.setTimeout(function () {
+                staffState.positionSearch = event.target.value.trim();
+                staffState.page = 1;
+                loadPositions();
+            }, 300);
+        });
+
+        document.getElementById('positionPageSize').addEventListener('change', function (event) {
+            staffState.pageSize = Number(event.target.value) || 20;
+            staffState.page = 1;
+            loadPositions();
+        });
+
+        document.getElementById('positionsTableBody').addEventListener('click', onPositionActionClick);
+        document.getElementById('positionMenu').addEventListener('click', onPositionMenuClick);
+        document.getElementById('employeeSearchResults').addEventListener('click', onEmployeeResultClick);
+        document.getElementById('employeesTableBody').addEventListener('click', onEmployeeRowClick);
+
+        // Меню закрывается кликом мимо, прокруткой панели и изменением размера окна.
+        document.addEventListener('click', function (event) {
+            if (!event.target.closest('#positionMenu') && !event.target.closest('[data-action="menu"]')) closePositionMenu();
+        });
+        document.getElementById('staffDrawerBody').addEventListener('scroll', closePositionMenu);
+        window.addEventListener('resize', closePositionMenu);
+
+        const employeeSearch = document.getElementById('employeeTabelSearch');
+        employeeSearch.addEventListener('input', function () {
+            window.clearTimeout(staffState.employeeSearchTimer);
+            staffState.employeeSearchTimer = window.setTimeout(searchEmployees, 300);
+        });
+        employeeSearch.addEventListener('keydown', function (event) {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            window.clearTimeout(staffState.employeeSearchTimer);
+            searchEmployees();
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key !== 'Escape') return;
+            // Закрываем самый верхний слой: меню → перевод сотрудника → «Ходимлар» → форма должности → правая панель.
+            if (!document.getElementById('positionMenu').classList.contains('hidden')) {
+                closePositionMenu();
+            } else if (!document.getElementById('employeeEditModal').classList.contains('hidden')) {
+                hideEmployeeEdit();
+            } else if (!document.getElementById('employeesModal').classList.contains('hidden')) {
+                hideEmployeesModal();
+            } else if (!document.getElementById('positionModal').classList.contains('hidden')) {
+                hidePositionModal();
+            } else if (staffState.selected) {
+                closeStaffDrawer();
+            }
+        });
+
+        await loadTree();
+        restoreSelectionFromHash();
+    });
+
+    /* ---------- утилиты ---------- */
+
+    function esc(value) {
+        return String(value ?? '').replace(/[&<>"']/g, function (char) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
+        });
+    }
+
+    function formatNumber(value) {
+        return Number(value || 0).toLocaleString('ru-RU');
+    }
+
+    // apiRequest уже показал общий тост; здесь заменяем его конкретным текстом ошибки поля.
+    function reportApiError(error) {
+        const data = error && error.responseData;
+        if (!data || typeof data !== 'object') return;
+        const values = Object.values(data).flat();
+        const message = values.find(function (value) { return typeof value === 'string' && value; });
+        if (message) showToast(message, 'error');
+    }
+
+    function nodeKey(node) {
+        return node.type + ':' + node.id;
+    }
+
+    // Ищет узел на любой глубине. ancestors — вложенные отделы между цехом и узлом (без обоих концов).
+    function findNode(type, id) {
+        function walk(parent, department, trail) {
+            for (const child of (parent.children || [])) {
+                if (type === 'section' && child.id === id) return { node: child, department: department, ancestors: trail };
+                const deeper = walk(child, department, trail.concat(child));
+                if (deeper) return deeper;
+            }
+            return null;
+        }
+
+        for (const department of staffState.tree) {
+            if (type === 'department' && department.id === id) return { node: department, department: department, ancestors: [] };
+            const found = walk(department, department, []);
+            if (found) return found;
+        }
+        return null;
+    }
+
+    /* ---------- дерево-выбор ---------- */
+
+    async function loadTree() {
+        try {
+            const response = await apiRequest('/template/staff/tree/');
+            staffState.tree = Array.isArray(response.data) ? response.data : [];
+            renderTree();
+            updateSelectLabel();
+        } catch (error) {
+            console.error('Дарахтни юклашда хато:', error);
+            document.getElementById('staffTree').innerHTML =
+                '<div class="px-4 py-6 text-center text-sm font-semibold text-red-600">Дарахтни юклаб бўлмади. Саҳифани янгиланг.</div>';
+        }
+    }
+
+    function renderTree() {
+        const container = document.getElementById('staffTree');
+        const term = staffState.treeFilter.trim().toLowerCase();
+        const matches = function (node) { return node.name.toLowerCase().includes(term); };
+        const subtreeMatches = function (node) { return matches(node) || (node.children || []).some(subtreeMatches); };
+        const rows = [];
+
+        // Узел виден, если подходит сам, подходит кто-то из предков (тогда видно всё поддерево) или кто-то ниже.
+        const walk = function (node, level, ancestorMatched) {
+            const showAll = !term || ancestorMatched || matches(node);
+            if (term && !showAll && !subtreeMatches(node)) return;
+
+            const children = node.children || [];
+            const hasChildren = children.length > 0;
+            // При поиске раскрываем всё найденное, иначе — по выбору пользователя.
+            const expanded = hasChildren && (term ? true : staffState.expanded.has(nodeKey(node)));
+            rows.push(treeRowHtml(node, { hasChildren: hasChildren, expanded: expanded, level: level }));
+            if (expanded) {
+                children.forEach(function (child) { walk(child, level + 1, Boolean(term) && showAll); });
+            }
+        };
+        staffState.tree.forEach(function (department) { walk(department, 0, false); });
+
+        if (rows.length) {
+            container.innerHTML = rows.join('');
+        } else if (term) {
+            container.innerHTML = '<div class="px-4 py-6 text-center text-sm font-semibold text-slate-500">Ҳеч нарса топилмади.</div>';
+        } else {
+            container.innerHTML = '<div class="px-4 py-6 text-center text-sm font-semibold text-slate-500">Цехлар топилмади. Аввал «Цеха» бўлимида цех қўшинг.</div>';
+        }
+    }
+
+    function treeRowHtml(node, options) {
+        const hasChildren = Boolean(options.hasChildren);
+        const expanded = Boolean(options.expanded);
+        const selected = Boolean(staffState.selected && staffState.selected.type === node.type && staffState.selected.id === node.id);
+
+        const toggle = hasChildren
+            ? '<button type="button" data-toggle="' + nodeKey(node) + '" tabindex="-1" aria-label="' + (expanded ? 'Йиғиш' : 'Очиш') + '"' +
+              ' class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200/70">' +
+              '<i class="fas fa-caret-' + (expanded ? 'down' : 'right') + '"></i></button>'
+            : '<span class="h-7 w-7 shrink-0"></span>';
+
+        const vacantBadge = node.vacant_total > 0
+            ? '<span class="shrink-0 rounded-lg bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-700" title="Бўш иш ўрни">' + formatNumber(node.vacant_total) + '</span>'
+            : '';
+        const staffBadge = node.staff_total > 0
+            ? '<span class="shrink-0 rounded-lg bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600" title="Штат">' + formatNumber(node.staff_total) + '</span>'
+            : '';
+        const icon = node.type === 'department' ? 'fa-industry' : 'fa-diagram-project';
+
+        return '<div role="treeitem" tabindex="0" data-type="' + node.type + '" data-id="' + node.id + '"' +
+            (hasChildren ? ' aria-expanded="' + expanded + '"' : '') + ' aria-selected="' + selected + '"' +
+            ' class="flex cursor-pointer items-center gap-1 rounded-xl py-1.5 pr-2 text-sm ' +
+            (selected ? 'bg-blue-50 font-bold text-blue-700' : 'text-slate-700 hover:bg-slate-50') + '"' +
+            ' style="padding-left:' + (0.25 + (options.level || 0) * 1.75) + 'rem">' +
+            toggle +
+            '<i class="fas ' + icon + ' w-4 shrink-0 text-xs ' + (selected ? 'text-blue-600' : 'text-slate-400') + '"></i>' +
+            '<span class="min-w-0 flex-1 truncate" title="' + esc(node.name) + '">' + esc(node.name) + '</span>' +
+            vacantBadge + staffBadge +
+            '</div>';
+    }
+
+    function onTreeClick(event) {
+        const toggle = event.target.closest('[data-toggle]');
+        if (toggle) {
+            event.stopPropagation();
+            toggleNode(toggle.dataset.toggle);
+            return;
+        }
+        const row = event.target.closest('[data-type]');
+        if (row) selectUnit(row.dataset.type, Number(row.dataset.id));
+    }
+
+    function onTreeKeydown(event) {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        const row = event.target.closest('[data-type]');
+        if (!row) return;
+        event.preventDefault();
+        selectUnit(row.dataset.type, Number(row.dataset.id));
+    }
+
+    function toggleNode(key) {
+        if (staffState.expanded.has(key)) {
+            staffState.expanded.delete(key);
+        } else {
+            staffState.expanded.add(key);
+        }
+        renderTree();
+    }
+
+    function toggleTreePanel() {
+        const panel = document.getElementById('treePanel');
+        const isHidden = panel.classList.toggle('hidden');
+        document.getElementById('treeSelectButton').setAttribute('aria-expanded', String(!isHidden));
+        document.getElementById('treeSelectChevron').classList.toggle('rotate-180', !isHidden);
+    }
+
+    function updateSelectLabel() {
+        const label = document.getElementById('treeSelectLabel');
+        const found = staffState.selected ? findNode(staffState.selected.type, staffState.selected.id) : null;
+
+        if (!found) {
+            label.textContent = 'Цех ёки бўлимни танланг';
+            label.className = 'truncate text-slate-400';
+            return;
+        }
+        // Для вложенных отделов — весь путь: «Цех / Юридик хизмати / Юридик бўлим».
+        label.textContent = found.node.type === 'section'
+            ? [found.department.name].concat(found.ancestors.map(function (item) { return item.name; }), found.node.name).join(' / ')
+            : found.node.name;
+        label.className = 'truncate font-semibold text-slate-900';
+    }
+
+    function restoreSelectionFromHash() {
+        const match = /^#(department|section)-(\d+)$/.exec(window.location.hash);
+        if (match && findNode(match[1], Number(match[2]))) {
+            selectUnit(match[1], Number(match[2]));
+        }
+    }
+
+    function setHash(value) {
+        try {
+            window.history.replaceState(null, '', value || window.location.pathname);
+        } catch (error) { /* адресная строка не критична */ }
+    }
+
+    /* ---------- правая панель ---------- */
+
+    function selectUnit(type, id) {
+        const found = findNode(type, id);
+        if (!found) return;
+
+        staffState.selected = { type: type, id: id };
+        staffState.page = 1;
+        staffState.positionSearch = '';
+        document.getElementById('positionSearchInput').value = '';
+        // Раскрываем цепочку предков, чтобы выбранный узел был виден, и сам узел, если у него есть вложенные.
+        staffState.expanded.add(nodeKey(found.department));
+        found.ancestors.forEach(function (item) { staffState.expanded.add(nodeKey(item)); });
+        if ((found.node.children || []).length) staffState.expanded.add(nodeKey(found.node));
+
+        updateSelectLabel();
+        renderTree();
+        openStaffDrawer();
+        setHash('#' + type + '-' + id);
+        loadPositions();
+    }
+
+    function openStaffDrawer() {
+        const drawer = document.getElementById('staffDrawer');
+        drawer.classList.remove('translate-x-full');
+        drawer.setAttribute('aria-hidden', 'false');
+        document.getElementById('staffDrawerOverlay').classList.remove('hidden');
+    }
+
+    function closeStaffDrawer() {
+        closePositionMenu();
+        const drawer = document.getElementById('staffDrawer');
+        drawer.classList.add('translate-x-full');
+        drawer.setAttribute('aria-hidden', 'true');
+        document.getElementById('staffDrawerOverlay').classList.add('hidden');
+
+        staffState.requestId += 1; // ответ запроса, ушедшего до закрытия, больше не нужен
+        staffState.selected = null;
+        updateSelectLabel();
+        renderTree();
+        setHash('');
+    }
+
+    async function loadPositions() {
+        if (!staffState.selected) return;
+
+        const requestId = ++staffState.requestId;
+        const selected = staffState.selected;
+        const loading = document.getElementById('positionsLoading');
+        const empty = document.getElementById('positionsEmptyState');
+
+        closePositionMenu(); // строки таблицы сейчас будут заменены
+        loading.classList.remove('hidden');
+        empty.classList.add('hidden');
+        document.getElementById('positionsTableBody').innerHTML = '';
+
+        try {
+            const params = new URLSearchParams({
+                page: String(staffState.page),
+                page_size: String(staffState.pageSize),
+                search: staffState.positionSearch,
+            });
+            params.set(selected.type + '_id', String(selected.id));
+
+            const response = await apiRequest('/template/staff/positions/?' + params.toString());
+            if (requestId !== staffState.requestId) return;
+            renderPositions(response);
+        } catch (error) {
+            if (requestId !== staffState.requestId) return;
+            // Страница исчезла после удаления последней строки — возвращаемся на первую.
+            if (error.status === 404 && staffState.page > 1) {
+                staffState.page = 1;
+                loadPositions();
+                return;
+            }
+            console.error('Лавозимларни юклашда хато:', error);
+            empty.textContent = 'Лавозимларни юклаб бўлмади.';
+            empty.classList.remove('hidden');
+        } finally {
+            if (requestId === staffState.requestId) loading.classList.add('hidden');
+        }
+    }
+
+    function renderPositions(response) {
+        const items = Array.isArray(response.data) ? response.data : [];
+        const unit = response.unit || {};
+        const summary = response.summary || {};
+        const count = Number(response.count ?? items.length);
+
+        const caption = document.getElementById('drawerCaption');
+        caption.textContent = unit.type === 'section' ? (unit.breadcrumb || unit.department_name) : '';
+        caption.classList.toggle('hidden', unit.type !== 'section');
+        document.getElementById('drawerTitle').textContent = unit.name || '';
+
+        const boss = document.getElementById('drawerBoss');
+        boss.textContent = unit.boss_full_name ? 'Раҳбар: ' + unit.boss_full_name : '';
+        boss.classList.toggle('hidden', !unit.boss_full_name);
+
+        document.getElementById('drawerTotalStaff').textContent = formatNumber(summary.total_staff);
+        document.getElementById('drawerTotalVacant').textContent = formatNumber(summary.total_vacant);
+        document.getElementById('tableTotalStaff').textContent = formatNumber(summary.own_staff);
+        document.getElementById('tableTotalVacant').textContent = formatNumber(summary.own_vacant);
+
+        staffState.positions = new Map(items.map(function (item) { return [item.id, item]; }));
+
+        const offset = (staffState.page - 1) * staffState.pageSize;
+        document.getElementById('positionsTableBody').innerHTML = items.map(function (item, index) {
+            return '<tr class="fade-in border-t border-slate-100 text-sm hover:bg-slate-50/80">' +
+                '<td class="px-5 py-3 text-slate-500">' + (offset + index + 1) + '</td>' +
+                '<td class="px-5 py-3 font-semibold text-slate-900">' + esc(item.name) + '</td>' +
+                '<td class="px-5 py-3 text-slate-700">' + formatNumber(item.staff_count) + '</td>' +
+                '<td class="px-5 py-3 ' + (item.vacant > 0 ? 'font-bold text-amber-600' : 'text-slate-500') + '">' + formatNumber(item.vacant) + '</td>' +
+                '<td class="px-5 py-3 text-right">' +
+                '<button type="button" data-action="menu" data-id="' + item.id + '" class="icon-action" title="Амаллар" aria-label="Амаллар" aria-haspopup="menu" aria-expanded="false"><i class="fas fa-ellipsis-vertical"></i></button>' +
+                '</td></tr>';
+        }).join('');
+
+        const empty = document.getElementById('positionsEmptyState');
+        if (items.length === 0) {
+            empty.textContent = staffState.positionSearch
+                ? 'Қидирув бўйича лавозим топилмади.'
+                : 'Бу бирликда лавозимлар йўқ. «Қўшиш» тугмаси орқали қўшинг.';
+            empty.classList.remove('hidden');
+        } else {
+            empty.classList.add('hidden');
+        }
+
+        renderPositionsPagination(count);
+    }
+
+    function renderPositionsPagination(count) {
+        const container = document.getElementById('positionsPagination');
+        if (!count) {
+            container.innerHTML = '';
+            return;
+        }
+
+        const pages = Math.max(1, Math.ceil(count / staffState.pageSize));
+        const page = staffState.page;
+        const buttonClass = 'h-10 min-w-[40px] rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-600 disabled:cursor-not-allowed disabled:opacity-40';
+
+        container.innerHTML = '<div class="flex items-center justify-between gap-3">' +
+            '<p class="text-xs font-semibold text-slate-400">Жами: ' + formatNumber(count) + '</p>' +
+            (pages > 1
+                ? '<div class="flex items-center gap-2">' +
+                  '<button type="button" onclick="goToPage(' + (page - 1) + ')" class="' + buttonClass + '"' + (page <= 1 ? ' disabled' : '') + ' aria-label="Олдинги"><i class="fas fa-angle-left"></i></button>' +
+                  '<span class="text-sm font-bold text-slate-600">' + page + ' / ' + pages + '</span>' +
+                  '<button type="button" onclick="goToPage(' + (page + 1) + ')" class="' + buttonClass + '"' + (page >= pages ? ' disabled' : '') + ' aria-label="Кейинги"><i class="fas fa-angle-right"></i></button>' +
+                  '</div>'
+                : '') +
+            '</div>';
+    }
+
+    function goToPage(page) {
+        staffState.page = Math.max(1, page);
+        loadPositions();
+    }
+
+    /* ---------- добавление / правка / удаление должности ---------- */
+
+    function onPositionActionClick(event) {
+        const button = event.target.closest('[data-action="menu"]');
+        if (button) openPositionMenu(button);
+    }
+
+    function openPositionMenu(button) {
+        const menu = document.getElementById('positionMenu');
+        const id = Number(button.dataset.id);
+        const sameButton = staffState.menuButton === button;
+        closePositionMenu();
+        if (sameButton) return; // повторный клик по «⋮» закрывает меню
+
+        staffState.menuPositionId = id;
+        staffState.menuButton = button;
+        button.setAttribute('aria-expanded', 'true');
+        menu.classList.remove('hidden');
+
+        // Под кнопкой, выровнено по правому краю; если снизу не помещается — над кнопкой.
+        const rect = button.getBoundingClientRect();
+        const width = menu.offsetWidth;
+        const height = menu.offsetHeight;
+        const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+        let top = rect.bottom + 6;
+        if (top + height > window.innerHeight - 8) top = Math.max(8, rect.top - height - 6);
+        menu.style.left = left + 'px';
+        menu.style.top = top + 'px';
+    }
+
+    function closePositionMenu() {
+        document.getElementById('positionMenu').classList.add('hidden');
+        if (staffState.menuButton) staffState.menuButton.setAttribute('aria-expanded', 'false');
+        staffState.menuButton = null;
+        staffState.menuPositionId = null;
+    }
+
+    function onPositionMenuClick(event) {
+        const entry = event.target.closest('[data-menu-action]');
+        if (!entry || entry.disabled) return;
+
+        const item = staffState.positions.get(staffState.menuPositionId);
+        const action = entry.dataset.menuAction;
+        closePositionMenu();
+        if (!item) return;
+
+        if (action === 'edit') showPositionModal(item);
+        else if (action === 'delete') deletePosition(item);
+        else if (action === 'employees') openEmployeesModal(item);
+    }
+
+    /* ---------- «Ходимлар»: сотрудники должности и добавление по табельному номеру ---------- */
+
+    function employeeAvatarHtml(employee) {
+        const placeholder = '<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"><i class="fas fa-user"></i></div>';
+        if (!employee.photo) return placeholder;
+        // Файл фото может отсутствовать на диске (404) — тогда вместо «битой» картинки показываем значок.
+        return '<img src="' + esc(employee.photo) + '" alt="" loading="lazy" class="h-10 w-10 shrink-0 rounded-2xl object-cover"' +
+            ' data-fallback="' + esc(placeholder) + '" onerror="this.onerror=null;this.outerHTML=this.dataset.fallback">';
+    }
+
+    function setEmployeesHeading(unitName, positionName) {
+        document.getElementById('employeesModalTitle').textContent = unitName ? unitName + ', ' + positionName : positionName;
+    }
+
+    async function openEmployeesModal(item) {
+        const found = staffState.selected ? findNode(staffState.selected.type, staffState.selected.id) : null;
+        staffState.employeesPosition = { id: item.id, name: item.name };
+        staffState.employeesMeta = null;
+
+        setEmployeesHeading(found ? found.node.name : '', item.name);
+        document.getElementById('employeesModalMeta').textContent = '';
+        document.getElementById('employeesTableBody').innerHTML = '';
+        toggleEmployeeAdd(false);
+        document.getElementById('employeesModal').classList.remove('hidden');
+
+        await loadPositionEmployees();
+    }
+
+    function hideEmployeesModal() {
+        staffState.employeesRequestId += 1;
+        staffState.employeeSearchRequestId += 1;
+        staffState.employeesPosition = null;
+        staffState.employeesMeta = null;
+        staffState.employeeMembers = new Map();
+        staffState.unitPositions = [];
+        hideEmployeeEdit();
+        toggleEmployeeAdd(false);
+        document.getElementById('employeesModal').classList.add('hidden');
+    }
+
+    async function loadPositionEmployees() {
+        const current = staffState.employeesPosition;
+        if (!current) return;
+
+        const requestId = ++staffState.employeesRequestId;
+        const loading = document.getElementById('employeesLoading');
+        const empty = document.getElementById('employeesEmptyState');
+        loading.classList.remove('hidden');
+        empty.classList.add('hidden');
+
+        try {
+            const response = await apiRequest('/template/staff/positions/' + current.id + '/employees/');
+            if (requestId !== staffState.employeesRequestId) return;
+            renderPositionEmployees(response);
+        } catch (error) {
+            if (requestId !== staffState.employeesRequestId) return;
+            console.error('Ходимларни юклашда хато:', error);
+            document.getElementById('employeesTableBody').innerHTML = '';
+            empty.textContent = 'Ходимларни юклаб бўлмади.';
+            empty.classList.remove('hidden');
+        } finally {
+            if (requestId === staffState.employeesRequestId) loading.classList.add('hidden');
+        }
+    }
+
+    function renderPositionEmployees(response) {
+        const meta = response.position || {};
+        const employees = Array.isArray(response.data) ? response.data : [];
+        staffState.employeesMeta = meta;
+        staffState.unitPositions = Array.isArray(response.unit_positions) ? response.unit_positions : [];
+        staffState.employeeMembers = new Map(employees.map(function (employee) { return [employee.id, employee]; }));
+
+        setEmployeesHeading(meta.unit_name, meta.name);
+        document.getElementById('employeesModalMeta').textContent =
+            'Штат: ' + formatNumber(meta.staff_count) + ' · Банд: ' + formatNumber(meta.occupied) + ' · Бўш: ' + formatNumber(meta.vacant);
+
+        document.getElementById('employeesTableBody').innerHTML = employees.map(function (employee, index) {
+            return '<tr class="fade-in border-t border-slate-100 text-sm hover:bg-slate-50/80">' +
+                '<td class="px-4 py-3 text-slate-500">' + (index + 1) + '</td>' +
+                '<td class="px-4 py-3"><div class="flex items-center gap-3">' + employeeAvatarHtml(employee) +
+                '<span class="font-semibold text-slate-900">' + esc(employee.full_name) + '</span></div></td>' +
+                '<td class="px-4 py-3 whitespace-nowrap text-slate-700">' + esc(employee.tabel_number) + '</td>' +
+                '<td class="px-4 py-3 text-slate-500">' + esc(employee.login || '—') + '</td>' +
+                '<td class="px-4 py-3 text-right"><div class="inline-flex items-center gap-2">' +
+                '<a href="/employees/' + encodeURIComponent(employee.slug) + '/" target="_blank" rel="noopener" ' +
+                'class="icon-action" title="Ходим карточкасини очиш" aria-label="Ходим карточкасини очиш"><i class="fas fa-user"></i></a>' +
+                '<button type="button" data-emp-action="edit" data-id="' + employee.id + '" class="icon-action" title="Таҳрирлаш" aria-label="Таҳрирлаш"><i class="fas fa-pen-to-square"></i></button>' +
+                '<button type="button" data-emp-action="remove" data-id="' + employee.id + '" class="icon-action danger" title="Лавозимдан чиқариш" aria-label="Лавозимдан чиқариш"><i class="fas fa-user-minus"></i></button>' +
+                '</div></td></tr>';
+        }).join('');
+
+        const empty = document.getElementById('employeesEmptyState');
+        if (employees.length === 0) {
+            empty.textContent = 'Бу лавозимда ходимлар йўқ. «Қўшиш» тугмаси орқали қўшинг.';
+            empty.classList.remove('hidden');
+        } else {
+            empty.classList.add('hidden');
+        }
+
+        updateEmployeeAddNote();
+    }
+
+    function hasNoVacancy() {
+        return Boolean(staffState.employeesMeta) && Number(staffState.employeesMeta.vacant) <= 0;
+    }
+
+    function updateEmployeeAddNote() {
+        const note = document.getElementById('employeeAddNote');
+        if (hasNoVacancy()) {
+            note.textContent = 'Бу лавозимда бўш иш ўрни йўқ. Ходим қўшиш учун аввал «Штатлар сони»ни кўпайтиринг.';
+            note.classList.remove('hidden');
+        } else {
+            note.classList.add('hidden');
+        }
+        // Результаты поиска, показанные до обновления, пересчитываем под новое число вакансий.
+        document.querySelectorAll('#employeeSearchResults [data-add]').forEach(function (button) {
+            button.disabled = hasNoVacancy();
+        });
+    }
+
+    function toggleEmployeeAdd(force) {
+        const panel = document.getElementById('employeeAddPanel');
+        const open = typeof force === 'boolean' ? force : panel.classList.contains('hidden');
+        panel.classList.toggle('hidden', !open);
+        document.getElementById('employeesAddToggle').setAttribute('aria-expanded', String(open));
+
+        const input = document.getElementById('employeeTabelSearch');
+        if (open) {
+            input.focus();
+        } else {
+            input.value = '';
+            document.getElementById('employeeSearchResults').innerHTML = '';
+            staffState.employeeResults = new Map();
+            staffState.employeeSearchRequestId += 1;
+        }
+    }
+
+    async function searchEmployees() {
+        const current = staffState.employeesPosition;
+        const results = document.getElementById('employeeSearchResults');
+        const term = document.getElementById('employeeTabelSearch').value.trim();
+        const requestId = ++staffState.employeeSearchRequestId;
+        if (!current) return;
+
+        if (!term) {
+            results.innerHTML = '';
+            staffState.employeeResults = new Map();
+            return;
+        }
+
+        results.innerHTML = '<div class="px-2 py-3 text-sm text-slate-500"><span class="loading"></span><span class="ml-2">Қидирилмоқда...</span></div>';
+        try {
+            const params = new URLSearchParams({ tabel_number: term, position_id: String(current.id) });
+            const response = await apiRequest('/template/staff/employee-lookup/?' + params.toString());
+            if (requestId !== staffState.employeeSearchRequestId) return;
+            renderEmployeeResults(Array.isArray(response.data) ? response.data : []);
+        } catch (error) {
+            if (requestId !== staffState.employeeSearchRequestId) return;
+            console.error('Ходимни қидиришда хато:', error);
+            results.innerHTML = '<div class="px-2 py-3 text-sm font-semibold text-red-600">Қидириш амалга ошмади.</div>';
+        }
+    }
+
+    function describeAssignment(employee) {
+        const place = [employee.department, employee.section].filter(Boolean).join(' / ');
+        if (!place && !employee.position) return 'Цех ва лавозим кўрсатилмаган';
+        return (place || 'Цех кўрсатилмаган') + (employee.position ? ' — ' + employee.position : '');
+    }
+
+    function renderEmployeeResults(employees) {
+        const results = document.getElementById('employeeSearchResults');
+        staffState.employeeResults = new Map(employees.map(function (employee) { return [employee.id, employee]; }));
+
+        if (employees.length === 0) {
+            results.innerHTML = '<div class="px-2 py-3 text-sm font-semibold text-slate-500">Бундай табель рақамли ходим топилмади.</div>';
+            return;
+        }
+
+        results.innerHTML = employees.map(function (employee) {
+            const action = employee.in_position
+                ? '<span class="shrink-0 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-500">Қўшилган</span>'
+                : '<button type="button" data-add="' + employee.id + '"' + (hasNoVacancy() ? ' disabled' : '') +
+                  ' class="shrink-0 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40">Қўшиш</button>';
+            return '<div class="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2">' +
+                employeeAvatarHtml(employee) +
+                '<div class="min-w-0 flex-1">' +
+                '<div class="truncate text-sm font-semibold text-slate-900">' + esc(employee.full_name) +
+                '<span class="ml-2 text-xs font-bold text-slate-500">№ ' + esc(employee.tabel_number) + '</span></div>' +
+                '<div class="truncate text-xs text-slate-500" title="' + esc(describeAssignment(employee)) + '">' + esc(describeAssignment(employee)) + '</div>' +
+                '</div>' + action + '</div>';
+        }).join('');
+    }
+
+    /* ---------- «Амаллар» в строке сотрудника: перевод (Таҳрирлаш) и снятие с должности ---------- */
+
+    // После изменения обновляем список окна, таблицу должностей и дерево («Банд»/«Бўш» везде одинаковые).
+    async function refreshAfterEmployeeChange(response) {
+        if (staffState.employeesPosition) renderPositionEmployees(response);
+        await Promise.all([loadPositions(), loadTree()]);
+    }
+
+    function onEmployeeRowClick(event) {
+        const button = event.target.closest('[data-emp-action]');
+        if (!button) return;
+        const employee = staffState.employeeMembers.get(Number(button.dataset.id));
+        if (!employee) return;
+
+        if (button.dataset.empAction === 'edit') openEmployeeEdit(employee);
+        else if (button.dataset.empAction === 'remove') removeEmployeeFromPosition(employee, button);
+    }
+
+    function openEmployeeEdit(employee) {
+        const current = staffState.employeesPosition;
+        if (!current) return;
+
+        const select = document.getElementById('employeeEditPosition');
+        select.innerHTML = staffState.unitPositions.map(function (item) {
+            const isCurrent = item.id === current.id;
+            const full = !isCurrent && Number(item.vacant) <= 0;
+            const label = item.name + (isCurrent ? ' (ҳозирги)' : ' — бўш: ' + formatNumber(item.vacant));
+            return '<option value="' + item.id + '"' + (isCurrent ? ' selected' : '') + (full ? ' disabled' : '') + '>' + esc(label) + '</option>';
+        }).join('');
+
+        const hasOtherChoice = staffState.unitPositions.some(function (item) {
+            return item.id !== current.id && Number(item.vacant) > 0;
+        });
+        document.getElementById('employeeEditHint').textContent = hasOtherChoice
+            ? 'Ходим шу цех ёки бўлимнинг танланган лавозимига ўтказилади.'
+            : 'Бу цех ёки бўлимда ўтказиш учун бўш иш ўрни бор бошқа лавозим йўқ.';
+        document.getElementById('employeeEditSave').disabled = !hasOtherChoice;
+
+        document.getElementById('employeeEditId').value = employee.id;
+        document.getElementById('employeeEditName').textContent = employee.full_name + ' · № ' + employee.tabel_number;
+        document.getElementById('employeeEditModal').classList.remove('hidden');
+        select.focus();
+    }
+
+    function hideEmployeeEdit() {
+        document.getElementById('employeeEditModal').classList.add('hidden');
+    }
+
+    async function saveEmployeeEdit(event) {
+        event.preventDefault();
+        const current = staffState.employeesPosition;
+        if (!current) return;
+
+        const button = document.getElementById('employeeEditSave');
+        const employeeId = Number(document.getElementById('employeeEditId').value);
+        const targetId = Number(document.getElementById('employeeEditPosition').value);
+        if (!targetId || targetId === current.id) { // ничего не поменялось
+            hideEmployeeEdit();
+            return;
+        }
+
+        setLoading(button, true);
+        try {
+            const response = await apiRequest('/template/staff/positions/' + current.id + '/employees/' + employeeId + '/', {
+                method: 'PATCH',
+                body: JSON.stringify({ position_id: targetId }),
+            });
+            showToast('Ходим бошқа лавозимга ўтказилди');
+            hideEmployeeEdit();
+            await refreshAfterEmployeeChange(response);
+        } catch (error) {
+            console.error('Ходимни ўтказишда хато:', error);
+            reportApiError(error);
+            loadPositionEmployees(); // вакансии могли измениться — перечитываем
+        } finally {
+            setLoading(button, false);
+        }
+    }
+
+    async function removeEmployeeFromPosition(employee, button) {
+        const current = staffState.employeesPosition;
+        if (!current) return;
+        // Сотрудник остаётся в системе и в своём цехе/отделе — очищается только должность.
+        if (!confirmAction('«' + employee.full_name + '» ходимини «' + current.name + '» лавозимидан чиқарасизми?\n(Ходим тизимдан ўчирилмайди, фақат лавозими олиб ташланади.)')) return;
+
+        setLoading(button, true, '');
+        try {
+            const response = await apiRequest('/template/staff/positions/' + current.id + '/employees/' + employee.id + '/', { method: 'DELETE' });
+            showToast('Ходим лавозимдан чиқарилди');
+            await refreshAfterEmployeeChange(response);
+        } catch (error) {
+            console.error('Ходимни лавозимдан чиқаришда хато:', error);
+            reportApiError(error);
+            setLoading(button, false);
+            loadPositionEmployees();
+        }
+    }
+
+    function onEmployeeResultClick(event) {
+        const button = event.target.closest('[data-add]');
+        if (button && !button.disabled) addEmployeeToPosition(Number(button.dataset.add), button);
+    }
+
+    async function addEmployeeToPosition(employeeId, button) {
+        const current = staffState.employeesPosition;
+        const employee = staffState.employeeResults.get(employeeId);
+        if (!current || !employee) return;
+
+        // Назначение меняет цех/отдел/должность сотрудника — просим подтвердить перевод.
+        if (employee.department || employee.section || employee.position) {
+            const question = '«' + employee.full_name + '» ҳозир: ' + describeAssignment(employee) +
+                '. Уни «' + current.name + '» лавозимига ўтказасизми?';
+            if (!confirmAction(question)) return;
+        }
+
+        setLoading(button, true, '...');
+        try {
+            const response = await apiRequest('/template/staff/positions/' + current.id + '/employees/', {
+                method: 'POST',
+                body: JSON.stringify({ employee_id: employeeId }),
+            });
+            showToast('Ходим лавозимга қўшилди');
+            if (staffState.employeesPosition && staffState.employeesPosition.id === current.id) {
+                renderPositionEmployees(response);
+                document.getElementById('employeeTabelSearch').value = '';
+                document.getElementById('employeeSearchResults').innerHTML = '';
+                staffState.employeeResults = new Map();
+                document.getElementById('employeeTabelSearch').focus();
+            }
+            // Таблица должностей и дерево показывают «Банд»/«Бўш» — обновляем и их.
+            await Promise.all([loadPositions(), loadTree()]);
+        } catch (error) {
+            console.error('Ходимни қўшишда хато:', error);
+            reportApiError(error);
+            setLoading(button, false);
+            // Данные могли измениться (например, место заняли) — перечитываем список.
+            loadPositionEmployees();
+        }
+    }
+
+    function showPositionModal(item) {
+        if (!staffState.selected) return;
+        const found = findNode(staffState.selected.type, staffState.selected.id);
+
+        document.getElementById('positionForm').reset();
+        document.getElementById('positionId').value = item ? item.id : '';
+        document.getElementById('positionModalTitle').textContent = item ? 'Лавозимни таҳрирлаш' : 'Лавозим қўшиш';
+        document.getElementById('positionModalUnit').textContent = found ? found.node.name : '';
+        document.getElementById('positionName').value = item ? item.name : '';
+        document.getElementById('positionStaffCount').value = item ? item.staff_count : 1;
+
+        document.getElementById('positionModal').classList.remove('hidden');
+        document.getElementById('positionName').focus();
+    }
+
+    function hidePositionModal() {
+        document.getElementById('positionModal').classList.add('hidden');
+        document.getElementById('positionForm').reset();
+    }
+
+    async function savePosition(event) {
+        event.preventDefault();
+        if (!staffState.selected) return;
+
+        const button = document.getElementById('positionSaveButton');
+        const positionId = document.getElementById('positionId').value;
+        const payload = {
+            name: document.getElementById('positionName').value.trim(),
+            staff_count: Number(document.getElementById('positionStaffCount').value),
+        };
+
+        setLoading(button, true);
+        try {
+            if (positionId) {
+                await apiRequest('/template/staff/positions/' + positionId + '/', { method: 'PUT', body: JSON.stringify(payload) });
+                showToast('Лавозим янгиланди');
+            } else {
+                payload[staffState.selected.type + '_id'] = staffState.selected.id;
+                await apiRequest('/template/staff/positions/', { method: 'POST', body: JSON.stringify(payload) });
+                showToast('Лавозим қўшилди');
+            }
+            hidePositionModal();
+            // Дерево тоже обновляем: в нём показаны итоги штата и вакансий.
+            await Promise.all([loadPositions(), loadTree()]);
+        } catch (error) {
+            console.error('Лавозимни сақлашда хато:', error);
+            reportApiError(error);
+        } finally {
+            setLoading(button, false);
+        }
+    }
+
+    async function deletePosition(item) {
+        if (!confirmAction('«' + item.name + '» лавозимини ўчиришни тасдиқлайсизми?')) return;
+
+        try {
+            await apiRequest('/template/staff/positions/' + item.id + '/', { method: 'DELETE' });
+            showToast('Лавозим ўчирилди');
+            if (staffState.positions.size === 1 && staffState.page > 1) staffState.page -= 1;
+            await Promise.all([loadPositions(), loadTree()]);
+        } catch (error) {
+            console.error('Лавозимни ўчиришда хато:', error);
+        }
+    }
+</script>
+{% endblock %}
