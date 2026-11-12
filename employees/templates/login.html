@@ -18,6 +18,13 @@
                         sans: ['Manrope', 'system-ui', 'sans-serif'],
                         display: ['IBM Plex Sans', 'system-ui', 'sans-serif'],
                     },
+                    colors: {
+                        // base.html билан бир хил палитра: асосий ранг #4154f1.
+                        blue: {
+                            50: '#f1f3fe', 100: '#e4e8fd', 200: '#ced5fc', 300: '#aab5f9', 400: '#7e8cf6', 500: '#5a6bf3',
+                            600: '#4154f1', 700: '#3342d4', 800: '#2c39ab', 900: '#273487', 950: '#181f52',
+                        },
+                    },
                 }
             }
         }
@@ -25,23 +32,20 @@
     <style>
         body {
             font-family: 'Manrope', system-ui, sans-serif;
-            background:
-                radial-gradient(circle at top left, rgba(37, 99, 235, 0.18), transparent 24%),
-                radial-gradient(circle at bottom right, rgba(239, 125, 50, 0.18), transparent 22%),
-                linear-gradient(135deg, #eef4fb 0%, #f9fbff 50%, #fff6ef 100%);
+            background: #f4f6fb;
         }
     </style>
 </head>
 
 <body class="min-h-screen text-slate-900">
     <div class="mx-auto grid min-h-screen max-w-7xl items-center gap-10 px-6 py-10 lg:grid-cols-[1.1fr_0.9fr]">
-        <section class="hidden rounded-[2rem] bg-slate-900 p-10 text-white shadow-2xl lg:block">
+        <section class="hidden rounded-[2rem] bg-[#111827] p-10 text-white shadow-2xl lg:block">
             <div class="flex h-full flex-col justify-between">
                 <div>
-                    <div class="mb-8 inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-white/10 text-[#ef7d32]">
+                    <div class="mb-8 inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-[#4154f1] text-white">
                         <i class="fas fa-id-card-clip text-3xl"></i>
                     </div>
-                    <p class="font-display text-4xl font-bold tracking-wide text-[#ef7d32]">bnpzID</p>
+                    <p class="font-display text-4xl font-bold tracking-wide text-white">bnpzID</p>
                     <h1 class="mt-8 max-w-xl font-display text-5xl font-bold leading-tight">Ходимларни бошқариш тизимига хавфсиз кириш</h1>
                     <p class="mt-5 max-w-lg text-base leading-7 text-slate-300">Цехлар, ходимлар ва фойдаланувчиларни битта панелда бошқариш. Администратор ва HR учун паролдан кейин қўшимча Face ID текшируви ўтказилади.</p>
                 </div>
@@ -61,7 +65,7 @@
         <section class="mx-auto w-full max-w-md">
             <div class="rounded-[2rem] border border-white/70 bg-white/90 p-8 shadow-[0_30px_80px_rgba(15,23,42,0.12)] backdrop-blur">
                 <div class="mb-8 text-center lg:text-left">
-                    <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-3xl bg-[#fff0e4] text-[#ef7d32] lg:mx-0">
+                    <div class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-3xl bg-[#eceffe] text-[#4154f1] lg:mx-0">
                         <i class="fas fa-right-to-bracket text-2xl"></i>
                     </div>
                     <h2 class="font-display text-3xl font-bold text-slate-900">{% if face_auth_required %}Face ID тасдиғи{% elif bnpzid_request %}bnpzID орқали кириш{% else %}Тизимга кириш{% endif %}</h2>
@@ -97,7 +101,7 @@
                     </div>
 
                     <button id="verifyFaceButton" type="button" onclick="verifyFaceLogin()"
-                        class="inline-flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-[#ef7d32] to-[#2563eb] px-4 text-sm font-bold text-white shadow-lg shadow-blue-200 transition hover:translate-y-[-1px]">
+                        class="inline-flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-[#4154f1] px-4 text-sm font-bold text-white shadow-lg shadow-blue-200 transition hover:bg-[#3342d4]">
                         <i class="fas fa-face-smile"></i>
                         <span>Face ID ни тасдиқлаш</span>
                     </button>
@@ -143,7 +147,7 @@
                     </div>
 
                     <button type="submit"
-                        class="inline-flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-[#ef7d32] to-[#2563eb] px-4 text-sm font-bold text-white shadow-lg shadow-blue-200 transition hover:translate-y-[-1px]">
+                        class="inline-flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-[#4154f1] px-4 text-sm font-bold text-white shadow-lg shadow-blue-200 transition hover:bg-[#3342d4]">
                         <i class="fas fa-arrow-right-to-bracket"></i>
                         <span>Кириш</span>
                     </button>

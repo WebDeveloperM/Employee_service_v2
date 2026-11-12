@@ -23,7 +23,7 @@
                 Excel экспорти
             </button>
             <a href="/employees/create/"
-                class="inline-flex items-center gap-2 rounded-lg bg-[var(--success)] px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-95">
+                class="inline-flex items-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[var(--primary-hover)]">
                 <i class="fas fa-plus"></i>
                 Янги ҳодим қўшиш
             </a>
@@ -1193,7 +1193,7 @@
         // Қоида staff.py даги PINNED_DEPARTMENTS билан бир хил: номи «20» дан бошланади («200-…» эмас).
         const NO_BANNER_DEPARTMENT = /^\s*20(?!\d)/;
         // Цех ва бўлим/ички бўлим сарлавҳалари бир хил: ўртада, оқ ёзув, кўк фон.
-        const BANNER_CELL = 'bg-[#0a9de3] px-4 text-center font-medium text-white';
+        const BANNER_CELL = 'bg-[var(--primary)] px-4 text-center font-medium text-white';
         const departmentBanner = (name) => `
             <tr class="staff-group-row staff-group-department">
                 <td colspan="${COLUMN_COUNT}" class="${BANNER_CELL} py-4 text-lg">${escapeHtml(name)}</td>
@@ -1233,7 +1233,7 @@
             previousSection = sectionKey || null;
 
             return `${banners}
-            <tr class="staff-employee-row fade-in border-t border-slate-100 text-sm text-slate-700 ${index % 2 === 0 ? 'bg-[#f2f9fe]' : 'bg-white'} hover:bg-sky-50">
+            <tr class="staff-employee-row fade-in border-t border-slate-100 text-sm text-slate-700 ${index % 2 === 0 ? 'bg-[#f6f7fe]' : 'bg-white'} hover:bg-[var(--primary-soft)]">
                 <td class="px-4 py-4 font-semibold text-slate-500">${startIndex + index + 1}</td>
                 <td class="px-4 py-4">
                     <div class="flex items-center gap-4">
@@ -1246,8 +1246,8 @@
                 <td class="px-4 py-4 text-slate-700">${employee.position || '—'}</td>
                 <td class="px-4 py-4">
                     <div class="flex items-center justify-center gap-2">
-                        <a class="${ACTION_BUTTON} border-[var(--success)] text-[var(--success)] hover:bg-emerald-50" href="/employees/${employee.slug}/" title="Кўриш"><i class="fas fa-eye"></i></a>
-                        <a class="${ACTION_BUTTON} border-[var(--success)] text-[var(--success)] hover:bg-emerald-50" href="/employees/${employee.slug}/edit/" title="Таҳрирлаш"><i class="fas fa-pen"></i></a>
+                        <a class="${ACTION_BUTTON} border-[var(--primary)] text-[var(--primary)] hover:bg-[var(--primary-soft)]" href="/employees/${employee.slug}/" title="Кўриш"><i class="fas fa-eye"></i></a>
+                        <a class="${ACTION_BUTTON} border-[var(--primary)] text-[var(--primary)] hover:bg-[var(--primary-soft)]" href="/employees/${employee.slug}/edit/" title="Таҳрирлаш"><i class="fas fa-pen"></i></a>
                         <a class="${ACTION_BUTTON} border-red-300 text-red-500 hover:bg-red-50" href="/employees/${employee.slug}/delete/" title="Ўчириш"><i class="fas fa-trash"></i></a>
                     </div>
                 </td>
@@ -1277,7 +1277,7 @@
         const arrow = (target, icon, disabled) => `<button onclick="goToPage(${target})" class="flex h-9 w-14 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-40" ${disabled ? 'disabled' : ''}><i class="fas ${icon} text-xs"></i></button>`;
         const numbers = paginationItems().map(item => item === '…'
             ? '<span class="px-1 text-sm font-semibold text-slate-400">…</span>'
-            : `<button onclick="goToPage(${item})" class="flex h-9 w-9 items-center justify-center rounded-full border text-sm font-semibold transition ${item === currentPage ? 'border-[var(--success)] bg-[var(--success)] text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300'}">${item}</button>`).join('');
+            : `<button onclick="goToPage(${item})" class="flex h-9 w-9 items-center justify-center rounded-full border text-sm font-semibold transition ${item === currentPage ? 'border-[var(--primary)] bg-[var(--primary)] text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-[var(--primary)]'}">${item}</button>`).join('');
         return `${numbers}${arrow(Math.max(1, currentPage - 1), 'fa-angle-left', currentPage === 1)}${arrow(Math.min(totalPages, currentPage + 1), 'fa-angle-right', currentPage === totalPages)}`;
     }
 

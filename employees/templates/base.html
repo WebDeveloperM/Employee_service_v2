@@ -15,11 +15,21 @@
                         display: ['IBM Plex Sans', 'system-ui', 'sans-serif'],
                     },
                     colors: {
-                        ink: '#1e293b',
-                        shell: '#f3f6fb',
-                        accent: '#ef7d32',
-                        cobalt: '#2563eb',
+                        ink: '#1f2937',
+                        shell: '#f4f6fb',
+                        accent: '#eb6834',
+                        cobalt: '#4154f1',
                         panel: '#ffffff',
+                        // Сайтнинг асосий ранги #4154f1 (600): барча blue-* ва violet-* синфлар шу шкалага ўтади,
+                        // шунда тугмалар, ҳаволалар ва белгилар битта палитрада бўлади.
+                        blue: {
+                            50: '#f1f3fe', 100: '#e4e8fd', 200: '#ced5fc', 300: '#aab5f9', 400: '#7e8cf6', 500: '#5a6bf3',
+                            600: '#4154f1', 700: '#3342d4', 800: '#2c39ab', 900: '#273487', 950: '#181f52',
+                        },
+                        violet: {
+                            50: '#f1f3fe', 100: '#e4e8fd', 200: '#ced5fc', 300: '#aab5f9', 400: '#7e8cf6', 500: '#5a6bf3',
+                            600: '#4154f1', 700: '#3342d4', 800: '#2c39ab', 900: '#273487', 950: '#181f52',
+                        },
                     },
                     boxShadow: {
                         panel: '0 24px 60px rgba(15, 23, 42, 0.08)',
@@ -38,22 +48,29 @@
     <script src="https://unpkg.com/imask@7.6.0/dist/imask.min.js"></script>
     <style>
         :root {
-            /* Сайдбар иш столидан (#f3f6fb) бир оз тўқроқ юмшоқ кулранг-кўк: кўзни қамаштирмайди.
-               Фаол банд — саҳифадаги карталар каби оқ, яшил белги билан. */
-            --sidebar: #e8edf4;
-            --sidebar-line: #d9e1ec;
-            --sidebar-soft: rgba(255, 255, 255, 0.6);
-            --sidebar-text: #334155;
-            --sidebar-active-bg: #ffffff;
-            --sidebar-active-text: #127a52;
+            /* Сайт палитраси (Refleksiv portfolio намунасидан): қоронғи сайдбар, асосий ранг #4154f1,
+               диаграммалар учун кўк #2a78d6 ва тўқ сариқ #eb6834. */
+            --primary: #4154f1;
+            --primary-hover: #3342d4;
+            --primary-soft: #eceffe;
+            --chart-blue: #2a78d6;
+            --accent: #eb6834;
+            --accent-soft: #fdeee8;
+
+            --sidebar: #111827;
+            --sidebar-line: #1f2634;
+            --sidebar-soft: rgba(255, 255, 255, 0.07);
+            --sidebar-text: #cbd2e1;
+            --sidebar-muted: #7c869c;
+            --sidebar-active-bg: var(--primary);
+            --sidebar-active-text: #ffffff;
+
             --surface: #ffffff;
-            --shell: #f3f6fb;
-            --line: #dbe3f0;
-            --text: #192434;
-            --muted: #72819a;
-            --accent: #ef7d32;
-            --accent-soft: #fff0e4;
-            --info: #2563eb;
+            --shell: #f4f6fb;
+            --line: #e5e8f0;
+            --text: #1f2937;
+            --muted: #6b7280;
+            --info: var(--primary);
             --success: #19a56f;
             --danger: #ef4444;
             --shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
@@ -71,10 +88,7 @@
 
         body {
             font-family: 'Manrope', system-ui, sans-serif;
-            background:
-                radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 22%),
-                radial-gradient(circle at top right, rgba(239, 125, 50, 0.10), transparent 18%),
-                var(--shell);
+            background: var(--shell);
             color: var(--text);
         }
 
@@ -87,7 +101,7 @@
             align-items: center;
             gap: 0.85rem;
             padding: 0.85rem 1rem;
-            border-radius: 0.95rem;
+            border-radius: 0.65rem;
             color: var(--sidebar-text);
             transition: background-color 0.2s ease, color 0.2s ease;
         }
@@ -95,23 +109,22 @@
         /* Ҳоверда элемент жойидан силжимайди (силжиса, курсор четида «титраш» беради) — фақат ранг ўзгаради. */
         .sidebar-link:hover {
             background: var(--sidebar-soft);
-            color: #0f172a;
+            color: #ffffff;
         }
 
         .sidebar-link.active {
             background: var(--sidebar-active-bg);
             color: var(--sidebar-active-text);
-            box-shadow: inset 3px 0 0 var(--success), 0 1px 3px rgba(15, 23, 42, 0.08);
         }
 
-        /* Очиқ гуруҳ («Созламалар»): фақат яшил матн, тўлиқ белги эса ичидаги танланган саҳифада. */
+        /* Очиқ гуруҳ («Созламалар»): фақат оқ матн, тўлиқ кўк белги эса ичидаги танланган саҳифада. */
         .sidebar-link.group-active {
-            color: var(--sidebar-active-text);
+            color: #ffffff;
         }
 
         .panel-card {
             background: var(--surface);
-            border: 1px solid rgba(219, 227, 240, 0.9);
+            border: 1px solid rgba(229, 232, 240, 0.9);
             box-shadow: var(--shadow);
         }
 
@@ -127,7 +140,7 @@
             width: 88px;
             height: 88px;
             border-radius: 999px;
-            background: linear-gradient(135deg, rgba(37, 99, 235, 0.16), rgba(239, 125, 50, 0.08));
+            background: linear-gradient(135deg, rgba(65, 84, 241, 0.16), rgba(235, 104, 52, 0.08));
         }
 
         .table-filter {
@@ -141,8 +154,8 @@
 
         .table-filter:focus {
             outline: none;
-            border-color: rgba(37, 99, 235, 0.45);
-            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.08);
+            border-color: rgba(65, 84, 241, 0.5);
+            box-shadow: 0 0 0 4px rgba(65, 84, 241, 0.1);
         }
 
         .icon-action {
@@ -161,8 +174,8 @@
         .icon-action:hover {
             transform: translateY(-1px);
             color: var(--info);
-            border-color: rgba(37, 99, 235, 0.32);
-            box-shadow: 0 10px 25px rgba(37, 99, 235, 0.10);
+            border-color: rgba(65, 84, 241, 0.35);
+            box-shadow: 0 10px 25px rgba(65, 84, 241, 0.12);
         }
 
         .icon-action.danger:hover {
@@ -191,7 +204,7 @@
             display: inline-block;
             width: 18px;
             height: 18px;
-            border: 3px solid rgba(37, 99, 235, 0.18);
+            border: 3px solid rgba(65, 84, 241, 0.18);
             border-radius: 50%;
             border-top-color: var(--info);
             animation: spin 1s linear infinite;
@@ -214,25 +227,25 @@
 <body>
     <div class="app-shell lg:grid lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside id="appSidebar"
-            class="fixed inset-y-0 left-0 z-40 w-[260px] border-r border-[var(--sidebar-line)] bg-[var(--sidebar)] px-6 py-6 text-slate-700 transition-transform duration-300 lg:static lg:translate-x-0 mobile-sidebar-hidden">
+            class="fixed inset-y-0 left-0 z-40 w-[260px] border-r border-[var(--sidebar-line)] bg-[var(--sidebar)] px-6 py-6 text-[var(--sidebar-text)] transition-transform duration-300 lg:static lg:translate-x-0 mobile-sidebar-hidden">
             <div class="mb-8 flex items-center justify-between">
                 <a href="/" class="flex items-center gap-3">
                     <div
-                        class="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-[var(--accent)] shadow-sm">
+                        class="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--primary)] text-white">
                         <i class="fas fa-id-card-clip text-2xl"></i>
                     </div>
                     <div>
-                        <p class="font-display text-2xl font-bold leading-none tracking-wide text-[var(--accent)]">bnpzID
+                        <p class="font-display text-2xl font-bold leading-none tracking-wide text-white">bnpzID
                         </p>
-                        <p class="mt-1 text-xs uppercase tracking-[0.25em] text-slate-500">Ходимларни бошқариш</p>
+                        <p class="mt-1 text-xs uppercase tracking-[0.25em] text-[var(--sidebar-muted)]">Ходимларни бошқариш</p>
                     </div>
                 </a>
-                <button class="lg:hidden text-slate-400 hover:text-slate-700" onclick="toggleSidebar()">
+                <button class="lg:hidden text-[var(--sidebar-muted)] hover:text-white" onclick="toggleSidebar()">
                     <i class="fas fa-xmark text-xl"></i>
                 </button>
             </div>
 
-            <div class="mb-6 text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Меню</div>
+            <div class="mb-6 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sidebar-muted)]">Меню</div>
             <nav class="space-y-2 text-sm font-semibold">
                 <a href="/" class="sidebar-link {% if request.path == '/' %}active{% endif %}">
                     <i class="fas fa-house w-4"></i>
@@ -284,7 +297,7 @@
                 onclick="toggleSidebar()"></div>
 
             <header
-                class="sticky top-0 z-20 border-b border-slate-200/70 bg-white/85 px-4 py-4 backdrop-blur sm:px-6 lg:px-8">
+                class="sticky top-0 z-20 border-b border-[var(--line)] bg-white/90 px-4 py-4 backdrop-blur sm:px-6 lg:px-8">
                 <div class="flex items-center justify-between gap-4">
                     <div class="flex items-center gap-3">
                         <button
@@ -311,7 +324,7 @@
                                  class="h-11 w-11 rounded-2xl object-cover border-2 border-white shadow-sm">
                             {% else %}
                             <div
-                                class="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]">
+                                class="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary)]">
                                 <i class="fas fa-user"></i>
                             </div>
                             {% endif %}

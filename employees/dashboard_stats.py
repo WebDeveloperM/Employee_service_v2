@@ -8,19 +8,19 @@ from .models import Employee
 from .staff import collect_staff_stats
 
 
-BLUE = '#29b6ff'
-PURPLE = '#5750c8'
-GREEN = '#00d96b'
-ORANGE = '#ff6b3d'
-LAVENDER = '#b3acf0'
+# Сайт палитраси (base.html даги --chart-blue ва --accent билан бир хил): кўк ва тўқ сариқ, ёш гуруҳлари учун кўкнинг туслари.
+BLUE = '#2a78d6'
+LIGHT_BLUE = '#7fb2ec'
+DARK_BLUE = '#1b4a96'
+ORANGE = '#eb6834'
 GRAY = '#94a3b8'
 
 # (название, от, до включительно (None — без верхней границы), цвет)
 AGE_GROUPS = (
     ('18 ёшгача', 0, 17, GRAY),
-    ('18-24 ёш', 18, 24, BLUE),
-    ('25-40 ёш', 25, 40, PURPLE),
-    ('41-60 ёш', 41, 60, GREEN),
+    ('18-24 ёш', 18, 24, LIGHT_BLUE),
+    ('25-40 ёш', 25, 40, BLUE),
+    ('41-60 ёш', 41, 60, DARK_BLUE),
     ('60 ёшдан катта', 61, None, ORANGE),
 )
 
@@ -49,7 +49,7 @@ def staff_chart():
     vacant = sum(unit['vacant'] for unit in stats.own.values())
     occupied = total - vacant
     occupied_row = row('Банд ўринлар', occupied, BLUE)
-    vacant_row = row('Бўш иш ўринлари', vacant, LAVENDER)
+    vacant_row = row('Бўш иш ўринлари', vacant, ORANGE)
     return make_chart(
         'staff', 'Штат бирлиги & Бўш иш ўринлари',
         rows=[row('Штат бирлиги', total), occupied_row, vacant_row],
@@ -84,7 +84,7 @@ def gender_chart():
             genders[gender] += 1
         else:
             unknown += 1
-    rows = [row('Эркаклар', genders['M'], BLUE), row('Аёллар', genders['F'], PURPLE)]
+    rows = [row('Эркаклар', genders['M'], BLUE), row('Аёллар', genders['F'], ORANGE)]
     note = f'Жинси кўрсатилмаган: {unknown}' if unknown else ''
     return make_chart('gender', 'Эркаклар & Аёллар', rows, note=note)
 

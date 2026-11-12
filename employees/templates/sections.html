@@ -7,10 +7,10 @@
     <div class="mb-6">
         <div class="flex justify-between items-center">
             <h2 class="text-2xl font-bold text-gray-900">
-                <i class="fas fa-sitemap mr-2 text-green-600"></i>
+                <i class="fas fa-sitemap mr-2 text-blue-600"></i>
                 Бўлимлар
             </h2>
-            <button onclick="showCreateModal()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center">
+            <button onclick="showCreateModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center">
                 <i class="fas fa-plus mr-2"></i>
                 Бўлим қўшиш
             </button>
@@ -21,9 +21,9 @@
         <div class="flex flex-col sm:flex-row gap-4">
             <div class="flex-1">
                 <input type="text" id="searchInput" placeholder="Бўлимлар бўйича қидириш..." 
-                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
             </div>
-            <select id="departmentFilter" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500">
+            <select id="departmentFilter" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                 <option value="">Барча цехлар</option>
             </select>
             <button onclick="loadSections()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg">
@@ -80,7 +80,7 @@
                     Бўлим номи *
                 </label>
                 <input type="text" id="name" required
-                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
             </div>
             
             <div class="mb-4">
@@ -88,7 +88,7 @@
                     Цех *
                 </label>
                 <select id="department_id" required
-                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                     <option value="">Цехни танланг</option>
                 </select>
             </div>
@@ -99,7 +99,7 @@
                     Бекор қилиш
                 </button>
                 <button type="submit" id="saveButton"
-                        class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg">
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">
                     Сақлаш
                 </button>
             </div>
@@ -199,7 +199,7 @@ function renderSections(sections) {
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                 <button onclick="editSection(${section.id})" 
-                        class="text-green-600 hover:text-green-900 mr-3">
+                        class="text-blue-600 hover:text-blue-900 mr-3">
                     <i class="fas fa-edit"></i>
                 </button>
                 <button onclick="deleteSection(${section.id})" 
@@ -232,7 +232,7 @@ function renderPagination(response) {
             const isActive = i === currentPage;
             paginationHTML += `
                 <button onclick="loadSections(${i})" 
-                        class="px-3 py-1 ${isActive ? 'bg-green-600 text-white' : 'bg-gray-200 hover:bg-gray-300'} rounded">
+                        class="px-3 py-1 ${isActive ? 'bg-blue-600 text-white' : 'bg-gray-200 hover:bg-gray-300'} rounded">
                     ${i}
                 </button>
             `;

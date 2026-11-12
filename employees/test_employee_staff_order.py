@@ -153,7 +153,7 @@ class EmployeeTableFollowsStaffTreeOrderTests(TestCase):
         self.assertIn(r'const NO_BANNER_DEPARTMENT = /^\s*20(?!\d)/;', html)
         self.assertEqual(PINNED_DEPARTMENTS[1].pattern, r'^\s*20(?!\d)')
         # бўлим ва ички бўлим сарлавҳалари цех сарлавҳаси каби ўртада, кўк фонда
-        self.assertIn("const BANNER_CELL = 'bg-[#0a9de3] px-4 text-center font-medium text-white';", html)
+        self.assertIn("const BANNER_CELL = 'bg-[var(--primary)] px-4 text-center font-medium text-white';", html)
 
     def test_deleted_employees_are_still_hidden(self):
         department = Department.objects.create(name='1-Цех', sort_order=1)
