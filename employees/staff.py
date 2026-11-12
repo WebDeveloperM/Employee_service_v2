@@ -6,6 +6,7 @@
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
+from decimal import Decimal
 
 from django.db.models import Prefetch
 
@@ -57,8 +58,20 @@ class StaffStats:
         return self.occupied.get((unit_type, unit_id, normalize_position(name)), 0)
 
 
+def to_decimal(value):
+    """Decimal из int/Decimal/float/str (float — через str, чтобы 0.1 не превращалось в 0.1000000000000000055…)."""
+    return value if isinstance(value, Decimal) else Decimal(str(value))
+
+
 def vacant_places(staff_count, occupied):
-    return max(int(staff_count) - int(occupied), 0)
+    """Свободные места: штат (может быть дробным: 0,5 / 1,25) минус занятые, но не меньше нуля."""
+    return max(to_decimal(staff_count) - to_decimal(occupied), Decimal(0))
+
+
+def plain_number(value):
+    """Decimal → int, если число целое, иначе float: шаблон и JSON показывают 3 или 3.5, а не 3.00 или строку '3.50'."""
+    value = to_decimal(value)
+    return int(value) if value == value.to_integral_value() else float(value)
 
 
 def collect_staff_stats():

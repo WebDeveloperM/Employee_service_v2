@@ -111,7 +111,8 @@ class StaffPosition(models.Model):
     department = models.ForeignKey(Department, on_delete=models.CASCADE, related_name='staff_positions', verbose_name='Цех')
     section = models.ForeignKey(Section, on_delete=models.CASCADE, null=True, blank=True, related_name='staff_positions', verbose_name='Отдел')
     name = models.CharField(max_length=255, verbose_name='Должность')
-    staff_count = models.PositiveIntegerField(default=1, verbose_name='Штатных единиц')
+    # Дробные ставки (0,5 / 0,25 / 1,5) допустимы; раньше было целое число (PositiveIntegerField).
+    staff_count = models.DecimalField(max_digits=9, decimal_places=2, default=1, verbose_name='Штатных единиц')
     salary = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True, verbose_name='Оклад')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Создана')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Обновлена')

@@ -7,7 +7,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.hashers import make_password
 from django.core.files.base import ContentFile
 from rest_framework import serializers
-from rest_framework.validators import UniqueTogetherValidator, UniqueValidator
+from rest_framework.validators import UniqueValidator
 
 from .models import Department, Employee, Section, StaffPosition, UserProfile, ROLE_CHOICES, ROLE_USER
 from .sections_tree import MAX_SECTION_DEPTH, SectionIndex
@@ -248,13 +248,13 @@ class SectionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Section
         fields = ['id', 'code', 'name', 'department', 'department_id', 'parent_id', 'path', 'depth', 'children_count']
-        # Явный список вместо автоматического: DRF 3.15 разворачивает двухполевое ограничение
+        # Пустой список вместо автоматического: DRF 3.15 разворачивает двухполевое ограничение
         # (department, code) и делает code обязательным со значением по умолчанию '' — тогда PUT
-        # без code затирал бы ID, а создание без ID не проходило бы. Прежняя проверка «название
-        # уникально в цехе» (unique_together) сохранена как есть, а ID проверяет validate().
-        validators = [
-            UniqueTogetherValidator(queryset=Section.objects.all(), fields=('department_id', 'name')),
-        ]
+        # без code затирал бы ID, а создание без ID не проходило бы. Правило «название уникально
+        # в цехе» (unique_together) сохранено, но проверяется в validate(): стандартный
+        # UniqueTogetherValidator отвечал по-английски («The fields department_id, name must make
+        # a unique set.») и не говорил, какой именно отдел занимает это название.
+        validators = []
 
     def _index(self):
         # Список передаёт готовый индекс в context; для одиночных ответов строим один раз.
@@ -280,12 +280,34 @@ class SectionSerializer(serializers.ModelSerializer):
     def validate_code(self, value):
         return (value or '').strip()
 
+    def _duplicate_name_message(self, existing, parent, *, creating):
+        where = 'асосий бўлим' if existing.parent_id is None else self._index().path(existing.pk)
+        message = f'Бу цехда «{existing.name}» номли бўлим аллақачон мавжуд ({where}). Бўлим номи цех бўйича ноёб бўлиши керак.'
+        # Типик ҳолат: мавжуд асосий бўлимни ички бўлим қилмоқчи — янги нусха яратиш эмас, мавжудини кўчириш керак.
+        if creating and parent is not None and existing.parent_id is None:
+            message += f' Уни «{parent.name}» ичига кўчириш учун янгисини яратманг: мавжуд бўлимни таҳрирлаб, «Юқори бўлим»ни танланг.'
+        return message
+
     def validate(self, attrs):
         # При правке цех, ID или родитель могут не прийти — берём их из самого отдела.
         instance = self.instance
         code = attrs.get('code', instance.code if instance is not None else '')
         department = attrs.get('department', instance.department if instance is not None else None)
         parent = attrs['parent'] if 'parent' in attrs else (instance.parent if instance is not None else None)
+
+        # Новый отдел всегда создаётся в каком-то цеху (раньше это требовал UniqueTogetherValidator).
+        if instance is None and department is None:
+            raise serializers.ValidationError({'department_id': 'Цехни танланг.'})
+
+        # Название уникально внутри цеха (и для вложенных отделов тоже: на это опирается импорт из Excel).
+        name = attrs.get('name', instance.name if instance is not None else None)
+        if name is not None and department is not None:
+            same_name = Section.objects.filter(department=department, name=name)
+            if instance is not None:
+                same_name = same_name.exclude(pk=instance.pk)
+            existing = same_name.first()
+            if existing is not None:
+                raise serializers.ValidationError({'name': self._duplicate_name_message(existing, parent, creating=instance is None)})
 
         # «ID отдела» уникален среди «соседей»: отделы верхнего уровня нумеруются внутри цеха,
         # вложенные — внутри своего родителя (у каждого родителя своя нумерация 1, 2, 3 …).
@@ -325,7 +347,17 @@ class StaffPositionSerializer(serializers.ModelSerializer):
     section_id = serializers.PrimaryKeyRelatedField(
         queryset=Section.objects.select_related('department'), source='section', required=False, allow_null=True,
     )
-    staff_count = serializers.IntegerField(min_value=1, required=False)
+    # Дробные ставки допустимы (0,5 / 0,25 / 1,5): сотых долей достаточно, ответ — числом (не строкой), как раньше.
+    staff_count = serializers.DecimalField(
+        max_digits=9, decimal_places=2, min_value=Decimal('0.01'), required=False, coerce_to_string=False,
+        error_messages={
+            'invalid': 'Штатлар сонини сон билан киритинг (масалан, 1 ёки 0.5).',
+            'min_value': 'Штатлар сони 0.01 дан кам бўлмаслиги керак.',
+            'max_decimal_places': 'Вергулдан кейин энг кўпи билан 2 та рақам киритиш мумкин (масалан, 0.25).',
+            'max_digits': 'Штатлар сони жуда катта.',
+            'max_whole_digits': 'Штатлар сони жуда катта.',
+        },
+    )
     salary = serializers.DecimalField(
         max_digits=14, decimal_places=2, min_value=Decimal('0'), required=False, allow_null=True,
     )

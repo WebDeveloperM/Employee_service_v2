@@ -263,6 +263,27 @@ class EmployeeListCreateTemplateView(generics.ListCreateAPIView):
         if tabel_number:
             queryset = queryset.filter(tabel_number__icontains=tabel_number)
 
+        # Телефон бўйича қидирув: Телефон 1 ёки Телефон 2 дан биронтасида киритилган рақамлар учраши керак.
+        # Рақамлар базада турлича сақланган («+998 90 123 45 67», «+998901234567», «901234567»), шунинг учун
+        # икки томон ҳам фақат рақамларга келтирилади: «90 123», «+998(90)123» ва «901234567» бир хил ишлайди.
+        phone = self.request.query_params.get('phone', '').strip()
+        if phone:
+            digits = re.sub(r'\D', '', phone)
+            if not digits:
+                return queryset.none()   # рақамсиз матн ҳеч кимга мос келмайди (рўйхатни жим тўлиқ қайтармаймиз)
+            queryset = queryset.annotate(
+                phone_1_digits=models.Func(models.F('phone_number_1'), models.Value(r'\D'), models.Value(''), models.Value('g'),
+                                           function='regexp_replace', output_field=models.CharField()),
+                phone_2_digits=models.Func(models.F('phone_number_2'), models.Value(r'\D'), models.Value(''), models.Value('g'),
+                                           function='regexp_replace', output_field=models.CharField()),
+            )
+            conditions = models.Q(phone_1_digits__contains=digits) | models.Q(phone_2_digits__contains=digits)
+            if digits.startswith('998') and len(digits) >= 5:
+                # «+998 90 123…» деб ёзилса, давлат кодисиз сақланган «90123…» ҳам топилади.
+                local = digits[3:]
+                conditions |= models.Q(phone_1_digits__startswith=local) | models.Q(phone_2_digits__startswith=local)
+            queryset = queryset.filter(conditions)
+
         name = self.request.query_params.get('name', '').strip()
         if name:
             queryset = queryset.filter(

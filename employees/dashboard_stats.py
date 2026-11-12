@@ -5,7 +5,7 @@
 from django.utils import timezone
 
 from .models import Employee
-from .staff import collect_staff_stats
+from .staff import collect_staff_stats, plain_number
 
 
 # Сайт палитраси (base.html даги --chart-blue ва --accent билан бир хил): кўк ва тўқ сариқ, ёш гуруҳлари учун кўкнинг туслари.
@@ -45,9 +45,11 @@ def row(label, value, color=None):
 
 def staff_chart():
     stats = collect_staff_stats()
+    # Штат бирлиги дробли бўлиши мумкин (0,5 / 1,25): йиғинди Decimal да, кўрсатишда эса 3 ёки 3.5 (3.00 эмас).
     total = sum(unit['staff'] for unit in stats.own.values())
     vacant = sum(unit['vacant'] for unit in stats.own.values())
-    occupied = total - vacant
+    occupied = plain_number(total - vacant)
+    total, vacant = plain_number(total), plain_number(vacant)
     occupied_row = row('Банд ўринлар', occupied, BLUE)
     vacant_row = row('Бўш иш ўринлари', vacant, ORANGE)
     return make_chart(

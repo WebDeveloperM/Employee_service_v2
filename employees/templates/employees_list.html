@@ -101,7 +101,7 @@
         <div id="filterPanel" inert aria-hidden="true"
             class="grid grid-rows-[0fr] transition-[grid-template-rows] duration-200 ease-out">
             <div class="overflow-hidden">
-                <div class="mb-4 grid gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-[minmax(0,320px)_minmax(0,220px)]">
+                <div class="mb-4 grid gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2 xl:grid-cols-[minmax(0,320px)_minmax(0,220px)_minmax(0,320px)]">
                     <label class="block text-sm font-semibold text-slate-500">
                         Табель рақами
                         <span class="mt-1.5 flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 focus-within:border-[var(--primary)]">
@@ -120,6 +120,15 @@
                             <option value="">Барчаси</option>
                         </select>
                     </label>
+                    <label class="block text-sm font-semibold text-slate-500">
+                        Телефон рақами
+                        <span class="mt-1.5 flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 focus-within:border-[var(--primary)]">
+                            <i class="fas fa-phone text-xs text-slate-400"></i>
+                            <input id="phoneFilter" type="tel" inputmode="tel" placeholder="Телефон рақами бўйича қидириш..."
+                                autocomplete="off" spellcheck="false"
+                                class="w-full border-0 bg-transparent p-0 text-sm font-semibold text-slate-700 placeholder:font-normal placeholder:text-slate-400 focus:outline-none">
+                        </span>
+                    </label>
                 </div>
             </div>
         </div>
@@ -130,7 +139,8 @@
             <select id="filterSection"><option value="">Барча бўлимлар</option></select>
         </div>
 
-        <div class="overflow-x-auto">
+        {# overflow-y-hidden: сатрлар fade-in да 10px пастдан чиқади; акс ҳолда ҳар қидирувда 250 мс scrollbar пайдо бўлиб, жадвал 15px сурилар эди. #}
+        <div class="overflow-x-auto overflow-y-hidden">
             <table class="min-w-full border-separate border-spacing-0">
                 <thead>
                     <tr class="border-b border-slate-200 bg-white text-left text-sm font-bold text-slate-900">
@@ -989,6 +999,7 @@
     // Тугмадаги рақам: сукутдан фарқ қиладиган филтрлар сони (accordion ёпиқ бўлса ҳам кўриниб туради).
     function updateFilterBadge() {
         const count = (document.getElementById('tabelFilter').value.trim() ? 1 : 0)
+            + (document.getElementById('phoneFilter').value.trim() ? 1 : 0)
             + (document.getElementById('statusFilter').value !== 'active' ? 1 : 0);
         const badge = document.getElementById('filterBadge');
         badge.textContent = String(count);
@@ -1008,17 +1019,19 @@
             loadEmployees(1);
         });
 
-        // Табель рақами бўйича қидирув: ёзилиши билан (кичик тўхташдан кейин) ишлайди; Enter — дарҳол.
-        const tabelInput = document.getElementById('tabelFilter');
-        tabelInput.addEventListener('input', function () {
-            updateFilterBadge();
-            scheduleServerFilterReload();
-        });
-        tabelInput.addEventListener('keypress', function (event) {
-            if (event.key === 'Enter') {
-                window.clearTimeout(dashboardReloadTimer);
-                applyServerFilters();
-            }
+        // Табель рақами ва телефон бўйича қидирув: ёзилиши билан (кичик тўхташдан кейин) ишлайди; Enter — дарҳол.
+        ['tabelFilter', 'phoneFilter'].forEach(function (id) {
+            const input = document.getElementById(id);
+            input.addEventListener('input', function () {
+                updateFilterBadge();
+                scheduleServerFilterReload();
+            });
+            input.addEventListener('keypress', function (event) {
+                if (event.key === 'Enter') {
+                    window.clearTimeout(dashboardReloadTimer);
+                    applyServerFilters();
+                }
+            });
         });
 
         // Қидирув матни ёзилиши билан жадвал фильтрланади (кичик тўхташдан кейин); Enter — дарҳол.
@@ -1115,10 +1128,12 @@
             return;
         }
         const staff = staffTotalsForSelection();
+        // Штат дробли бўлиши мумкин (0.5 / 1.25); цехлар йиғиндиси JS да қўшилади — 0.1+0.2 каби хато чиқмаслиги учун 2 хонагача юмалоқланади.
+        const roundCount = (value) => Math.round(Number(value) * 100) / 100;
         const items = [
-            ...(staff ? [{ label: 'Штатлар сони', value: staff.staff }] : []),
+            ...(staff ? [{ label: 'Штатлар сони', value: roundCount(staff.staff) }] : []),
             { label: 'Ходимлар', value: totalEmployees },
-            ...(staff ? [{ label: 'Бўш иш ўринлари', value: staff.vacant }] : []),
+            ...(staff ? [{ label: 'Бўш иш ўринлари', value: roundCount(staff.vacant) }] : []),
         ];
         document.getElementById('statsContainer').innerHTML = items.map(item => `
             <p class="font-medium">${item.label} : <span class="font-bold">${item.value}</span></p>
@@ -1201,6 +1216,8 @@
             if (status) params.set('status', status);
             const tabelNumber = document.getElementById('tabelFilter').value.trim();
             if (tabelNumber) params.set('tabel_number', tabelNumber);
+            const phone = document.getElementById('phoneFilter').value.trim();
+            if (phone) params.set('phone', phone);
 
             const payload = await apiRequest(`/template/employees/?${params.toString()}`);
             if (!isLatest()) {
