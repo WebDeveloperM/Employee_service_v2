@@ -160,6 +160,12 @@ class EmployeeTableFollowsStaffTreeOrderTests(TestCase):
         self.assertIn('const NO_BANNER_DEPARTMENTS = [', html)
         self.assertIn('.some((pattern) => pattern.test(departmentName))', html)
         self.assertIn('if (!hasNoBanner(departmentName)) {', html)
+        # «Раҳбарият» нинг бўлимсиз ходимлари тепасида цех номи оддий бўлим полосаси («Юридик хизмати» каби) бўлиб чиқади,
+        # «Раҳбарият» бўлими бўлса, такрорланмайди.
+        self.assertIn('const LEADERSHIP_DEPARTMENT = /^\\s*ра[хҳ]барият/i;', html)
+        self.assertIn("const groupKey = sectionKey || (LEADERSHIP_DEPARTMENT.test(departmentName) ? 'department' : '');", html)
+        self.assertIn('banners += sectionBanner(banner);', html)
+        self.assertIn('if (label !== lastBannerLabel) {', html)
         # бўлим ва ички бўлим сарлавҳалари цех сарлавҳаси каби ўртада, кўк фонда
         self.assertIn("const BANNER_CELL = 'bg-[var(--primary)] px-4 text-center font-medium text-white';", html)
 

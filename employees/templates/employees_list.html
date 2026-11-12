@@ -1275,10 +1275,11 @@
         const COLUMN_COUNT = 5;   // №, Ходим, Бўлим, Лавозим, Амаллар (цех устуни йўқ: цех сарлавҳа полосасида кўрсатилади)
         const ACTION_BUTTON = 'inline-flex h-9 w-9 items-center justify-center rounded-md border bg-white transition';
         const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-        // «Раҳбарият» ва «20-Цех Завод бошқармаси» учун цех сарлавҳаси чиқарилмайди: уларнинг бўлимлари ўзлари сарлавҳа бўлиб туради
-        // («Раҳбарият» цехидаги «Раҳбарият» бўлими икки марта такрорланмайди).
+        // «Раҳбарият» ва «20-Цех Завод бошқармаси» учун катта цех сарлавҳаси чиқарилмайди: уларнинг бўлимлари ўзлари сарлавҳа бўлиб туради.
         // Қоида staff.py даги PINNED_DEPARTMENTS билан бир хил: «Раҳбарият/Рахбарият…» ва номи «20» дан бошланадиган («200-…» эмас).
-        const NO_BANNER_DEPARTMENTS = [/^\s*ра[хҳ]барият/i, /^\s*20(?!\d)/];
+        // «Раҳбарият» цехининг бўлимсиз ходимлари тепасида эса цех номи оддий бўлим полосаси («Юридик хизмати» каби) кўринишида чиқади.
+        const LEADERSHIP_DEPARTMENT = /^\s*ра[хҳ]барият/i;
+        const NO_BANNER_DEPARTMENTS = [LEADERSHIP_DEPARTMENT, /^\s*20(?!\d)/];
         const hasNoBanner = (departmentName) => NO_BANNER_DEPARTMENTS.some((pattern) => pattern.test(departmentName));
         // Цех ва бўлим/ички бўлим сарлавҳалари бир хил: ўртада, оқ ёзув, кўк фон.
         const BANNER_CELL = 'bg-[var(--primary)] px-4 text-center font-medium text-white';
@@ -1286,17 +1287,16 @@
             <tr class="staff-group-row staff-group-department">
                 <td colspan="${COLUMN_COUNT}" class="${BANNER_CELL} py-4 text-lg">${escapeHtml(name)}</td>
             </tr>`;
-        const sectionBanner = (section) => {
-            // ички бўлим: тўлиқ йўл («Бўлим / Ички бўлим»), шунда қайси бўлимга тегишли эканини кўриб туради
-            const label = Number(section.depth || 0) > 0 ? (section.path || section.name) : section.name;
-            return `
+        // ички бўлим: тўлиқ йўл («Бўлим / Ички бўлим»), шунда қайси бўлимга тегишли эканини кўриб туради
+        const sectionLabel = (section) => Number(section.depth || 0) > 0 ? (section.path || section.name) : section.name;
+        const sectionBanner = (section) => `
             <tr class="staff-group-row staff-group-section">
-                <td colspan="${COLUMN_COUNT}" class="${BANNER_CELL} border-t border-white/40 py-3 text-base" title="${escapeHtml(section.path || section.name)}">${escapeHtml(label)}</td>
+                <td colspan="${COLUMN_COUNT}" class="${BANNER_CELL} border-t border-white/40 py-3 text-base" title="${escapeHtml(section.path || section.name)}">${escapeHtml(sectionLabel(section))}</td>
             </tr>`;
-        };
 
         let previousDepartment = null;   // null — ещё ничего не выводили (первая строка страницы всегда с полосой)
-        let previousSection = null;
+        let previousGroup = null;        // бўлим id си ёки 'department' («Раҳбарият» цехининг бўлимсиз ходимлари)
+        let lastBannerLabel = '';        // охирги бўлим полосасининг номи: «Раҳбарият» цехидаги «Раҳбарият» бўлими такрорланмайди
         tableBody.innerHTML = pageItems.map((employee, index) => {
             // Ходим номи: Фамилия, Исм, Отасининг исми (шу тартибда).
             const fullName = [employee.last_name, employee.first_name, employee.surname].filter(Boolean).join(' ').trim() || '—';
@@ -1307,18 +1307,26 @@
             let banners = '';
             const departmentKey = String(employee.department?.id ?? '');
             const sectionKey = String(employee.section?.id ?? '');
+            const departmentName = employee.department?.name || 'Цех кўрсатилмаган';
             if (departmentKey !== previousDepartment) {
-                const departmentName = employee.department?.name || 'Цех кўрсатилмаган';
                 if (!hasNoBanner(departmentName)) {
                     banners += departmentBanner(departmentName);
                 }
                 previousDepartment = departmentKey;
-                previousSection = null;
+                previousGroup = null;
+                lastBannerLabel = '';
             }
-            if (sectionKey && sectionKey !== previousSection) {
-                banners += sectionBanner(employee.section);
+            // Сервер цехнинг ўз ходимларини (бўлимсиз) бўлимлардан аввал беради; «Раҳбарият» да улар тепасида ҳам полоса туради.
+            const groupKey = sectionKey || (LEADERSHIP_DEPARTMENT.test(departmentName) ? 'department' : '');
+            if (groupKey && groupKey !== previousGroup) {
+                const banner = sectionKey ? employee.section : { name: departmentName, depth: 0 };
+                const label = sectionLabel(banner).trim().toLowerCase();
+                if (label !== lastBannerLabel) {
+                    banners += sectionBanner(banner);
+                    lastBannerLabel = label;
+                }
             }
-            previousSection = sectionKey || null;
+            previousGroup = groupKey || null;
 
             return `${banners}
             <tr class="staff-employee-row fade-in border-t border-slate-100 text-sm text-slate-700 ${index % 2 === 0 ? 'bg-[#f6f7fe]' : 'bg-white'} hover:bg-[var(--primary-soft)]">
