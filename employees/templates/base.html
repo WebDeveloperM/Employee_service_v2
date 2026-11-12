@@ -38,11 +38,13 @@
     <script src="https://unpkg.com/imask@7.6.0/dist/imask.min.js"></script>
     <style>
         :root {
-            /* Сайдбар асосий иш столи билан бир хил ёруғ рангда: оқ фон, ингичка чегара, фаол банд — сайтнинг яшил ранги. */
-            --sidebar: #ffffff;
-            --sidebar-soft: #f1f5f9;
-            --sidebar-text: #475569;
-            --sidebar-active-bg: #e8f6ef;
+            /* Сайдбар иш столидан (#f3f6fb) бир оз тўқроқ юмшоқ кулранг-кўк: кўзни қамаштирмайди.
+               Фаол банд — саҳифадаги карталар каби оқ, яшил белги билан. */
+            --sidebar: #e8edf4;
+            --sidebar-line: #d9e1ec;
+            --sidebar-soft: rgba(255, 255, 255, 0.6);
+            --sidebar-text: #334155;
+            --sidebar-active-bg: #ffffff;
             --sidebar-active-text: #127a52;
             --surface: #ffffff;
             --shell: #f3f6fb;
@@ -99,7 +101,7 @@
         .sidebar-link.active {
             background: var(--sidebar-active-bg);
             color: var(--sidebar-active-text);
-            box-shadow: inset 3px 0 0 var(--success);
+            box-shadow: inset 3px 0 0 var(--success), 0 1px 3px rgba(15, 23, 42, 0.08);
         }
 
         /* Очиқ гуруҳ («Созламалар»): фақат яшил матн, тўлиқ белги эса ичидаги танланган саҳифада. */
@@ -212,11 +214,11 @@
 <body>
     <div class="app-shell lg:grid lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside id="appSidebar"
-            class="fixed inset-y-0 left-0 z-40 w-[260px] border-r border-slate-200/80 bg-[var(--sidebar)] px-6 py-6 text-slate-700 transition-transform duration-300 lg:static lg:translate-x-0 mobile-sidebar-hidden">
+            class="fixed inset-y-0 left-0 z-40 w-[260px] border-r border-[var(--sidebar-line)] bg-[var(--sidebar)] px-6 py-6 text-slate-700 transition-transform duration-300 lg:static lg:translate-x-0 mobile-sidebar-hidden">
             <div class="mb-8 flex items-center justify-between">
                 <a href="/" class="flex items-center gap-3">
                     <div
-                        class="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]">
+                        class="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-[var(--accent)] shadow-sm">
                         <i class="fas fa-id-card-clip text-2xl"></i>
                     </div>
                     <div>
