@@ -15,6 +15,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 
 from .bnpzid import build_bnpzid_redirect, get_bnpzid_authorize_request
+from .dashboard_stats import build_dashboard_charts
 from .models import Department, Employee, Section, ROLE_ADMIN, ROLE_CHOICES, ROLE_HR, UserProfile
 from .ordering import order_sections_by_code
 from .permissions import is_admin_or_hr
@@ -273,15 +274,34 @@ class LogoutPageView(View):
         return HttpResponseRedirect(settings.LOGOUT_REDIRECT_URL)
 
 
+def redirect_plain_user_to_own_card(request):
+    """Обычный пользователь (роль «user») видит только свою карточку: список и главная его туда перенаправляют."""
+    profile = getattr(request.user, 'profile', None)
+    if profile and profile.role == 'user':
+        employee = getattr(request.user, 'employee', None)
+        if employee and not employee.is_deleted:
+            return HttpResponseRedirect(f'/employees/{employee.slug}/')
+    return None
+
+
+class EmployeesListView(AuthenticatedTemplateView):
+    """«Ходимлар рўйхати» — список сотрудников (раньше он был на главной странице)."""
+    template_name = 'employees_list.html'
+
+    def get(self, request, *args, **kwargs):
+        own_card_redirect = redirect_plain_user_to_own_card(request)
+        if own_card_redirect is not None:
+            return own_card_redirect
+        return render(request, self.template_name)
+
+
 class DashboardView(AuthenticatedTemplateView):
     template_name = 'dashboard.html'
-    
+
     def get(self, request, *args, **kwargs):
-        profile = getattr(request.user, 'profile', None)
-        if profile and profile.role == 'user':
-            employee = getattr(request.user, 'employee', None)
-            if employee and not employee.is_deleted:
-                return HttpResponseRedirect(f'/employees/{employee.slug}/')
+        own_card_redirect = redirect_plain_user_to_own_card(request)
+        if own_card_redirect is not None:
+            return own_card_redirect
 
         if request.headers.get('Accept') == 'application/json':
             return Response({
@@ -290,8 +310,11 @@ class DashboardView(AuthenticatedTemplateView):
                 'data': self.get_dashboard_data()
             })
         
-        return render(request, self.template_name)
-    
+        return render(request, self.template_name, {
+            'stats': self.get_dashboard_data(),
+            'charts': build_dashboard_charts(include_staff=is_admin_or_hr(request.user)),
+        })
+
     def get_dashboard_data(self):
         total_employees = Employee.objects.filter(is_deleted=False).count()
         active_employees = Employee.objects.filter(is_deleted=False, is_active=True).count()

@@ -131,12 +131,20 @@ class UzbekPagesTests(TestCase):
             self.assertNotIn(text, html, f'{url}: unexpected {text!r}')
         self.assertIn('<html lang="uz-Cyrl">', html)
 
-    def test_dashboard_menu_and_layout_are_in_uzbek(self):
+    def test_employee_list_page_and_menu_are_in_uzbek(self):
         self.assertPage(
-            '/',
-            present=['Ходимлар рўйхати', 'Excel импорти', 'Ходим қўшиш', 'Бош саҳифа', 'Созламалар', 'Чиқиш',
+            '/employees/',
+            present=['Ходимлар рўйхати', 'Excel импорти', 'Янги ҳодим қўшиш', 'Бош саҳифа', 'Созламалар', 'Чиқиш',
                      'Штат бирлиги ва лавозим', 'Цехлар', 'Бўлимлар', 'Фойдаланувчилар рухсатлари'],
             absent=['Список сотрудников', 'Главная страница', 'Настройка', 'Выход', 'Доступ пользователей'],
+        )
+
+    def test_home_page_is_in_uzbek_and_no_longer_holds_the_employee_list(self):
+        self.assertPage(
+            '/',
+            present=['Бош саҳифа', 'Ходимлар рўйхати', 'Созламалар', 'Чиқиш',
+                     'Штат бирлиги &amp; Бўш иш ўринлари', 'Ёш бўйича статистика', 'Эркаклар &amp; Аёллар'],
+            absent=['Excel импорти', 'Ходим қўшиш', 'Главная страница', 'Выход', 'Фаол ходимлар'],
         )
 
     def test_other_pages_are_in_uzbek(self):

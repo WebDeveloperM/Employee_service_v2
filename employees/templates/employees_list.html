@@ -1,0 +1,1331 @@
+{% extends 'base.html' %}
+
+{% block title %}Ходимлар - Ходимлар хизмати{% endblock %}
+
+{% block content %}
+<section class="space-y-4">
+    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <h2 class="font-display text-2xl font-bold text-slate-900">Ходимлар рўйхати</h2>
+        <div class="flex flex-wrap gap-2">
+            <button id="openImportModalButton" onclick="openImportModal()"
+                class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                <i class="fas fa-file-import text-blue-600"></i>
+                Excel импорти
+            </button>
+            <!-- <button onclick="openPhoneImportModal()"
+                class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                <i class="fas fa-phone text-violet-600"></i>
+                Телефон рақамлари импорти
+            </button> -->
+            <button onclick="exportEmployees()"
+                class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                <i class="fas fa-file-export text-emerald-600"></i>
+                Excel экспорти
+            </button>
+            <a href="/employees/create/"
+                class="inline-flex items-center gap-2 rounded-lg bg-[var(--success)] px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-95">
+                <i class="fas fa-plus"></i>
+                Янги ҳодим қўшиш
+            </a>
+        </div>
+    </div>
+
+    <div id="treeFilterControl" class="relative">
+        <div class="flex w-full items-center rounded-lg border border-slate-200 bg-white transition focus-within:border-emerald-400 hover:border-slate-300">
+            <button id="treeFilterButton" type="button" onclick="toggleTreeFilterDropdown()"
+                class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-4 py-3.5 text-left text-base text-slate-800 focus:outline-none">
+                <i class="fas fa-sitemap text-slate-400"></i>
+                <span id="treeFilterButtonText" class="truncate">Барча цех ва бўлимлар</span>
+            </button>
+            <button id="treeFilterClear" type="button" onclick="clearTreeFilterSelection()" title="Тозалаш"
+                class="hidden h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:text-slate-700">
+                <i class="fas fa-circle-xmark"></i>
+            </button>
+            <button type="button" onclick="toggleTreeFilterDropdown()" tabindex="-1" aria-label="Цех ва бўлимлар рўйхати"
+                class="px-4 py-3.5 focus:outline-none">
+                <i id="treeFilterButtonChevron" class="fas fa-chevron-down text-xs text-slate-400 transition-transform"></i>
+            </button>
+        </div>
+
+        <div id="treeFilterMenu" class="absolute left-0 right-0 top-full z-30 mt-1 hidden rounded-lg border border-slate-200 bg-white shadow-xl">
+            <div class="border-b border-slate-100 p-2">
+                <div class="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2">
+                    <i class="fas fa-magnifying-glass text-xs text-slate-400"></i>
+                    <input id="treeFilterSearch" type="text" placeholder="Цех ёки бўлим бўйича қидириш..."
+                        oninput="renderTreeFilterOptions()"
+                        class="w-full border-0 bg-transparent p-0 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none">
+                </div>
+            </div>
+            <div id="treeFilterTree" class="max-h-[420px] overflow-y-auto p-2"></div>
+        </div>
+    </div>
+
+    <div class="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3">
+        <i class="fas fa-magnifying-glass text-slate-400"></i>
+        <input id="globalSearchInput" type="text" placeholder="Исм, табель, лавозим бўйича қидириш..."
+            autocomplete="off" autocapitalize="off" spellcheck="false"
+            class="w-full border-0 bg-transparent p-0 text-base text-slate-700 placeholder:text-slate-400 focus:outline-none">
+    </div>
+
+    <div id="statsContainer" class="flex flex-wrap items-baseline gap-x-8 gap-y-1 text-xl text-slate-900"></div>
+
+    <div class="rounded-xl border border-slate-100 bg-white p-4 shadow-sm sm:p-5">
+        <div class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div class="flex flex-wrap items-center gap-3">
+                <label class="flex items-center gap-2 text-sm font-semibold text-slate-500">
+                    Кўрсатиш:
+                    <select id="pageSizeSelect"
+                        class="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+                        <option value="10">10</option>
+                        <option value="20" selected>20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </label>
+            </div>
+            <div id="paginationTop" class="flex flex-wrap items-center justify-end gap-2"></div>
+        </div>
+
+        {# Цех/бўлим танлови (юқоридаги дарахт-фильтр) шу яширин рўйхатларда сақланади; устунлар бўйича қидириш қатори йўқ. #}
+        <div class="hidden" aria-hidden="true">
+            <select id="filterDepartment"><option value="">Барча цехлар</option></select>
+            <select id="filterSection"><option value="">Барча бўлимлар</option></select>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full border-separate border-spacing-0">
+                <thead>
+                    <tr class="border-b border-slate-200 bg-white text-left text-sm font-bold text-slate-900">
+                        <th class="border-b border-slate-200 px-4 py-4">№</th>
+                        <th class="min-w-[400px] border-b border-slate-200 px-4 py-4">Ходим</th>
+                        <th class="w-[240px] border-b border-slate-200 px-4 py-4">Цех</th>
+                        <th class="w-[240px] border-b border-slate-200 px-4 py-4">Бўлим</th>
+                        <th class="border-b border-slate-200 px-4 py-4">Лавозим</th>
+                        <th class="border-b border-slate-200 px-4 py-4 text-center">Амаллар</th>
+                    </tr>
+                </thead>
+                <tbody id="employeesTableBody"></tbody>
+            </table>
+
+            <div id="loading" class="hidden px-6 py-12 text-center">
+                <div class="loading"></div>
+                <p class="mt-3 text-sm font-semibold text-slate-500">Ходимлар юкланмоқда...</p>
+            </div>
+
+            <div id="emptyState" class="hidden px-6 py-14 text-center">
+                <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-100 text-slate-400">
+                    <i class="fas fa-users text-2xl"></i>
+                </div>
+                <p class="mt-4 text-sm font-semibold text-slate-700">Ходимлар топилмади</p>
+                <p class="mt-1 text-sm text-slate-500">Фильтрларни тозаланг ёки янги ходим қўшинг.</p>
+            </div>
+        </div>
+
+        <div id="pagination" class="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"></div>
+    </div>
+</section>
+
+<div id="imageModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm"
+    onclick="if(event.target===this)closeImageModal()">
+    <div class="relative">
+        <button onclick="closeImageModal()"
+            class="absolute -right-3 -top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-600 shadow-lg hover:bg-slate-100">
+            <i class="fas fa-xmark text-lg"></i>
+        </button>
+        <img id="imageModalImg" src="" alt="" class="max-h-[80vh] max-w-[90vw] rounded-2xl shadow-2xl">
+    </div>
+</div>
+
+<div id="importModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm"
+    onclick="if(event.target===this)closeImportModal()">
+    <div class="panel-card max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-[28px] p-6 sm:p-7">
+        <div class="flex items-start justify-between gap-4">
+            <div>
+                <p class="text-xs font-bold uppercase tracking-[0.24em] text-blue-600">Excel import</p>
+                <h3 class="mt-2 font-display text-2xl font-bold text-slate-900">Excel орқали ходимларни импорт қилиш</h3>
+                <p class="mt-2 max-w-2xl text-sm text-slate-500">
+                    .xlsx ёки .xls файлини юкланг. Агар камида битта қаторда хато бўлса, импорт тўлиқ
+                    бекор қилинади.
+                </p>
+            </div>
+            <button onclick="closeImportModal()"
+                class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 text-slate-500 hover:bg-slate-50">
+                <i class="fas fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="mt-6 w-full">
+            <div class="w-full rounded-[24px] border border-slate-200 bg-slate-50/60 p-5">
+                <h4 class="text-sm font-extrabold uppercase tracking-[0.2em] text-slate-500">Excel файлда нима бўлиши керак
+                </h4>
+                <div class="mt-4 grid gap-4 sm:grid-cols-2 mb-2 ">
+                    <div class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100">
+                        <p class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-600">Мажбурий</p>
+                        <ul class="mt-3 space-y-2 text-sm font-semibold text-slate-700">
+                            <li>Табель рақами</li>
+                            <li>Исм</li>
+                            <li>Фамилия</li>
+                        </ul>
+                    </div>
+                    <div class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100">
+                        <p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-600">Тавсия этилади</p>
+                        <ul class="mt-3 space-y-2 text-sm font-semibold text-slate-700">
+                            <li>Цех</li>
+                            <li>Бўлим</li>
+                            <li>Лавозим</li>
+                            <li>Ишга қабул қилинган сана</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="rounded-[24px] border border-slate-200 bg-white p-5">
+                    <h4 class="text-sm font-extrabold uppercase tracking-[0.2em] text-slate-500">Файл юклаш</h4>
+                    <input id="importExcelInput" type="file" accept=".xlsx,.xls"
+                        class="mt-4 block w-full rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-600 file:mr-3 file:rounded-xl file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:file:bg-blue-700">
+                    <div class="mt-4 rounded-[20px] border border-slate-200 bg-white p-4">
+                        <p class="text-sm font-bold text-slate-900">Ходимлар фотосуратлари</p>
+                        <p class="mt-1 text-sm text-slate-500">Мажбурий эмас. Бир нечта тасвир ёки ZIP-архивни танланг. Файл номи табель рақами билан бир хил бўлиши керак, масалан EMP-901.jpg.</p>
+                        <input id="importEmployeeImagesInput" type="file" accept="image/*,.zip" multiple
+                            class="mt-4 block w-full rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-600 file:mr-3 file:rounded-xl file:border-0 file:bg-emerald-600 file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:file:bg-emerald-700">
+                    </div>
+                    <div class="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                        Табель рақами ноёб бўлиши керак. Агар у файлда такрорланса ёки базада аллақачон мавжуд бўлса,
+                        импорт хато билан тугайди.
+                    </div>
+                    <div class="mt-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                        Бошида нол бўлган рақамли табель рақамлари учун Excel да устунни матн сифатида сақланг.
+                    </div>
+                    <div class="mt-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                        Агар фотосурат файл номи бўйича топилса, у ходимнинг асосий тасвири сифатида автоматик сақланади.
+                    </div>
+                    <div class="mt-5 flex flex-wrap gap-3">
+                        <button id="importExcelSubmitButton" onclick="submitExcelImport()"
+                            class="inline-flex items-center gap-2 rounded-2xl bg-[var(--info)] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-500/20">
+                            <i class="fas fa-cloud-arrow-up"></i>
+                            Файлни юклаш
+                        </button>
+                        <button onclick="closeImportModal()"
+                            class="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600">
+                            Бекор қилиш
+                        </button>
+                    </div>
+                    <div id="importResult" class="mt-5 hidden rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                    </div>
+                </div>
+
+
+            </div>
+
+
+        </div>
+    </div>
+</div>
+
+
+<div id="phoneImportModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm"
+    onclick="if(event.target===this)closePhoneImportModal()">
+    <div class="panel-card max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[28px] p-6 sm:p-7">
+        <div class="flex items-start justify-between gap-4">
+            <div>
+                <p class="text-xs font-bold uppercase tracking-[0.24em] text-violet-600">Excel import</p>
+                <h3 class="mt-2 font-display text-2xl font-bold text-slate-900">Телефон рақамлари импорти</h3>
+                <p class="mt-2 max-w-xl text-sm text-slate-500">
+                    Excel файлни юкланг. Ходимлар табель рақами бўйича топилади — Телефон 1 ва Туғилган сана янгиланади.
+                </p>
+            </div>
+            <button onclick="closePhoneImportModal()"
+                class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 text-slate-500 hover:bg-slate-50">
+                <i class="fas fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="mt-6 rounded-[24px] border border-slate-200 bg-slate-50/60 p-5">
+            <h4 class="text-sm font-extrabold uppercase tracking-[0.2em] text-slate-500">Файл тузилмаси</h4>
+            <div class="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-slate-50 text-left text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                        <tr>
+                            <th class="px-4 py-2 w-10">Устун</th>
+                            <th class="px-4 py-2">Excel даги сарлавҳа</th>
+                            <th class="px-4 py-2">Мажбурий</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        <tr>
+                            <td class="px-4 py-2 text-center text-xs font-bold text-slate-400">A</td>
+                            <td class="px-4 py-2 font-semibold text-slate-800">Табель рақами</td>
+                            <td class="px-4 py-2"><span class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700">Ҳа</span></td>
+                        </tr>
+                        <tr>
+                            <td class="px-4 py-2 text-center text-xs font-bold text-slate-400">B</td>
+                            <td class="px-4 py-2 font-semibold text-slate-800">Телефон 1</td>
+                            <td class="px-4 py-2"><span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">Камида биттаси</span></td>
+                        </tr>
+                        <tr>
+                            <td class="px-4 py-2 text-center text-xs font-bold text-slate-400">C</td>
+                            <td class="px-4 py-2 font-semibold text-slate-800">Туғилган сана</td>
+                            <td class="px-4 py-2"><span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">Камида биттаси</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                Сана форматлари: <span class="font-mono">КК.ОО.ЙЙЙЙ</span>, <span class="font-mono">ЙЙЙЙ-ОО-КК</span>, <span class="font-mono">КК/ОО/ЙЙЙЙ</span>. Агар майдон аллақачон тўлдирилган бўлса — устига ёзилади.
+            </div>
+
+            <div class="mt-4 rounded-[24px] border border-slate-200 bg-white p-5">
+                <h4 class="text-sm font-extrabold uppercase tracking-[0.2em] text-slate-500">Файл юклаш</h4>
+                <input id="phoneImportExcelInput" type="file" accept=".xlsx,.xls"
+                    class="mt-4 block w-full rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-600 file:mr-3 file:rounded-xl file:border-0 file:bg-violet-600 file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:file:bg-violet-700">
+                <div class="mt-5 flex flex-wrap gap-3">
+                    <button id="phoneImportSubmitButton" onclick="submitPhoneImport()"
+                        class="inline-flex items-center gap-2 rounded-2xl bg-violet-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-violet-500/20">
+                        <i class="fas fa-cloud-arrow-up"></i>
+                        Файлни юклаш
+                    </button>
+                    <button onclick="closePhoneImportModal()"
+                        class="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600">
+                        Бекор қилиш
+                    </button>
+                </div>
+                <div id="phoneImportResult" class="mt-5 hidden rounded-[24px] border border-slate-200 bg-slate-50 p-4"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script>
+    let employeesCache = [];
+    let filteredEmployees = [];
+    let departmentsCache = [];
+    let sectionsCache = [];
+    let expandedTreeNodeKeys = new Set();   // «d47» — цех, «s100» — бўлим
+    let treeRootExpanded = true;
+    let currentPage = 1;
+    let pageSize = 20;
+    let totalEmployees = 0;
+    let totalPages = 1;
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function openImageModal(src, alt) {
+        const modal = document.getElementById('imageModal');
+        const img = document.getElementById('imageModalImg');
+        img.src = src;
+        img.alt = alt;
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+
+    function closeImageModal() {
+        const modal = document.getElementById('imageModal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+
+    function getTreeFilterElements() {
+        return {
+            control: document.getElementById('treeFilterControl'),
+            menu: document.getElementById('treeFilterMenu'),
+            search: document.getElementById('treeFilterSearch'),
+            buttonText: document.getElementById('treeFilterButtonText'),
+            buttonChevron: document.getElementById('treeFilterButtonChevron'),
+            tree: document.getElementById('treeFilterTree'),
+        };
+    }
+
+    function toggleTreeFilterDropdown(forceOpen) {
+        const { menu, search, buttonChevron } = getTreeFilterElements();
+        const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : menu.classList.contains('hidden');
+
+        if (shouldOpen) {
+            menu.classList.remove('hidden');
+            buttonChevron.classList.add('rotate-180');
+            selectedTreeAncestorKeys().forEach(key => expandedTreeNodeKeys.add(key));
+            renderTreeFilterOptions();
+            window.setTimeout(() => search.focus(), 0);
+            return;
+        }
+
+        closeTreeFilterDropdown();
+    }
+
+    function closeTreeFilterDropdown() {
+        const { menu, buttonChevron } = getTreeFilterElements();
+        menu.classList.add('hidden');
+        buttonChevron.classList.remove('rotate-180');
+    }
+
+    function resolveDepartmentById(departmentId) {
+        return departmentsCache.find(item => String(item.id) === String(departmentId)) || null;
+    }
+
+    function resolveSectionById(sectionId) {
+        return sectionsCache.find(item => String(item.id) === String(sectionId)) || null;
+    }
+
+    function syncTreeFilterButtonState() {
+        const { buttonText } = getTreeFilterElements();
+        const departmentId = document.getElementById('filterDepartment').value;
+        const sectionId = document.getElementById('filterSection').value;
+        const department = resolveDepartmentById(departmentId);
+        const section = resolveSectionById(sectionId);
+
+        if (section) {
+            buttonText.textContent = `${department?.name || 'Цех'} / ${section.path || section.name}`;
+        } else if (department) {
+            buttonText.textContent = department.name;
+        } else {
+            buttonText.textContent = 'Барча цех ва бўлимлар';
+        }
+
+        // Танлов бор бўлса, қутида HRM даги каби «×» кўринади.
+        const clearButton = document.getElementById('treeFilterClear');
+        const hasSelection = Boolean(departmentId || sectionId);
+        clearButton.classList.toggle('hidden', !hasSelection);
+        clearButton.classList.toggle('flex', hasSelection);
+    }
+
+    // Танланган бўлимгача бўлган цех ва юқори бўлимлар (дарахт очилганда кўриниб туриши учун).
+    function selectedTreeAncestorKeys() {
+        const keys = new Set();
+        const departmentId = document.getElementById('filterDepartment').value;
+        if (departmentId) {
+            keys.add(`d${departmentId}`);
+        }
+        const seen = new Set();
+        let current = resolveSectionById(document.getElementById('filterSection').value);
+        while (current && current.parent_id && !seen.has(current.id)) {
+            seen.add(current.id);
+            keys.add(`s${current.parent_id}`);
+            current = resolveSectionById(current.parent_id);
+        }
+        return keys;
+    }
+
+    function toggleTreeNode(key) {
+        if (key === 'root') {
+            treeRootExpanded = !treeRootExpanded;
+        } else if (expandedTreeNodeKeys.has(key)) {
+            expandedTreeNodeKeys.delete(key);
+        } else {
+            expandedTreeNodeKeys.add(key);
+        }
+        renderTreeFilterOptions();
+    }
+
+    function applyTreeFilterSelection(departmentId = '', sectionId = '') {
+        const filterDepartment = document.getElementById('filterDepartment');
+        const filterSection = document.getElementById('filterSection');
+        const normalizedDepartmentId = String(departmentId || '');
+        const normalizedSectionId = String(sectionId || '');
+
+        filterDepartment.value = normalizedDepartmentId;
+        populateSectionFilterOptions(normalizedDepartmentId);
+        filterSection.value = normalizedSectionId;
+        syncTreeFilterButtonState();
+        renderTreeFilterOptions();
+        closeTreeFilterDropdown();
+        loadEmployees(1);
+    }
+
+    function clearTreeFilterSelection() {
+        const filterDepartment = document.getElementById('filterDepartment');
+        const filterSection = document.getElementById('filterSection');
+        const { search } = getTreeFilterElements();
+
+        filterDepartment.value = '';
+        populateSectionFilterOptions('');
+        filterSection.value = '';
+        search.value = '';
+        syncTreeFilterButtonState();
+        renderTreeFilterOptions();
+        closeTreeFilterDropdown();
+        loadEmployees(1);
+    }
+
+    // «ID» бўйича тартиб: аввал рақамли ID лар (1, 2, 10), кейин матнлилар, охирида ID сизлар (сервердаги қоида билан бир хил).
+    function compareSectionsById(a, b) {
+        const rank = (section) => /^[0-9]{1,15}$/.test(section.code || '') ? 0 : (section.code ? 1 : 2);
+        return rank(a) - rank(b)
+            || (rank(a) === 0 ? Number(a.code) - Number(b.code) : 0)
+            || String(a.code || '').localeCompare(String(b.code || ''))
+            || String(a.name || '').localeCompare(String(b.name || ''));
+    }
+
+    // Цех → бўлим → ички бўлим (ота-бўлим ichida).
+    function buildTreeFilterData() {
+        const childrenOf = new Map();
+        sectionsCache.forEach(section => {
+            const departmentId = String(section.department?.id || section.department_id || '');
+            const key = `${departmentId}:${section.parent_id || ''}`;
+            if (!childrenOf.has(key)) {
+                childrenOf.set(key, []);
+            }
+            childrenOf.get(key).push(section);
+        });
+        childrenOf.forEach(list => list.sort(compareSectionsById));
+
+        const sectionNode = (section, departmentId) => ({
+            key: `s${section.id}`,
+            departmentId,
+            sectionId: String(section.id),
+            name: section.name,
+            children: (childrenOf.get(`${departmentId}:${section.id}`) || []).map(child => sectionNode(child, departmentId)),
+        });
+
+        return departmentsCache.map(department => {
+            const departmentId = String(department.id);
+            return {
+                key: `d${departmentId}`,
+                departmentId,
+                sectionId: '',
+                name: department.name,
+                children: (childrenOf.get(`${departmentId}:`) || []).map(section => sectionNode(section, departmentId)),
+            };
+        });
+    }
+
+    // HRM даги каби дарахт: учбурчак билан очилади/ёпилади, танланган сатр яшил, чуқурлик бўйича сурилади.
+    function renderTreeFilterOptions() {
+        const { tree, search } = getTreeFilterElements();
+        const selectedDepartmentId = document.getElementById('filterDepartment').value;
+        const selectedSectionId = document.getElementById('filterSection').value;
+        const searchValue = String(search?.value || '').trim().toLowerCase();
+
+        // Қидирувда тугун ўзи ёки авлодларидан бири мос келса кўринади; мос келган тугуннинг барча авлодлари кўрсатилади.
+        const prune = (node, ancestorMatched) => {
+            const matched = ancestorMatched || String(node.name || '').toLowerCase().includes(searchValue);
+            const children = node.children.map(child => prune(child, matched)).filter(Boolean);
+            return !searchValue || matched || children.length ? { ...node, children } : null;
+        };
+
+        let nodes = buildTreeFilterData();
+        if (searchValue) {
+            nodes = nodes.map(node => prune(node, false)).filter(Boolean);
+            if (!nodes.length) {
+                tree.innerHTML = '<div class="rounded-md border border-dashed border-slate-200 px-3 py-4 text-center text-xs font-semibold text-slate-500">Ҳеч нарса топилмади.</div>';
+                return;
+            }
+        }
+
+        const caret = (expanded, key) => `<button type="button" onclick="toggleTreeNode('${key}')" class="flex h-7 w-6 shrink-0 items-center justify-center text-slate-500 hover:text-slate-900" aria-label="${expanded ? 'Ёпиш' : 'Очиш'}"><i class="fas ${expanded ? 'fa-caret-down' : 'fa-caret-right'}"></i></button>`;
+        const spacer = '<span class="inline-block h-7 w-6 shrink-0"></span>';
+        const rowHtml = (depth, selected, toggle, department, section, label) => `
+            <div class="tree-filter-row flex items-center rounded-md ${selected ? 'bg-emerald-50 font-semibold text-emerald-800' : 'text-slate-700 hover:bg-slate-100'}" style="padding-left: ${depth * 24 + 6}px">
+                ${toggle}
+                <button type="button" onclick="applyTreeFilterSelection('${department}', '${section}')" class="min-w-0 flex-1 truncate py-1.5 pr-3 text-left text-sm">${escapeHtml(label)}</button>
+            </div>`;
+
+        const renderNode = (node, depth) => {
+            const hasChildren = node.children.length > 0;
+            const expanded = Boolean(searchValue) || expandedTreeNodeKeys.has(node.key);
+            const selected = node.sectionId
+                ? selectedSectionId === node.sectionId
+                : selectedDepartmentId === node.departmentId && !selectedSectionId;
+            return rowHtml(depth, selected, hasChildren ? caret(expanded, node.key) : spacer, node.departmentId, node.sectionId, node.name)
+                + (hasChildren && expanded ? node.children.map(child => renderNode(child, depth + 1)).join('') : '');
+        };
+
+        const rootExpanded = Boolean(searchValue) || treeRootExpanded;
+        const rootSelected = !selectedDepartmentId && !selectedSectionId;
+        tree.innerHTML = rowHtml(0, rootSelected, caret(rootExpanded, 'root'), '', '', 'Барча цех ва бўлимлар')
+            + (rootExpanded ? nodes.map(node => renderNode(node, 1)).join('') : '');
+    }
+
+    function openImportModal() {
+        const modal = document.getElementById('importModal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        hideImportResult();
+    }
+
+    function closeImportModal() {
+        const modal = document.getElementById('importModal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        hideImportResult();
+    }
+
+    function hideImportResult() {
+        const container = document.getElementById('importResult');
+        container.classList.add('hidden');
+        container.innerHTML = '';
+    }
+
+    function getImportErrorMessage(item) {
+        if (item?.message) {
+            return item.message;
+        }
+
+        if (item?.errors && typeof item.errors === 'object') {
+            const firstFieldErrors = Object.values(item.errors).find(value => Array.isArray(value) && value.length);
+            if (firstFieldErrors) {
+                return firstFieldErrors[0];
+            }
+        }
+
+        return item?.tabel_number || 'Текширув хатоси';
+    }
+
+    function renderImportResult(payload, type = 'success') {
+        const container = document.getElementById('importResult');
+        const errors = Array.isArray(payload?.errors) ? payload.errors : [];
+        const employees = Array.isArray(payload?.employees) ? payload.employees : [];
+        const rows = errors.slice(0, 8).map(item => {
+            const fields = Array.isArray(item?.fields) && item.fields.length
+                ? `<div class="mt-2 text-xs font-semibold text-red-600">Майдонлар: ${escapeHtml(item.fields.join(', '))}</div>`
+                : '';
+            const rowsInfo = Array.isArray(item?.rows) && item.rows.length
+                ? `<div class="mt-2 text-xs font-semibold text-red-600">Қаторлар: ${escapeHtml(item.rows.join(', '))}</div>`
+                : '';
+            return `
+                <div class="rounded-2xl border border-slate-200 bg-white p-3">
+                    <div class="text-sm font-bold text-slate-900">Қатор ${escapeHtml(item.row || '—')}</div>
+                    <div class="mt-1 text-sm text-slate-600">${escapeHtml(getImportErrorMessage(item))}</div>
+                    ${fields}
+                    ${rowsInfo}
+                </div>
+            `;
+        }).join('');
+
+        const palette = type === 'success'
+            ? 'border-emerald-200 bg-emerald-50'
+            : 'border-red-200 bg-red-50';
+
+        const generatedCredentials = type === 'success' && employees.length
+            ? `
+                <div class="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                    <div class="border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Яратилган рухсатлар</div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full text-sm">
+                            <thead class="bg-white text-left text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                                <tr>
+                                    <th class="px-4 py-3">Табель</th>
+                                    <th class="px-4 py-3">Ходим</th>
+                                    <th class="px-4 py-3">Логин</th>
+                                    <th class="px-4 py-3">Парол</th>
+                                    <th class="px-4 py-3">Рол</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 bg-white">
+                                ${employees.map(item => `
+                                    <tr>
+                                        <td class="px-4 py-3 font-semibold text-slate-700">${escapeHtml(item.tabel_number || '—')}</td>
+                                        <td class="px-4 py-3 text-slate-600">${escapeHtml(item.full_name || '—')}</td>
+                                        <td class="px-4 py-3 font-mono text-slate-900">${escapeHtml(item.login || '—')}</td>
+                                        <td class="px-4 py-3 font-mono text-slate-900">${escapeHtml(item.generated_password || '—')}</td>
+                                        <td class="px-4 py-3 text-slate-600">${escapeHtml(item.role || 'user')}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `
+            : '';
+
+        container.className = `mt-5 rounded-[24px] border p-4 ${palette}`;
+        container.innerHTML = `
+            <div class="flex items-start gap-3">
+                <div class="mt-0.5 text-lg ${type === 'success' ? 'text-emerald-600' : 'text-red-600'}">
+                    <i class="fas ${type === 'success' ? 'fa-circle-check' : 'fa-circle-exclamation'}"></i>
+                </div>
+                <div class="min-w-0 flex-1">
+                    <div class="text-sm font-bold text-slate-900">${escapeHtml(payload?.message || '')}</div>
+                    ${payload?.created_count ? `<div class="mt-1 text-sm text-slate-600">Қўшилган ходимлар: ${escapeHtml(payload.created_count)}</div>` : ''}
+                    ${payload?.imported_with_images ? `<div class="mt-1 text-sm text-slate-600">Бириктирилган фотосуратлар: ${escapeHtml(payload.imported_with_images)}</div>` : ''}
+                    ${generatedCredentials}
+                    ${errors.length ? `<div class="mt-4 grid gap-3">${rows}</div>` : ''}
+                    ${errors.length > 8 ? `<div class="mt-3 text-xs font-semibold text-slate-500">Дастлабки 8 та хато кўрсатилган, жами: ${escapeHtml(errors.length)}.</div>` : ''}
+                </div>
+            </div>
+        `;
+        container.classList.remove('hidden');
+    }
+
+    function showImportErrorToasts(payload) {
+        const errors = Array.isArray(payload?.errors) ? payload.errors : [];
+        const messages = [];
+
+        if (payload?.message) {
+            messages.push(payload.message);
+        }
+
+        errors.slice(0, 3).forEach(item => {
+            const rowLabel = item?.row ? `Қатор ${item.row}: ` : '';
+            messages.push(`${rowLabel}${getImportErrorMessage(item)}`);
+        });
+
+        if (!messages.length) {
+            messages.push('Импорт бажарилмади. Маълумотларни текшириб, қайта уриниб кўринг.');
+        }
+
+        messages.forEach((message, index) => {
+            window.setTimeout(() => showToast(message, 'error'), index * 3400);
+        });
+    }
+
+    async function submitExcelImport() {
+        const input = document.getElementById('importExcelInput');
+        const imageInput = document.getElementById('importEmployeeImagesInput');
+        const button = document.getElementById('importExcelSubmitButton');
+        const file = input.files?.[0];
+
+        if (!file) {
+            showToast('Импорт учун Excel файлни танланг.', 'info');
+            return;
+        }
+
+        try {
+            setLoading(button, true, 'Импорт қилинмоқда...');
+            const rows = await readExcelFile(file);
+            if (!rows.length) {
+                throw new Error('Файл бўш. Камида битта қаторни тўлдиринг.');
+            }
+
+            const formData = new FormData();
+            formData.append('file_name', file.name);
+            formData.append('rows', JSON.stringify(rows));
+            Array.from(imageInput?.files || []).forEach(imageFile => {
+                formData.append('images', imageFile);
+            });
+
+            const payload = await apiRequest('/template/employees/import-excel/', {
+                method: 'POST',
+                body: formData,
+            });
+
+            renderImportResult(payload, 'success');
+            showToast(payload.message || 'Импорт якунланди');
+            input.value = '';
+            if (imageInput) {
+                imageInput.value = '';
+            }
+            await Promise.all([loadStats(), loadDirectoryData(), loadEmployees(1)]);
+        } catch (error) {
+            const responsePayload = error.responseData || { message: error.message };
+            hideImportResult();
+            showImportErrorToasts(responsePayload);
+        } finally {
+            setLoading(button, false);
+        }
+    }
+
+    function readExcelFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onerror = () => reject(new Error('Excel файлни ўқиб бўлмади.'));
+            reader.onload = event => {
+                try {
+                    const workbook = XLSX.read(event.target.result, { type: 'array', cellDates: true });
+                    const firstSheetName = workbook.SheetNames[0];
+                    if (!firstSheetName) {
+                        reject(new Error('Файлда мавжуд варақлар йўқ.'));
+                        return;
+                    }
+
+                    const sheet = workbook.Sheets[firstSheetName];
+                    const rows = XLSX.utils.sheet_to_json(sheet, {
+                        defval: '',
+                        raw: false,
+                        dateNF: 'yyyy-mm-dd',
+                        blankrows: false,
+                    });
+                    resolve(rows);
+                } catch (readError) {
+                    reject(new Error('Excel файлни қайта ишлаб бўлмади. Жадвал тузилмасини текширинг.'));
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    function openPhoneImportModal() {
+        document.getElementById('phoneImportModal').classList.remove('hidden');
+        document.getElementById('phoneImportModal').classList.add('flex');
+        document.getElementById('phoneImportResult').classList.add('hidden');
+        document.getElementById('phoneImportResult').innerHTML = '';
+    }
+
+    function closePhoneImportModal() {
+        document.getElementById('phoneImportModal').classList.add('hidden');
+        document.getElementById('phoneImportModal').classList.remove('flex');
+        document.getElementById('phoneImportResult').classList.add('hidden');
+        document.getElementById('phoneImportResult').innerHTML = '';
+        document.getElementById('phoneImportExcelInput').value = '';
+    }
+
+    function readPhoneExcelFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onerror = () => reject(new Error('Excel файлни ўқиб бўлмади.'));
+            reader.onload = event => {
+                try {
+                    const workbook = XLSX.read(event.target.result, { type: 'array', cellDates: true });
+                    const firstSheetName = workbook.SheetNames[0];
+                    if (!firstSheetName) {
+                        reject(new Error('Файлда мавжуд варақлар йўқ.'));
+                        return;
+                    }
+                    const sheet = workbook.Sheets[firstSheetName];
+                    const allRows = XLSX.utils.sheet_to_json(sheet, {
+                        header: 1,
+                        defval: '',
+                        raw: false,
+                        dateNF: 'yyyy-mm-dd',
+                        blankrows: false,
+                    });
+
+                    let headerIdx = -1;
+                    for (let i = 0; i < allRows.length; i++) {
+                        if (allRows[i].some(c => String(c || '').trim())) {
+                            headerIdx = i;
+                            break;
+                        }
+                    }
+                    if (headerIdx === -1) {
+                        reject(new Error('Файл бўш.'));
+                        return;
+                    }
+
+                    const dataRows = allRows.slice(headerIdx + 1)
+                        .filter(row => row.some(c => String(c || '').trim()));
+
+                    function detectColByPattern(rows, testFn, minMatch) {
+                        const counts = {};
+                        rows.slice(0, 20).forEach(row => {
+                            row.forEach((val, i) => {
+                                if (testFn(String(val || '').trim())) {
+                                    counts[i] = (counts[i] || 0) + 1;
+                                }
+                            });
+                        });
+                        let best = -1, bestCount = 0;
+                        Object.keys(counts).forEach(i => {
+                            if (counts[i] > bestCount) { bestCount = counts[i]; best = parseInt(i); }
+                        });
+                        return bestCount >= minMatch ? best : -1;
+                    }
+
+                    const isTabel = v => /^\d{2,8}(\.\d+)?$/.test(v);
+                    const isPhone = v => v.startsWith('+') || v.replace(/\D/g, '').length >= 7;
+                    const isDate  = v => /\d{1,4}[.\-\/]\d{1,2}[.\-\/]\d{2,4}/.test(v);
+
+                    const minRows = Math.max(1, Math.min(5, dataRows.length));
+                    const tabelIdx = detectColByPattern(dataRows, isTabel, minRows);
+                    const phoneIdx = detectColByPattern(dataRows, isPhone, minRows);
+                    const dobIdx   = detectColByPattern(dataRows, isDate,  minRows);
+
+                    console.log('Phone import detected cols:', { tabelIdx, phoneIdx, dobIdx });
+
+                    const rows = dataRows.map(row => ({
+                        tabel_number:   tabelIdx >= 0 ? String(row[tabelIdx] || '').trim() : '',
+                        phone_number_1: phoneIdx >= 0 ? String(row[phoneIdx] || '').trim() : '',
+                        date_of_birth:  dobIdx   >= 0 ? String(row[dobIdx]   || '').trim() : '',
+                    }));
+
+                    resolve(rows);
+                } catch (e) {
+                    reject(new Error('Excel файлни қайта ишлаб бўлмади.'));
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    async function submitPhoneImport() {
+        const input = document.getElementById('phoneImportExcelInput');
+        const button = document.getElementById('phoneImportSubmitButton');
+        const file = input.files?.[0];
+
+        if (!file) {
+            showToast('Импорт учун Excel файлни танланг.', 'info');
+            return;
+        }
+
+        try {
+            setLoading(button, true, 'Импорт қилинмоқда...');
+
+            const formData = new FormData();
+            formData.append('excel_file', file);
+
+            const payload = await apiRequest('/template/employees/import-phones/', {
+                method: 'POST',
+                body: formData,
+            });
+
+            renderPhoneImportResult(payload, 'success');
+            showToast(payload.message || 'Импорт якунланди');
+            input.value = '';
+        } catch (error) {
+            const responsePayload = error.responseData || { message: error.message };
+            renderPhoneImportResult(responsePayload, 'error');
+        } finally {
+            setLoading(button, false);
+        }
+    }
+
+    function renderPhoneImportResult(payload, type) {
+        const container = document.getElementById('phoneImportResult');
+        const errors = Array.isArray(payload?.errors) ? payload.errors : [];
+        const palette = type === 'success' ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50';
+        const icon = type === 'success' ? 'fa-circle-check text-emerald-600' : 'fa-circle-exclamation text-red-600';
+
+        const errorRows = errors.slice(0, 8).map(item => `
+            <div class="rounded-2xl border border-slate-200 bg-white p-3">
+                <div class="text-sm font-bold text-slate-900">Қатор ${escapeHtml(item.row || '—')}${item.tabel_number ? ' · ' + escapeHtml(item.tabel_number) : ''}</div>
+                <div class="mt-1 text-sm text-slate-600">${escapeHtml(item.message || 'Хато')}</div>
+            </div>
+        `).join('');
+
+        const notFound = Array.isArray(payload?.not_found) && payload.not_found.length
+            ? `<div class="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3">
+                <div class="text-sm font-bold text-amber-800">Топилмаган ходимлар: ${escapeHtml(payload.not_found_count || payload.not_found.length)}</div>
+                <div class="mt-1 text-sm text-amber-700">${payload.not_found.slice(0,10).map(item => escapeHtml(item.tabel_number)).join(', ')}${payload.not_found.length > 10 ? '...' : ''}</div>
+               </div>`
+            : '';
+
+        container.className = `mt-5 rounded-[24px] border p-4 ${palette}`;
+        container.innerHTML = `
+            <div class="flex items-start gap-3">
+                <div class="mt-0.5 text-lg"><i class="fas ${icon}"></i></div>
+                <div class="min-w-0 flex-1">
+                    <div class="text-sm font-bold text-slate-900">${escapeHtml(payload?.message || '')}</div>
+                    ${payload?.updated_count ? `<div class="mt-1 text-sm text-slate-600">Янгиланган: ${escapeHtml(payload.updated_count)}</div>` : ''}
+                    ${notFound}
+                    ${errorRows ? `<div class="mt-4 grid gap-3">${errorRows}</div>` : ''}
+                    ${errors.length > 8 ? `<div class="mt-3 text-xs font-semibold text-slate-500">Дастлабки 8 та хато кўрсатилган, жами: ${escapeHtml(errors.length)}.</div>` : ''}
+                </div>
+            </div>
+        `;
+        container.classList.remove('hidden');
+    }
+
+    document.addEventListener('click', function (event) {
+        const { control } = getTreeFilterElements();
+        // Дарахт қайта чизилганда босилган тугма DOM дан чиқиб кетади — бундай босишни ташқарига босиш деб ҳисобламаймиз.
+        if (control && event.target.isConnected && !control.contains(event.target)) {
+            closeTreeFilterDropdown();
+        }
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            closeImageModal();
+            closeImportModal();
+            closePhoneImportModal();
+            closeTreeFilterDropdown();
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', async function () {
+        bindFilters();
+        await Promise.all([loadStaffTotals(), loadDirectoryData()]);
+        await loadEmployees();
+    });
+
+    function bindFilters() {
+        document.getElementById('pageSizeSelect').addEventListener('change', function () {
+            pageSize = Number(this.value) || 20;
+            currentPage = 1;
+            loadEmployees(1);
+        });
+
+        // Қидирув матни ёзилиши билан жадвал фильтрланади (кичик тўхташдан кейин); Enter — дарҳол.
+        const searchInput = document.getElementById('globalSearchInput');
+        searchInput.addEventListener('input', scheduleServerFilterReload);
+        searchInput.addEventListener('keypress', function (event) {
+            if (event.key === 'Enter') {
+                window.clearTimeout(dashboardReloadTimer);
+                applyServerFilters();
+            }
+        });
+
+        document.getElementById('filterDepartment').addEventListener('change', function () {
+            const departmentId = this.value;
+            const currentSectionId = document.getElementById('filterSection').value;
+            populateSectionFilterOptions(departmentId);
+            const selectedSection = resolveSectionById(currentSectionId);
+            const sectionBelongsToDepartment = selectedSection && String(selectedSection.department?.id || selectedSection.department_id || '') === String(departmentId || '');
+            if (currentSectionId && !sectionBelongsToDepartment) {
+                document.getElementById('filterSection').value = '';
+            }
+            syncTreeFilterButtonState();
+            renderTreeFilterOptions();
+            scheduleServerFilterReload();
+        });
+
+        document.getElementById('filterSection').addEventListener('change', function () {
+            const section = resolveSectionById(this.value);
+            const filterDepartment = document.getElementById('filterDepartment');
+            if (section) {
+                filterDepartment.value = String(section.department?.id || section.department_id || '');
+                populateSectionFilterOptions(filterDepartment.value);
+                this.value = String(section.id);
+            }
+            syncTreeFilterButtonState();
+            renderTreeFilterOptions();
+            scheduleServerFilterReload();
+        });
+    }
+
+    let dashboardReloadTimer = null;
+
+    function scheduleServerFilterReload() {
+        window.clearTimeout(dashboardReloadTimer);
+        dashboardReloadTimer = window.setTimeout(() => loadEmployees(1), 250);
+    }
+
+    // HRM даги каби қатор: «Штатлар сони : X   Ходимлар : N   Бўш иш ўринлари : Y».
+    // Штат ва бўш иш ўринлари «Штат бирлиги ва лавозим» саҳифасидаги маълумотдан олинади ва танланган цех/бўлимга
+    // (унинг ички бўлимлари билан) мос келади; танлов йўқ бўлса — барчаси бўйича. «Ходимлар» — жадвалда топилган ходимлар сони.
+    let staffTree = null;          // null — штат маълумоти йўқ (рухсат йўқ ёки олиб бўлмади): фақат «Ходимлар» кўрсатилади
+    let employeesLoaded = false;
+
+    async function loadStaffTotals() {
+        try {
+            // apiRequest хато бўлса огоҳлантириш чиқаради; бу ерда штат маълумоти шарт эмас, шунинг учун жимгина олинади.
+            const response = await fetch(`${API_BASE}/template/staff/tree/`, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
+            const payload = response.ok ? await response.json() : null;
+            staffTree = Array.isArray(payload?.data) ? payload.data : null;
+        } catch (error) {
+            staffTree = null;
+        }
+        renderStatsLine();
+    }
+
+    function findStaffNode(nodes, type, id) {
+        for (const node of nodes) {
+            if (node.type === type && String(node.id) === String(id)) {
+                return node;
+            }
+            const found = findStaffNode(node.children || [], type, id);
+            if (found) {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    function staffTotalsForSelection() {
+        if (!staffTree) {
+            return null;
+        }
+        const departmentId = document.getElementById('filterDepartment').value;
+        const sectionId = document.getElementById('filterSection').value;
+        if (sectionId || departmentId) {
+            const node = sectionId ? findStaffNode(staffTree, 'section', sectionId) : findStaffNode(staffTree, 'department', departmentId);
+            return { staff: node?.staff_total || 0, vacant: node?.vacant_total || 0 };
+        }
+        return staffTree.reduce((sum, node) => ({ staff: sum.staff + node.staff_total, vacant: sum.vacant + node.vacant_total }), { staff: 0, vacant: 0 });
+    }
+
+    function renderStatsLine() {
+        if (!employeesLoaded) {
+            return;
+        }
+        const staff = staffTotalsForSelection();
+        const items = [
+            ...(staff ? [{ label: 'Штатлар сони', value: staff.staff }] : []),
+            { label: 'Ходимлар', value: totalEmployees },
+            ...(staff ? [{ label: 'Бўш иш ўринлари', value: staff.vacant }] : []),
+        ];
+        document.getElementById('statsContainer').innerHTML = items.map(item => `
+            <p class="font-medium">${item.label} : <span class="font-bold">${item.value}</span></p>
+        `).join('');
+    }
+
+    async function loadDirectoryData() {
+        const [departments, sections] = await Promise.all([
+            apiRequest('/departments/'),
+            apiRequest('/sections/'),
+        ]);
+
+        departmentsCache = Array.isArray(departments) ? departments : [];
+        sectionsCache = Array.isArray(sections) ? sections : [];
+        expandedTreeNodeKeys = new Set();
+
+        populateDepartmentOptions();
+        populateSectionFilterOptions();
+        syncTreeFilterButtonState();
+        renderTreeFilterOptions();
+    }
+
+    function populateDepartmentOptions() {
+        const filterDepartment = document.getElementById('filterDepartment');
+
+        filterDepartment.innerHTML = '<option value="">Барча цехлар</option>';
+
+        departmentsCache.forEach(department => {
+            filterDepartment.innerHTML += `<option value="${department.id}">${department.name}</option>`;
+        });
+    }
+
+    function populateSectionFilterOptions(selectedDepartmentId = '') {
+        const filterSection = document.getElementById('filterSection');
+        filterSection.innerHTML = '<option value="">Барча бўлимлар</option>';
+
+        sectionsCache.filter(section => {
+            if (!selectedDepartmentId) {
+                return true;
+            }
+            return String(section.department?.id || section.department_id || '') === String(selectedDepartmentId);
+        }).forEach(section => {
+            filterSection.innerHTML += `<option value="${section.id}">${section.path || section.name}</option>`;
+        });
+    }
+
+    let employeesRequestSeq = 0;
+
+    async function loadEmployees(page = 1) {
+        const loading = document.getElementById('loading');
+        const emptyState = document.getElementById('emptyState');
+        const tableBody = document.getElementById('employeesTableBody');
+        // Қидирув ёзилганда сўровлар кетма-кет юборилади: фақат энг охиргисининг жавоби кўрсатилади.
+        const requestId = ++employeesRequestSeq;
+        const isLatest = () => requestId === employeesRequestSeq;
+
+        emptyState.classList.add('hidden');
+        // Жадвал бўш бўлмаса, эски қаторлар янги натижа келгунча туради (ҳар ҳарфда милтиллаб қолмаслиги учун).
+        if (tableBody.children.length) {
+            tableBody.classList.add('opacity-60', 'transition-opacity');
+        } else {
+            loading.classList.remove('hidden');
+        }
+
+        try {
+            const search = document.getElementById('globalSearchInput').value.trim();
+            const params = new URLSearchParams();
+            params.set('page', String(page));
+            params.set('page_size', String(pageSize));
+            if (search) {
+                params.set('search', search);
+            }
+            const departmentId = document.getElementById('filterDepartment').value;
+            const sectionId = document.getElementById('filterSection').value;
+
+            if (departmentId) params.set('department_id', departmentId);
+            if (sectionId) params.set('section_id', sectionId);
+
+            const payload = await apiRequest(`/template/employees/?${params.toString()}`);
+            if (!isLatest()) {
+                return;
+            }
+            employeesCache = Array.isArray(payload?.data) ? payload.data : [];
+            filteredEmployees = employeesCache;
+            totalEmployees = Number(payload?.count || 0);
+            totalPages = Math.max(1, Math.ceil(totalEmployees / pageSize));
+            currentPage = Math.min(Math.max(1, page), totalPages);
+            renderEmployees();
+        } catch (error) {
+            if (!isLatest()) {
+                return;
+            }
+            employeesCache = [];
+            filteredEmployees = [];
+            totalEmployees = 0;
+            totalPages = 1;
+            renderEmployees();
+            emptyState.classList.remove('hidden');
+        } finally {
+            if (isLatest()) {
+                loading.classList.add('hidden');
+                tableBody.classList.remove('opacity-60', 'transition-opacity');
+            }
+        }
+    }
+
+    function applyServerFilters() {
+        loadEmployees(1);
+    }
+
+    function renderEmployees() {
+        const tableBody = document.getElementById('employeesTableBody');
+        const emptyState = document.getElementById('emptyState');
+
+        employeesLoaded = true;
+        renderStatsLine();
+
+        if (!filteredEmployees.length) {
+            tableBody.innerHTML = '';
+            emptyState.classList.remove('hidden');
+            renderPagination();
+            return;
+        }
+
+        emptyState.classList.add('hidden');
+
+        const startIndex = (currentPage - 1) * pageSize;
+        const pageItems = filteredEmployees;
+
+        // Сервер отдаёт сотрудников в порядке «Штат бирлиги ва лавозим»: цех → отделы (вложенные сразу после родителя).
+        // Когда цех или отдел меняется, перед сотрудниками показываем полосу с его названием (как в HRM).
+        const COLUMN_COUNT = 6;
+        const ACTION_BUTTON = 'inline-flex h-9 w-9 items-center justify-center rounded-md border bg-white transition';
+        const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+        // «20-Цех Завод бошқармаси» учун цех сарлавҳаси чиқарилмайди: унинг бўлимлари ўзлари сарлавҳа бўлиб туради.
+        // Қоида staff.py даги PINNED_DEPARTMENTS билан бир хил: номи «20» дан бошланади («200-…» эмас).
+        const NO_BANNER_DEPARTMENT = /^\s*20(?!\d)/;
+        // Цех ва бўлим/ички бўлим сарлавҳалари бир хил: ўртада, оқ ёзув, кўк фон.
+        const BANNER_CELL = 'bg-[#0a9de3] px-4 text-center font-medium text-white';
+        const departmentBanner = (name) => `
+            <tr class="staff-group-row staff-group-department">
+                <td colspan="${COLUMN_COUNT}" class="${BANNER_CELL} py-4 text-lg">${escapeHtml(name)}</td>
+            </tr>`;
+        const sectionBanner = (section) => {
+            // ички бўлим: тўлиқ йўл («Бўлим / Ички бўлим»), шунда қайси бўлимга тегишли эканини кўриб туради
+            const label = Number(section.depth || 0) > 0 ? (section.path || section.name) : section.name;
+            return `
+            <tr class="staff-group-row staff-group-section">
+                <td colspan="${COLUMN_COUNT}" class="${BANNER_CELL} border-t border-white/40 py-3 text-base" title="${escapeHtml(section.path || section.name)}">${escapeHtml(label)}</td>
+            </tr>`;
+        };
+
+        let previousDepartment = null;   // null — ещё ничего не выводили (первая строка страницы всегда с полосой)
+        let previousSection = null;
+        tableBody.innerHTML = pageItems.map((employee, index) => {
+            // Ходим номи: Фамилия, Исм, Отасининг исми (шу тартибда).
+            const fullName = [employee.last_name, employee.first_name, employee.surname].filter(Boolean).join(' ').trim() || '—';
+            const photo = employee.base_image_url || employee.base_image
+                ? `<img src="${employee.base_image_url || employee.base_image}" alt="${fullName}" class="h-20 w-16 shrink-0 rounded-md object-cover shadow-sm cursor-pointer" onclick="openImageModal('${employee.base_image_url || employee.base_image}', '${fullName.replace(/'/g, "\\'")}')">`
+                : `<div class="flex h-20 w-16 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-400"><i class="fas fa-user text-xl"></i></div>`;
+
+            let banners = '';
+            const departmentKey = String(employee.department?.id ?? '');
+            const sectionKey = String(employee.section?.id ?? '');
+            if (departmentKey !== previousDepartment) {
+                const departmentName = employee.department?.name || 'Цех кўрсатилмаган';
+                if (!NO_BANNER_DEPARTMENT.test(departmentName)) {
+                    banners += departmentBanner(departmentName);
+                }
+                previousDepartment = departmentKey;
+                previousSection = null;
+            }
+            if (sectionKey && sectionKey !== previousSection) {
+                banners += sectionBanner(employee.section);
+            }
+            previousSection = sectionKey || null;
+
+            return `${banners}
+            <tr class="staff-employee-row fade-in border-t border-slate-100 text-sm text-slate-700 ${index % 2 === 0 ? 'bg-[#f2f9fe]' : 'bg-white'} hover:bg-sky-50">
+                <td class="px-4 py-4 font-semibold text-slate-500">${startIndex + index + 1}</td>
+                <td class="px-4 py-4">
+                    <div class="flex items-center gap-4">
+                        ${photo}
+                        <div class="font-semibold text-slate-900">${fullName}</div>
+                    </div>
+                </td>
+                <td class="w-[240px] px-4 py-4 text-slate-700">${employee.department?.name || '—'}</td>
+                <td class="w-[240px] px-4 py-4 text-slate-700">${employee.section?.name || '—'}</td>
+                <td class="px-4 py-4 text-slate-700">${employee.position || '—'}</td>
+                <td class="px-4 py-4">
+                    <div class="flex items-center justify-center gap-2">
+                        <a class="${ACTION_BUTTON} border-[var(--success)] text-[var(--success)] hover:bg-emerald-50" href="/employees/${employee.slug}/" title="Кўриш"><i class="fas fa-eye"></i></a>
+                        <a class="${ACTION_BUTTON} border-[var(--success)] text-[var(--success)] hover:bg-emerald-50" href="/employees/${employee.slug}/edit/" title="Таҳрирлаш"><i class="fas fa-pen"></i></a>
+                        <a class="${ACTION_BUTTON} border-red-300 text-red-500 hover:bg-red-50" href="/employees/${employee.slug}/delete/" title="Ўчириш"><i class="fas fa-trash"></i></a>
+                    </div>
+                </td>
+            </tr>
+        `;
+        }).join('');
+
+        renderPagination();
+    }
+
+    // 1 … 4 5 [6] 7 8 … 149 — как в HRM: первая, последняя и окно вокруг текущей страницы.
+    function paginationItems() {
+        const pages = [...new Set([1, totalPages, ...[-2, -1, 0, 1, 2].map(shift => currentPage + shift)])]
+            .filter(page => page >= 1 && page <= totalPages)
+            .sort((a, b) => a - b);
+        const items = [];
+        pages.forEach((page, position) => {
+            const gap = position ? page - pages[position - 1] : 1;
+            if (gap === 2) items.push(page - 1);
+            if (gap > 2) items.push('…');
+            items.push(page);
+        });
+        return items;
+    }
+
+    function paginationButtons() {
+        const arrow = (target, icon, disabled) => `<button onclick="goToPage(${target})" class="flex h-9 w-14 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-40" ${disabled ? 'disabled' : ''}><i class="fas ${icon} text-xs"></i></button>`;
+        const numbers = paginationItems().map(item => item === '…'
+            ? '<span class="px-1 text-sm font-semibold text-slate-400">…</span>'
+            : `<button onclick="goToPage(${item})" class="flex h-9 w-9 items-center justify-center rounded-full border text-sm font-semibold transition ${item === currentPage ? 'border-[var(--success)] bg-[var(--success)] text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-emerald-300'}">${item}</button>`).join('');
+        return `${numbers}${arrow(Math.max(1, currentPage - 1), 'fa-angle-left', currentPage === 1)}${arrow(Math.min(totalPages, currentPage + 1), 'fa-angle-right', currentPage === totalPages)}`;
+    }
+
+    function renderPagination() {
+        if (currentPage > totalPages) {
+            currentPage = totalPages;
+        }
+
+        const start = totalEmployees ? ((currentPage - 1) * pageSize) + 1 : 0;
+        const end = filteredEmployees.length ? start + filteredEmployees.length - 1 : 0;
+        const buttons = totalPages > 1 ? paginationButtons() : '';
+
+        document.getElementById('paginationTop').innerHTML = buttons;
+        document.getElementById('pagination').innerHTML = `
+        <p class="text-sm font-semibold text-slate-500">Кўрсатилган: ${start}–${end} / ${totalEmployees}</p>
+        <div class="flex flex-wrap items-center justify-end gap-2">${buttons}</div>
+    `;
+    }
+
+    function goToPage(page) {
+        loadEmployees(page);
+    }
+
+    function exportEmployees() {
+        const rows = filteredEmployees.length ? filteredEmployees : employeesCache;
+        if (!rows.length) {
+            showToast('Экспорт учун ходимлар йўқ', 'info');
+            return;
+        }
+
+        const data = rows.map((employee, i) => ({
+            '№': i + 1,
+            'Табель рақами': employee.tabel_number || '',
+            'Исм': employee.first_name || '',
+            'Фамилия': employee.last_name || '',
+            'Отасининг исми': employee.surname || '',
+            'Цех': employee.department?.name || '',
+            'Бўлим': employee.section?.name || '',
+            'Лавозим': employee.position || '',
+            'Ишга қабул қилинган сана': employee.date_of_employment || '',
+            'Ҳолати': employee.is_active ? 'Фаол' : 'Фаол эмас',
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(data);
+        const colWidths = Object.keys(data[0]).map(key => ({
+            wch: Math.max(key.length, ...data.map(r => String(r[key]).length)) + 2
+        }));
+        ws['!cols'] = colWidths;
+
+        const headerRange = XLSX.utils.decode_range(ws['!ref']);
+        for (let c = headerRange.s.c; c <= headerRange.e.c; c++) {
+            const addr = XLSX.utils.encode_cell({ r: 0, c: c });
+            if (ws[addr]) {
+                ws[addr].s = {
+                    fill: { fgColor: { rgb: '092482' } },
+                    font: { bold: true, color: { rgb: 'FFFFFF' } },
+                    alignment: { horizontal: 'center' }
+                };
+            }
+        }
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Ходимлар');
+        XLSX.writeFile(wb, 'ходимлар.xlsx');
+    }
+
+</script>
+{% endblock %}

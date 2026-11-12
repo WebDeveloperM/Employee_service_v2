@@ -58,6 +58,11 @@
             min-height: 100%;
         }
 
+        /* Scrollbar учун жой доим ажратилади: у пайдо бўлганда/йўқолганда саҳифа кенглиги сакрамайди (титраш бўлмайди). */
+        html {
+            scrollbar-gutter: stable;
+        }
+
         body {
             font-family: 'Manrope', system-ui, sans-serif;
             background:
@@ -224,6 +229,11 @@
                 </a>
 
                 {% if request.user.profile.role != 'user' %}
+                <a href="/employees/" class="sidebar-link {% if '/employees/' in request.path %}active{% endif %}">
+                    <i class="fas fa-users w-4"></i>
+                    <span>Ходимлар рўйхати</span>
+                </a>
+
                 <div>
                     <button onclick="toggleSettingsMenu()" class="sidebar-link w-full justify-between {% if '/staff/' in request.path or '/departments/' in request.path or '/sections/' in request.path or '/settings/access/' in request.path %}active{% endif %}">
                         <span class="flex items-center gap-[0.85rem]">

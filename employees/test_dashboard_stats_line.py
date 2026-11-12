@@ -40,7 +40,7 @@ class DashboardStatsLineTests(TestCase):
         web = Client(HTTP_HOST='192.168.2.72')
         web.force_login(self.admin)
 
-        html = web.get('/').content.decode()
+        html = web.get('/employees/').content.decode()
 
         self.assertIn('Штатлар сони', html)
         self.assertIn('Бўш иш ўринлари', html)

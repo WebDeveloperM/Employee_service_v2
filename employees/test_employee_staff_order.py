@@ -134,10 +134,26 @@ class EmployeeTableFollowsStaffTreeOrderTests(TestCase):
         web = Client(HTTP_HOST='192.168.2.72')
         web.force_login(User.objects.get(username='staff_order_admin'))
 
-        html = web.get('/').content.decode()
+        html = web.get('/employees/').content.decode()
 
         self.assertIn('staff-group-department', html)
         self.assertIn('staff-group-section', html)
+
+    def test_dashboard_does_not_draw_a_banner_for_the_plant_administration_department(self):
+        from django.test import Client
+
+        from .staff import PINNED_DEPARTMENTS
+
+        web = Client(HTTP_HOST='192.168.2.72')
+        web.force_login(User.objects.get(username='staff_order_admin'))
+
+        html = web.get('/employees/').content.decode()
+
+        # «20-Цех Завод бошқармаси» цехини таблицада штат дарахтидаги қоида (staff.py) билан бир хил аниқлаймиз
+        self.assertIn(r'const NO_BANNER_DEPARTMENT = /^\s*20(?!\d)/;', html)
+        self.assertEqual(PINNED_DEPARTMENTS[1].pattern, r'^\s*20(?!\d)')
+        # бўлим ва ички бўлим сарлавҳалари цех сарлавҳаси каби ўртада, кўк фонда
+        self.assertIn("const BANNER_CELL = 'bg-[#0a9de3] px-4 text-center font-medium text-white';", html)
 
     def test_deleted_employees_are_still_hidden(self):
         department = Department.objects.create(name='1-Цех', sort_order=1)

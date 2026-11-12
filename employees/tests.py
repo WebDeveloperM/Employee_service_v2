@@ -1147,17 +1147,53 @@ class SectionCodeTests(TestCase):
 
 
 class EmployeeWebRoutingTests(TestCase):
-    def test_employees_alias_route_serves_dashboard_for_admin(self):
+    def test_employees_route_serves_the_employee_list_and_home_serves_the_dashboard(self):
         user = User.objects.create_user(username='routing_admin', password='secret123')
         UserProfile.objects.create(user=user, role=ROLE_ADMIN)
 
         client = Client(HTTP_HOST='192.168.2.72')
         client.force_login(user)
 
-        response = client.get(reverse('employees-web'))
+        employees_response = client.get(reverse('employees-web'))
+        home_response = client.get(reverse('dashboard'))
 
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, 'dashboard.html')
+        self.assertEqual(employees_response.status_code, 200)
+        self.assertTemplateUsed(employees_response, 'employees_list.html')
+        self.assertNotContains(employees_response, 'dashboardChartsData')
+        self.assertEqual(home_response.status_code, 200)
+        self.assertTemplateUsed(home_response, 'dashboard.html')
+        self.assertContains(home_response, 'dashboardChartsData')
+        self.assertNotContains(home_response, 'employeesTableBody')
+
+    def test_sidebar_has_the_employee_list_menu_right_after_home(self):
+        user = User.objects.create_user(username='menu_admin', password='secret123')
+        UserProfile.objects.create(user=user, role=ROLE_ADMIN)
+
+        client = Client(HTTP_HOST='192.168.2.72')
+        client.force_login(user)
+
+        html = client.get(reverse('dashboard')).content.decode()
+
+        home = html.index('<span>Бош саҳифа</span>')
+        employees = html.index('<span>Ходимлар рўйхати</span>')
+        settings = html.index('<span>Созламалар</span>')
+        self.assertLess(home, employees)
+        self.assertLess(employees, settings)
+
+    def test_plain_user_is_sent_to_their_own_card_from_home_and_from_the_list(self):
+        user = User.objects.create_user(username='plain_routing_user', password='secret123')
+        UserProfile.objects.create(user=user, role=ROLE_USER)
+        employee = Employee.objects.create(
+            first_name='Plain', last_name='User', tabel_number='EMP-PLAIN-1', login='plain.user', user=user,
+        )
+
+        client = Client(HTTP_HOST='192.168.2.72')
+        client.force_login(user)
+
+        for url in (reverse('dashboard'), reverse('employees-web')):
+            response = client.get(url)
+            self.assertEqual(response.status_code, 302, url)
+            self.assertEqual(response['Location'], f'/employees/{employee.slug}/', url)
 
     def test_employee_delete_page_redirects_to_employees_alias_after_success(self):
         user = User.objects.create_user(username='delete_admin', password='secret123')
@@ -1184,7 +1220,7 @@ class EmployeeWebRoutingTests(TestCase):
         client = Client(HTTP_HOST='192.168.2.72')
         client.force_login(user)
 
-        response = client.get(reverse('dashboard'))
+        response = client.get(reverse('employees-web'))
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "${employee.slug || ''}")
