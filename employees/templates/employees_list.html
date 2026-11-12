@@ -82,18 +82,46 @@
                         <option value="100">100</option>
                     </select>
                 </label>
-                {# Сукут бўйича фақат фаол ходимлар; «Фаол эмас» ларни топиб, қайта фаоллаштириш учун танлов бор. #}
-                <label class="flex items-center gap-2 text-sm font-semibold text-slate-500">
-                    Ҳолати:
-                    <select id="statusFilter"
-                        class="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
-                        <option value="active" selected>Фаол</option>
-                        <option value="inactive">Фаол эмас</option>
-                        <option value="">Барчаси</option>
-                    </select>
-                </label>
             </div>
-            <div id="paginationTop" class="flex flex-wrap items-center justify-end gap-2"></div>
+            <div class="flex flex-wrap items-center justify-end gap-3">
+                <button id="filterToggleButton" type="button" onclick="toggleFilterPanel()"
+                    aria-expanded="false" aria-controls="filterPanel"
+                    class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                    <i class="fas fa-filter text-[var(--primary)]"></i>
+                    Филтр
+                    <span id="filterBadge" class="hidden h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[var(--primary)] px-1.5 text-xs font-bold text-white"></span>
+                    <i id="filterChevron" class="fas fa-chevron-down text-xs text-slate-400 transition-transform duration-200"></i>
+                </button>
+                <div id="paginationTop" class="flex flex-wrap items-center justify-end gap-2"></div>
+            </div>
+        </div>
+
+        {# Филтр accordion жадвал тепасида очилади. Сукут бўйича фақат фаол ходимлар; «Фаол эмас» ларни топиб, қайта фаоллаштириш учун танлов бор. #}
+        {# Ёпиқ вақтда ичидаги майдонлар Tab билан танланмаслиги учун inert қўйилган. Django изоҳи фақат бир қаторда ишлайди. #}
+        <div id="filterPanel" inert aria-hidden="true"
+            class="grid grid-rows-[0fr] transition-[grid-template-rows] duration-200 ease-out">
+            <div class="overflow-hidden">
+                <div class="mb-4 grid gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-[minmax(0,320px)_minmax(0,220px)]">
+                    <label class="block text-sm font-semibold text-slate-500">
+                        Табель рақами
+                        <span class="mt-1.5 flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 focus-within:border-[var(--primary)]">
+                            <i class="fas fa-magnifying-glass text-xs text-slate-400"></i>
+                            <input id="tabelFilter" type="text" placeholder="Табель рақами бўйича қидириш..."
+                                autocomplete="off" autocapitalize="off" spellcheck="false"
+                                class="w-full border-0 bg-transparent p-0 text-sm font-semibold text-slate-700 placeholder:font-normal placeholder:text-slate-400 focus:outline-none">
+                        </span>
+                    </label>
+                    <label class="block text-sm font-semibold text-slate-500">
+                        Ҳолати:
+                        <select id="statusFilter"
+                            class="mt-1.5 block w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+                            <option value="active" selected>Фаол</option>
+                            <option value="inactive">Фаол эмас</option>
+                            <option value="">Барчаси</option>
+                        </select>
+                    </label>
+                </div>
+            </div>
         </div>
 
         {# Цех/бўлим танлови (юқоридаги дарахт-фильтр) шу яширин рўйхатларда сақланади; устунлар бўйича қидириш қатори йўқ. #}
@@ -939,9 +967,34 @@
 
     document.addEventListener('DOMContentLoaded', async function () {
         bindFilters();
+        updateFilterBadge();   // браузер аввалги танловни тиклаган бўлиши мумкин (орқага/янгилаш)
         await Promise.all([loadStaffTotals(), loadDirectoryData()]);
         await loadEmployees();
     });
+
+    // «Филтр» accordion: жадвал тепасида силлиқ очилади/ёпилади (grid-rows 0fr ↔ 1fr, баландлик ўлчанмайди).
+    function toggleFilterPanel(forceOpen) {
+        const panel = document.getElementById('filterPanel');
+        const button = document.getElementById('filterToggleButton');
+        const open = typeof forceOpen === 'boolean' ? forceOpen : button.getAttribute('aria-expanded') !== 'true';
+
+        panel.classList.toggle('grid-rows-[1fr]', open);
+        panel.classList.toggle('grid-rows-[0fr]', !open);
+        panel.toggleAttribute('inert', !open);          // ёпиқ вақтда ичидаги майдонлар Tab билан танланмайди
+        panel.setAttribute('aria-hidden', String(!open));
+        button.setAttribute('aria-expanded', String(open));
+        document.getElementById('filterChevron').classList.toggle('rotate-180', open);
+    }
+
+    // Тугмадаги рақам: сукутдан фарқ қиладиган филтрлар сони (accordion ёпиқ бўлса ҳам кўриниб туради).
+    function updateFilterBadge() {
+        const count = (document.getElementById('tabelFilter').value.trim() ? 1 : 0)
+            + (document.getElementById('statusFilter').value !== 'active' ? 1 : 0);
+        const badge = document.getElementById('filterBadge');
+        badge.textContent = String(count);
+        badge.classList.toggle('hidden', count === 0);
+        badge.classList.toggle('inline-flex', count > 0);
+    }
 
     function bindFilters() {
         document.getElementById('pageSizeSelect').addEventListener('change', function () {
@@ -951,7 +1004,21 @@
         });
 
         document.getElementById('statusFilter').addEventListener('change', function () {
+            updateFilterBadge();
             loadEmployees(1);
+        });
+
+        // Табель рақами бўйича қидирув: ёзилиши билан (кичик тўхташдан кейин) ишлайди; Enter — дарҳол.
+        const tabelInput = document.getElementById('tabelFilter');
+        tabelInput.addEventListener('input', function () {
+            updateFilterBadge();
+            scheduleServerFilterReload();
+        });
+        tabelInput.addEventListener('keypress', function (event) {
+            if (event.key === 'Enter') {
+                window.clearTimeout(dashboardReloadTimer);
+                applyServerFilters();
+            }
         });
 
         // Қидирув матни ёзилиши билан жадвал фильтрланади (кичик тўхташдан кейин); Enter — дарҳол.
@@ -1132,6 +1199,8 @@
             // «Ҳолати»: active — фақат фаол (сукут), inactive — фақат фаол эмас, бўш — барчаси.
             const status = document.getElementById('statusFilter').value;
             if (status) params.set('status', status);
+            const tabelNumber = document.getElementById('tabelFilter').value.trim();
+            if (tabelNumber) params.set('tabel_number', tabelNumber);
 
             const payload = await apiRequest(`/template/employees/?${params.toString()}`);
             if (!isLatest()) {
