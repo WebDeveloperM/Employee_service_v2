@@ -87,6 +87,16 @@ class EmployeeListStatusFilterTests(TestCase):
         self.assertNotIn('Ҳолати', header_row)
         self.assertNotIn('statusFilter', header_row)
 
+    def test_header_row_is_separated_from_the_table_by_a_full_width_line(self):
+        html = self.html()
+
+        header_row = html.rindex('<div class="', 0, html.index('id="pageSizeSelect"') - 200)   # «Кўрсатиш» қатори (юқори контейнер)
+        tag = html[header_row:html.index('>', header_row)]
+        self.assertIn('border-b border-slate-200', tag)               # чизиқ
+        self.assertIn('-mx-4', tag)                                   # карта четидан четигача (паддингни қоплайди)
+        self.assertIn('sm:-mx-5', tag)
+        self.assertLess(header_row, html.index('id="filterPanel"'))   # чизиқ accordion ва жадвалдан тепада
+
     def test_django_comments_do_not_leak_into_the_page_as_text(self):
         # Django {# … #} изоҳи фақат бир қаторда ишлайди; кўп қаторлиси саҳифага матн бўлиб чиқиб қолади.
         self.assertNotIn('{#', self.html())
