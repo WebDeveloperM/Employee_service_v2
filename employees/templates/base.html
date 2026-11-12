@@ -38,8 +38,12 @@
     <script src="https://unpkg.com/imask@7.6.0/dist/imask.min.js"></script>
     <style>
         :root {
-            --sidebar: #1d2636;
-            --sidebar-soft: #2b3548;
+            /* Сайдбар асосий иш столи билан бир хил ёруғ рангда: оқ фон, ингичка чегара, фаол банд — сайтнинг яшил ранги. */
+            --sidebar: #ffffff;
+            --sidebar-soft: #f1f5f9;
+            --sidebar-text: #475569;
+            --sidebar-active-bg: #e8f6ef;
+            --sidebar-active-text: #127a52;
             --surface: #ffffff;
             --shell: #f3f6fb;
             --line: #dbe3f0;
@@ -82,20 +86,25 @@
             gap: 0.85rem;
             padding: 0.85rem 1rem;
             border-radius: 0.95rem;
-            color: rgba(255, 255, 255, 0.82);
-            transition: background-color 0.2s ease, transform 0.2s ease, color 0.2s ease;
+            color: var(--sidebar-text);
+            transition: background-color 0.2s ease, color 0.2s ease;
         }
 
+        /* Ҳоверда элемент жойидан силжимайди (силжиса, курсор четида «титраш» беради) — фақат ранг ўзгаради. */
         .sidebar-link:hover {
-            background: rgba(255, 255, 255, 0.08);
-            color: #fff;
-            transform: translateX(2px);
+            background: var(--sidebar-soft);
+            color: #0f172a;
         }
 
         .sidebar-link.active {
-            background: linear-gradient(135deg, rgba(239, 125, 50, 0.18), rgba(37, 99, 235, 0.2));
-            color: #fff;
-            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+            background: var(--sidebar-active-bg);
+            color: var(--sidebar-active-text);
+            box-shadow: inset 3px 0 0 var(--success);
+        }
+
+        /* Очиқ гуруҳ («Созламалар»): фақат яшил матн, тўлиқ белги эса ичидаги танланган саҳифада. */
+        .sidebar-link.group-active {
+            color: var(--sidebar-active-text);
         }
 
         .panel-card {
@@ -203,25 +212,25 @@
 <body>
     <div class="app-shell lg:grid lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside id="appSidebar"
-            class="fixed inset-y-0 left-0 z-40 w-[260px] bg-[var(--sidebar)] px-6 py-6 text-white transition-transform duration-300 lg:static lg:translate-x-0 mobile-sidebar-hidden">
+            class="fixed inset-y-0 left-0 z-40 w-[260px] border-r border-slate-200/80 bg-[var(--sidebar)] px-6 py-6 text-slate-700 transition-transform duration-300 lg:static lg:translate-x-0 mobile-sidebar-hidden">
             <div class="mb-8 flex items-center justify-between">
                 <a href="/" class="flex items-center gap-3">
                     <div
-                        class="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 text-[var(--accent)]">
+                        class="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]">
                         <i class="fas fa-id-card-clip text-2xl"></i>
                     </div>
                     <div>
                         <p class="font-display text-2xl font-bold leading-none tracking-wide text-[var(--accent)]">bnpzID
                         </p>
-                        <p class="mt-1 text-xs uppercase tracking-[0.25em] text-white/70">Ходимларни бошқариш</p>
+                        <p class="mt-1 text-xs uppercase tracking-[0.25em] text-slate-500">Ходимларни бошқариш</p>
                     </div>
                 </a>
-                <button class="lg:hidden text-white/70" onclick="toggleSidebar()">
+                <button class="lg:hidden text-slate-400 hover:text-slate-700" onclick="toggleSidebar()">
                     <i class="fas fa-xmark text-xl"></i>
                 </button>
             </div>
 
-            <div class="mb-6 text-xs font-semibold uppercase tracking-[0.22em] text-white/35">Меню</div>
+            <div class="mb-6 text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">Меню</div>
             <nav class="space-y-2 text-sm font-semibold">
                 <a href="/" class="sidebar-link {% if request.path == '/' %}active{% endif %}">
                     <i class="fas fa-house w-4"></i>
@@ -235,7 +244,7 @@
                 </a>
 
                 <div>
-                    <button onclick="toggleSettingsMenu()" class="sidebar-link w-full justify-between {% if '/staff/' in request.path or '/departments/' in request.path or '/sections/' in request.path or '/settings/access/' in request.path %}active{% endif %}">
+                    <button onclick="toggleSettingsMenu()" class="sidebar-link w-full justify-between {% if '/staff/' in request.path or '/departments/' in request.path or '/sections/' in request.path or '/settings/access/' in request.path %}group-active{% endif %}">
                         <span class="flex items-center gap-[0.85rem]">
                             <i class="fas fa-sliders w-4"></i>
                             <span>Созламалар</span>

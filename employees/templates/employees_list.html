@@ -82,6 +82,16 @@
                         <option value="100">100</option>
                     </select>
                 </label>
+                {# Сукут бўйича фақат фаол ходимлар; «Фаол эмас» ларни топиб, қайта фаоллаштириш учун танлов бор. #}
+                <label class="flex items-center gap-2 text-sm font-semibold text-slate-500">
+                    Ҳолати:
+                    <select id="statusFilter"
+                        class="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+                        <option value="active" selected>Фаол</option>
+                        <option value="inactive">Фаол эмас</option>
+                        <option value="">Барчаси</option>
+                    </select>
+                </label>
             </div>
             <div id="paginationTop" class="flex flex-wrap items-center justify-end gap-2"></div>
         </div>
@@ -940,6 +950,10 @@
             loadEmployees(1);
         });
 
+        document.getElementById('statusFilter').addEventListener('change', function () {
+            loadEmployees(1);
+        });
+
         // Қидирув матни ёзилиши билан жадвал фильтрланади (кичик тўхташдан кейин); Enter — дарҳол.
         const searchInput = document.getElementById('globalSearchInput');
         searchInput.addEventListener('input', scheduleServerFilterReload);
@@ -1115,6 +1129,9 @@
 
             if (departmentId) params.set('department_id', departmentId);
             if (sectionId) params.set('section_id', sectionId);
+            // «Ҳолати»: active — фақат фаол (сукут), inactive — фақат фаол эмас, бўш — барчаси.
+            const status = document.getElementById('statusFilter').value;
+            if (status) params.set('status', status);
 
             const payload = await apiRequest(`/template/employees/?${params.toString()}`);
             if (!isLatest()) {
