@@ -1,3 +1,5 @@
+import re
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework.test import APIClient
@@ -139,7 +141,7 @@ class EmployeeTableFollowsStaffTreeOrderTests(TestCase):
         self.assertIn('staff-group-department', html)
         self.assertIn('staff-group-section', html)
 
-    def test_dashboard_does_not_draw_a_banner_for_the_plant_administration_department(self):
+    def test_dashboard_does_not_draw_a_banner_for_the_leadership_and_plant_administration_departments(self):
         from django.test import Client
 
         from .staff import PINNED_DEPARTMENTS
@@ -149,11 +151,31 @@ class EmployeeTableFollowsStaffTreeOrderTests(TestCase):
 
         html = web.get('/employees/').content.decode()
 
-        # «20-Цех Завод бошқармаси» цехини таблицада штат дарахтидаги қоида (staff.py) билан бир хил аниқлаймиз
-        self.assertIn(r'const NO_BANNER_DEPARTMENT = /^\s*20(?!\d)/;', html)
-        self.assertEqual(PINNED_DEPARTMENTS[1].pattern, r'^\s*20(?!\d)')
+        # «Раҳбарият» ва «20-Цех Завод бошқармаси» цехлари таблицада штат дарахтидаги қоида (staff.py) билан бир хил аниқланади:
+        # жадвалдаги JS регулярлари PINNED_DEPARTMENTS нинг айнан ўзи бўлиши керак.
+        self.assertEqual(len(PINNED_DEPARTMENTS), 2)
+        for pattern in PINNED_DEPARTMENTS:
+            literal = f"/{pattern.pattern}/{'i' if pattern.flags & re.IGNORECASE else ''}"
+            self.assertIn(literal, html)
+        self.assertIn('const NO_BANNER_DEPARTMENTS = [', html)
+        self.assertIn('.some((pattern) => pattern.test(departmentName))', html)
+        self.assertIn('if (!hasNoBanner(departmentName)) {', html)
         # бўлим ва ички бўлим сарлавҳалари цех сарлавҳаси каби ўртада, кўк фонда
         self.assertIn("const BANNER_CELL = 'bg-[var(--primary)] px-4 text-center font-medium text-white';", html)
+
+    def test_table_has_no_department_column_only_the_banner_shows_the_department(self):
+        from django.test import Client
+
+        web = Client(HTTP_HOST='192.168.101.6')
+        web.force_login(User.objects.get(username='staff_order_admin'))
+
+        html = web.get('/employees/').content.decode()
+
+        header = html[html.index('<thead>'):html.index('</thead>')]
+        columns = re.findall(r'<th[^>]*>(.*?)</th>', header)
+        self.assertEqual(columns, ['№', 'Ходим', 'Бўлим', 'Лавозим', 'Амаллар'])   # «Цех» устуни йўқ
+        self.assertIn('const COLUMN_COUNT = 5;', html)                          # сарлавҳа полосалари 5 устунга чўзилади
+        self.assertNotIn("${employee.department?.name || '—'}", html)            # қатордаги цех катаги йўқ
 
     def test_deleted_employees_are_still_hidden(self):
         department = Department.objects.create(name='1-Цех', sort_order=1)

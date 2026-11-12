@@ -146,7 +146,6 @@
                     <tr class="border-b border-slate-200 bg-white text-left text-sm font-bold text-slate-900">
                         <th class="border-b border-slate-200 px-4 py-4">№</th>
                         <th class="min-w-[400px] border-b border-slate-200 px-4 py-4">Ходим</th>
-                        <th class="w-[240px] border-b border-slate-200 px-4 py-4">Цех</th>
                         <th class="w-[240px] border-b border-slate-200 px-4 py-4">Бўлим</th>
                         <th class="border-b border-slate-200 px-4 py-4">Лавозим</th>
                         <th class="border-b border-slate-200 px-4 py-4 text-center">Амаллар</th>
@@ -1272,12 +1271,14 @@
 
         // Сервер отдаёт сотрудников в порядке «Штат бирлиги ва лавозим»: цех → отделы (вложенные сразу после родителя).
         // Когда цех или отдел меняется, перед сотрудниками показываем полосу с его названием (как в HRM).
-        const COLUMN_COUNT = 6;
+        const COLUMN_COUNT = 5;   // №, Ходим, Бўлим, Лавозим, Амаллар (цех устуни йўқ: цех сарлавҳа полосасида кўрсатилади)
         const ACTION_BUTTON = 'inline-flex h-9 w-9 items-center justify-center rounded-md border bg-white transition';
         const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-        // «20-Цех Завод бошқармаси» учун цех сарлавҳаси чиқарилмайди: унинг бўлимлари ўзлари сарлавҳа бўлиб туради.
-        // Қоида staff.py даги PINNED_DEPARTMENTS билан бир хил: номи «20» дан бошланади («200-…» эмас).
-        const NO_BANNER_DEPARTMENT = /^\s*20(?!\d)/;
+        // «Раҳбарият» ва «20-Цех Завод бошқармаси» учун цех сарлавҳаси чиқарилмайди: уларнинг бўлимлари ўзлари сарлавҳа бўлиб туради
+        // («Раҳбарият» цехидаги «Раҳбарият» бўлими икки марта такрорланмайди).
+        // Қоида staff.py даги PINNED_DEPARTMENTS билан бир хил: «Раҳбарият/Рахбарият…» ва номи «20» дан бошланадиган («200-…» эмас).
+        const NO_BANNER_DEPARTMENTS = [/^\s*ра[хҳ]барият/i, /^\s*20(?!\d)/];
+        const hasNoBanner = (departmentName) => NO_BANNER_DEPARTMENTS.some((pattern) => pattern.test(departmentName));
         // Цех ва бўлим/ички бўлим сарлавҳалари бир хил: ўртада, оқ ёзув, кўк фон.
         const BANNER_CELL = 'bg-[var(--primary)] px-4 text-center font-medium text-white';
         const departmentBanner = (name) => `
@@ -1307,7 +1308,7 @@
             const sectionKey = String(employee.section?.id ?? '');
             if (departmentKey !== previousDepartment) {
                 const departmentName = employee.department?.name || 'Цех кўрсатилмаган';
-                if (!NO_BANNER_DEPARTMENT.test(departmentName)) {
+                if (!hasNoBanner(departmentName)) {
                     banners += departmentBanner(departmentName);
                 }
                 previousDepartment = departmentKey;
@@ -1327,7 +1328,6 @@
                         <div class="font-semibold text-slate-900">${fullName}</div>
                     </div>
                 </td>
-                <td class="w-[240px] px-4 py-4 text-slate-700">${employee.department?.name || '—'}</td>
                 <td class="w-[240px] px-4 py-4 text-slate-700">${employee.section?.name || '—'}</td>
                 <td class="px-4 py-4 text-slate-700">${employee.position || '—'}</td>
                 <td class="px-4 py-4">
