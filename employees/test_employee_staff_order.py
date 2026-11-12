@@ -131,7 +131,7 @@ class EmployeeTableFollowsStaffTreeOrderTests(TestCase):
     def test_dashboard_page_draws_the_group_banners(self):
         from django.test import Client
 
-        web = Client(HTTP_HOST='192.168.2.72')
+        web = Client(HTTP_HOST='192.168.101.6')
         web.force_login(User.objects.get(username='staff_order_admin'))
 
         html = web.get('/employees/').content.decode()
@@ -144,7 +144,7 @@ class EmployeeTableFollowsStaffTreeOrderTests(TestCase):
 
         from .staff import PINNED_DEPARTMENTS
 
-        web = Client(HTTP_HOST='192.168.2.72')
+        web = Client(HTTP_HOST='192.168.101.6')
         web.force_login(User.objects.get(username='staff_order_admin'))
 
         html = web.get('/employees/').content.decode()

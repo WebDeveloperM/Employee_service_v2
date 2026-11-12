@@ -314,7 +314,7 @@ class EmployeesOfTheTreeTests(HierarchyTestCase):
     def test_employee_forms_show_the_full_path_of_nested_sections(self):
         root = self.make('Юридик хизмати')
         self.make('Юридик бўлим', parent=root)
-        client = Client(HTTP_HOST='192.168.2.72')
+        client = Client(HTTP_HOST='192.168.101.6')
         client.force_login(self.admin)
 
         html = client.get('/employees/create/').content.decode()

@@ -116,7 +116,7 @@ class DepartmentSortOrderTests(TestCase):
         self.assertEqual(self.names(first) + self.names(second), ['Цех 30', 'Цех 40', 'Цех 50', 'Цех 60'])
 
     def test_departments_page_has_the_id_field_with_default_zero(self):
-        web = Client(HTTP_HOST='192.168.2.72')
+        web = Client(HTTP_HOST='192.168.101.6')
         web.force_login(self.admin)
 
         departments_html = web.get('/departments/').content.decode()

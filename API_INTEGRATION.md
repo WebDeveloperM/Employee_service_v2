@@ -14,7 +14,7 @@ External integration is read-only. When a request is authenticated with `X-Emplo
 Example production-style base URL:
 
 ```text
-https://192.168.2.72:8010/api/v1
+https://192.168.101.6:8010/api/v1
 ```
 
 ## Authentication
@@ -165,20 +165,20 @@ For another project that needs employee data and face verification:
 List employees:
 
 ```bash
-curl -X GET "https://192.168.2.72:8010/api/v1/employees/?source_system=tb-project&no_pagination=true" \
+curl -X GET "https://192.168.101.6:8010/api/v1/employees/?source_system=tb-project&no_pagination=true" \
   -H "X-Employee-Service-Key: dev-employee-service-key"
 ```
 
 Get employee details:
 
 ```bash
-curl -X GET "https://192.168.2.72:8010/api/v1/employees/tb-project-tb-1001-ali-valiyev/" \
+curl -X GET "https://192.168.101.6:8010/api/v1/employees/tb-project-tb-1001-ali-valiyev/" \
   -H "X-Employee-Service-Key: dev-employee-service-key"
 ```
 
 List departments:
 
 ```bash
-curl -X GET "https://192.168.2.72:8010/api/v1/departments/" \
+curl -X GET "https://192.168.101.6:8010/api/v1/departments/" \
   -H "X-Employee-Service-Key: dev-employee-service-key"
 ```

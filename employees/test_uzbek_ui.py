@@ -118,7 +118,7 @@ class UzbekPagesTests(TestCase):
         self.employee = Employee.objects.create(
             first_name='Olim', last_name='Karimov', tabel_number='UZ-9', department=self.department, section=self.section,
         )
-        self.client = Client(HTTP_HOST='192.168.2.72')
+        self.client = Client(HTTP_HOST='192.168.101.6')
         self.client.force_login(self.admin)
 
     def assertPage(self, url, present, absent=()):
@@ -159,7 +159,7 @@ class UzbekPagesTests(TestCase):
         self.assertPage('/staff/', ['Штат бирлиги ва лавозим'])
 
     def test_login_page_is_in_uzbek(self):
-        anonymous = Client(HTTP_HOST='192.168.2.72')
+        anonymous = Client(HTTP_HOST='192.168.101.6')
         html = anonymous.get('/login/').content.decode()
 
         self.assertIn('Тизимга кириш', html)
@@ -169,7 +169,7 @@ class UzbekPagesTests(TestCase):
         self.assertNotIn('Пароль', html)
 
     def test_wrong_password_message_is_in_uzbek(self):
-        anonymous = Client(HTTP_HOST='192.168.2.72')
+        anonymous = Client(HTTP_HOST='192.168.101.6')
 
         response = anonymous.post('/login/', {'username': 'uz_page_admin', 'password': 'wrong'})
 

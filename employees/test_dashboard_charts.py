@@ -109,7 +109,7 @@ class StaffChartTests(TestCase):
 
 class DashboardPageChartsTests(TestCase):
     def client_for(self, user):
-        client = Client(HTTP_HOST='192.168.2.72')
+        client = Client(HTTP_HOST='192.168.101.6')
         client.force_login(user)
         return client
 

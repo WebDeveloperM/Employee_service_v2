@@ -37,7 +37,7 @@ class DashboardStatsLineTests(TestCase):
         self.assertEqual((inner_node['type'], inner_node['staff_total'], inner_node['vacant_total']), ('section', 4, 3))
 
     def test_dashboard_page_builds_the_hrm_line_from_the_staff_tree(self):
-        web = Client(HTTP_HOST='192.168.2.72')
+        web = Client(HTTP_HOST='192.168.101.6')
         web.force_login(self.admin)
 
         html = web.get('/employees/').content.decode()

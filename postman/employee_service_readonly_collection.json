@@ -177,7 +177,7 @@
   "variable": [
     {
       "key": "employee_service_base_url",
-      "value": "https://192.168.2.72:8010/api/v1"
+      "value": "https://192.168.101.6:8010/api/v1"
     },
     {
       "key": "employee_service_api_key",

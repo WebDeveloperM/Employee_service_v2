@@ -38,7 +38,7 @@ def normalize_public_base_url(raw_value: str, fallback: str) -> str:
     value = (raw_value or fallback).strip().rstrip('/')
     parsed = urlparse(value)
     if not parsed.scheme or not parsed.hostname:
-        raise ImproperlyConfigured('PUBLIC_BASE_URL must include scheme and hostname, for example https://192.168.2.72')
+        raise ImproperlyConfigured('PUBLIC_BASE_URL must include scheme and hostname, for example https://192.168.101.6')
     return value
 
 
@@ -49,13 +49,13 @@ def build_public_url(base_url: str, port: int) -> str:
 
 PUBLIC_BASE_URL = normalize_public_base_url(
     os.environ.get('PUBLIC_BASE_URL', ''),
-    'https://192.168.2.72',
+    'https://192.168.101.6',
 )
 TB_PROJECT_BACKEND_URL = build_public_url(PUBLIC_BASE_URL, 8050)
 TB_PROJECT_FRONTEND_URL = build_public_url(PUBLIC_BASE_URL, 6060)
 EMPLOYEE_SERVICE_PUBLIC_URL = build_public_url(PUBLIC_BASE_URL, 5000)
 PUBLIC_HOST = urlparse(PUBLIC_BASE_URL).hostname
-LEGACY_PUBLIC_HOSTS = ['192.168.2.72']
+LEGACY_PUBLIC_HOSTS = ['192.168.101.6']
 INTERNAL_ALLOWED_HOSTS = ['host.docker.internal', 'employee-service', *LEGACY_PUBLIC_HOSTS]
 
 SECRET_KEY = os.environ.get('SECRET_KEY', 'employee-service-dev-secret-key')

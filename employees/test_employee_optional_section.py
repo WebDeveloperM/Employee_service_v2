@@ -64,7 +64,7 @@ class EmployeeSectionIsOptionalTests(TestCase):
 
     def test_create_page_does_not_mark_the_section_as_required(self):
         Section.objects.create(department=self.department, name='Бош технолог бўлими', code='1')
-        web = Client(HTTP_HOST='192.168.2.72')
+        web = Client(HTTP_HOST='192.168.101.6')
         web.force_login(self.admin)
 
         html = web.get('/employees/create/').content.decode()
@@ -107,7 +107,7 @@ class EmployeeSectionIsOptionalTests(TestCase):
         self.assertEqual(str(Employee.objects.get(tabel_number='OPT-9').date_of_employment), '2024-02-01')
 
     def test_create_page_does_not_mark_the_hire_date_as_required(self):
-        web = Client(HTTP_HOST='192.168.2.72')
+        web = Client(HTTP_HOST='192.168.101.6')
         web.force_login(self.admin)
 
         html = web.get('/employees/create/').content.decode()
@@ -120,7 +120,7 @@ class EmployeeSectionIsOptionalTests(TestCase):
         self.assertNotIn('text-red-500', label)
 
     def test_pages_show_the_server_error_text_instead_of_a_generic_message(self):
-        web = Client(HTTP_HOST='192.168.2.72')
+        web = Client(HTTP_HOST='192.168.101.6')
         web.force_login(self.admin)
         employee = Employee.objects.create(first_name='A', last_name='B', tabel_number='OPT-10', department=self.department)
 
@@ -133,7 +133,7 @@ class EmployeeSectionIsOptionalTests(TestCase):
                 self.assertNotIn('payload?.detail || payload?.message ||', html)
 
     def test_edit_page_always_sends_the_section_so_that_an_empty_choice_clears_it(self):
-        web = Client(HTTP_HOST='192.168.2.72')
+        web = Client(HTTP_HOST='192.168.101.6')
         web.force_login(self.admin)
         employee = Employee.objects.create(first_name='A', last_name='B', tabel_number='OPT-11', department=self.department)
 
@@ -143,7 +143,7 @@ class EmployeeSectionIsOptionalTests(TestCase):
         self.assertNotIn('if (sectionId) {', html)
 
     def test_create_page_does_not_pick_the_first_section_by_itself(self):
-        web = Client(HTTP_HOST='192.168.2.72')
+        web = Client(HTTP_HOST='192.168.101.6')
         web.force_login(self.admin)
 
         html = web.get('/employees/create/').content.decode()

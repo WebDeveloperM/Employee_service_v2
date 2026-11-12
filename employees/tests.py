@@ -80,7 +80,7 @@ class BnpzIdTests(TestCase):
 
         result = resolve_bnpzid_client_access(user, {
             'client_id': 'tb-project',
-            'redirect_uri': 'https://192.168.2.72:5175/auth/signin',
+            'redirect_uri': 'https://192.168.101.6:5175/auth/signin',
         })
 
         self.assertTrue(result['allowed'])
@@ -181,7 +181,7 @@ class EmployeeDashboardSortingTests(TestCase):
             tabel_number='EMP-999',
         )
 
-        client = APIClient(HTTP_HOST='192.168.2.72')
+        client = APIClient(HTTP_HOST='192.168.101.6')
         client.force_authenticate(user=admin_user)
 
         response = client.get('/api/template/employees/')
@@ -278,7 +278,7 @@ class UserTemplateViewPermissionTests(TestCase):
             f'/api/template/users/{self.other_profile.pk}/',
             {'first_name': 'Updated'},
             format='multipart',
-            HTTP_HOST='192.168.2.72',
+            HTTP_HOST='192.168.101.6',
         )
 
         self.assertEqual(response.status_code, 200)
@@ -311,7 +311,7 @@ class UserTemplateViewPermissionTests(TestCase):
             f'/api/template/users/{self.other_profile.pk}/',
             {'last_name': 'Manager'},
             format='multipart',
-            HTTP_HOST='192.168.2.72',
+            HTTP_HOST='192.168.101.6',
         )
 
         self.assertEqual(response.status_code, 200)
@@ -325,7 +325,7 @@ class UserTemplateViewPermissionTests(TestCase):
             f'/api/template/users/{self.other_profile.pk}/',
             {'first_name': 'Blocked'},
             format='multipart',
-            HTTP_HOST='192.168.2.72',
+            HTTP_HOST='192.168.101.6',
         )
 
         self.assertEqual(response.status_code, 403)
@@ -337,7 +337,7 @@ class UserTemplateViewPermissionTests(TestCase):
             f'/api/template/users/{self.regular_profile.pk}/',
             {'first_name': 'Self'},
             format='multipart',
-            HTTP_HOST='192.168.2.72',
+            HTTP_HOST='192.168.101.6',
         )
 
         self.assertEqual(response.status_code, 200)
@@ -349,7 +349,7 @@ class UserTemplateViewPermissionTests(TestCase):
 
         response = self.client.delete(
             f'/api/template/users/{self.other_profile.pk}/',
-            HTTP_HOST='192.168.2.72',
+            HTTP_HOST='192.168.101.6',
         )
 
         self.assertEqual(response.status_code, 200)
@@ -369,7 +369,7 @@ class UserTemplateViewPermissionTests(TestCase):
                 'is_active': False,
             },
             format='multipart',
-            HTTP_HOST='192.168.2.72',
+            HTTP_HOST='192.168.101.6',
         )
 
         self.assertEqual(response.status_code, 200)
@@ -387,7 +387,7 @@ class UserTemplateViewPermissionTests(TestCase):
 
         response = self.client.get(
             f'/api/template/users/{self.other_profile.pk}/',
-            HTTP_HOST='192.168.2.72',
+            HTTP_HOST='192.168.101.6',
         )
 
         self.assertEqual(response.status_code, 200)
@@ -865,7 +865,7 @@ class EmployeeExcelImportTemplateViewTests(TestCase):
             user=user,
         )
 
-        client = APIClient(HTTP_HOST='192.168.2.72')
+        client = APIClient(HTTP_HOST='192.168.101.6')
         client.force_authenticate(user=user)
         response = client.patch(
             f'/api/v1/employees/{employee.slug}/',
@@ -890,7 +890,7 @@ class EmployeeExcelImportTemplateViewTests(TestCase):
             user=user,
         )
 
-        client = APIClient(HTTP_HOST='192.168.2.72')
+        client = APIClient(HTTP_HOST='192.168.101.6')
         client.force_authenticate(user=user)
         long_name = 'rasm_' + ('verylongname' * 10) + '.jpg'
         response = client.patch(
@@ -925,7 +925,7 @@ class EmployeeSelfServiceTests(TestCase):
         )
 
     def test_regular_user_can_update_own_employee_sizes(self):
-        client = APIClient(HTTP_HOST='192.168.2.72')
+        client = APIClient(HTTP_HOST='192.168.101.6')
         client.force_authenticate(user=self.user)
 
         response = client.patch(
@@ -947,7 +947,7 @@ class EmployeeSelfServiceTests(TestCase):
         self.assertEqual(self.employee.tshirt_size, 'XL')
 
     def test_regular_user_cannot_update_non_size_fields(self):
-        client = APIClient(HTTP_HOST='192.168.2.72')
+        client = APIClient(HTTP_HOST='192.168.101.6')
         client.force_authenticate(user=self.user)
 
         response = client.patch(
@@ -961,7 +961,7 @@ class EmployeeSelfServiceTests(TestCase):
         self.assertEqual(self.employee.position, 'Operator')
 
     def test_regular_user_detail_page_allows_only_size_editing(self):
-        client = Client(HTTP_HOST='192.168.2.72')
+        client = Client(HTTP_HOST='192.168.101.6')
         client.force_login(self.user)
 
         response = client.get(f'/employees/{self.employee.slug}/')
@@ -993,7 +993,7 @@ class EmployeeGradeTests(TestCase):
         self.assertIsNone(self.employee.grade)
 
     def test_admin_can_set_and_clear_grade(self):
-        client = APIClient(HTTP_HOST='192.168.2.72')
+        client = APIClient(HTTP_HOST='192.168.101.6')
         client.force_authenticate(user=self.admin)
 
         response = client.patch(f'/api/v1/employees/{self.employee.slug}/', {'grade': '4'}, format='multipart')
@@ -1009,7 +1009,7 @@ class EmployeeGradeTests(TestCase):
         self.assertIsNone(self.employee.grade)
 
     def test_grade_is_optional_on_create(self):
-        client = APIClient(HTTP_HOST='192.168.2.72')
+        client = APIClient(HTTP_HOST='192.168.101.6')
         client.force_authenticate(user=self.admin)
 
         response = client.post(
@@ -1022,7 +1022,7 @@ class EmployeeGradeTests(TestCase):
         self.assertIsNone(Employee.objects.get(tabel_number='EMP-GRADE-2').grade)
 
     def test_regular_user_cannot_change_grade(self):
-        client = APIClient(HTTP_HOST='192.168.2.72')
+        client = APIClient(HTTP_HOST='192.168.101.6')
         client.force_authenticate(user=self.worker_user)
 
         response = client.patch(f'/api/v1/employees/{self.employee.slug}/', {'grade': '8'}, format='multipart')
@@ -1032,7 +1032,7 @@ class EmployeeGradeTests(TestCase):
         self.assertIsNone(self.employee.grade)
 
     def test_edit_page_renders_grade_input_after_position(self):
-        client = Client(HTTP_HOST='192.168.2.72')
+        client = Client(HTTP_HOST='192.168.101.6')
         client.force_login(self.admin)
 
         response = client.get(reverse('employee-edit-web', kwargs={'slug': self.employee.slug}))
@@ -1048,7 +1048,7 @@ class SectionCodeTests(TestCase):
         self.admin = User.objects.create_user(username='section_code_admin', password='secret123')
         UserProfile.objects.create(user=self.admin, role=ROLE_ADMIN)
         self.department = Department.objects.create(name='1-Цех')
-        self.client = APIClient(HTTP_HOST='192.168.2.72')
+        self.client = APIClient(HTTP_HOST='192.168.101.6')
         self.client.force_authenticate(user=self.admin)
 
     def _create(self, name, code=None, department=None):
@@ -1151,7 +1151,7 @@ class EmployeeWebRoutingTests(TestCase):
         user = User.objects.create_user(username='routing_admin', password='secret123')
         UserProfile.objects.create(user=user, role=ROLE_ADMIN)
 
-        client = Client(HTTP_HOST='192.168.2.72')
+        client = Client(HTTP_HOST='192.168.101.6')
         client.force_login(user)
 
         employees_response = client.get(reverse('employees-web'))
@@ -1169,7 +1169,7 @@ class EmployeeWebRoutingTests(TestCase):
         user = User.objects.create_user(username='menu_admin', password='secret123')
         UserProfile.objects.create(user=user, role=ROLE_ADMIN)
 
-        client = Client(HTTP_HOST='192.168.2.72')
+        client = Client(HTTP_HOST='192.168.101.6')
         client.force_login(user)
 
         html = client.get(reverse('dashboard')).content.decode()
@@ -1187,7 +1187,7 @@ class EmployeeWebRoutingTests(TestCase):
             first_name='Plain', last_name='User', tabel_number='EMP-PLAIN-1', login='plain.user', user=user,
         )
 
-        client = Client(HTTP_HOST='192.168.2.72')
+        client = Client(HTTP_HOST='192.168.101.6')
         client.force_login(user)
 
         for url in (reverse('dashboard'), reverse('employees-web')):
@@ -1205,7 +1205,7 @@ class EmployeeWebRoutingTests(TestCase):
             login='delete.worker',
         )
 
-        client = Client(HTTP_HOST='192.168.2.72')
+        client = Client(HTTP_HOST='192.168.101.6')
         client.force_login(user)
 
         response = client.get(reverse('employee-delete-web', kwargs={'slug': employee.slug}))
@@ -1217,7 +1217,7 @@ class EmployeeWebRoutingTests(TestCase):
         user = User.objects.create_user(username='dashboard_admin', password='secret123')
         UserProfile.objects.create(user=user, role=ROLE_ADMIN)
 
-        client = Client(HTTP_HOST='192.168.2.72')
+        client = Client(HTTP_HOST='192.168.101.6')
         client.force_login(user)
 
         response = client.get(reverse('employees-web'))
@@ -1229,7 +1229,7 @@ class EmployeeWebRoutingTests(TestCase):
         user = User.objects.create_user(username='profile_user', password='secret123', first_name='Ali', last_name='Valiyev')
         UserProfile.objects.create(user=user, role=ROLE_USER)
 
-        client = Client(HTTP_HOST='192.168.2.72')
+        client = Client(HTTP_HOST='192.168.101.6')
         client.force_login(user)
 
         response = client.get(reverse('profile-edit-web'))
@@ -1249,7 +1249,7 @@ class EmployeeWebRoutingTests(TestCase):
             login='admin',
         )
 
-        client = Client(HTTP_HOST='192.168.2.72')
+        client = Client(HTTP_HOST='192.168.101.6')
         client.force_login(user)
 
         response = client.get(reverse('employee-edit-web', kwargs={'slug': employee.slug}))
@@ -1263,7 +1263,7 @@ class EmployeeWebRoutingTests(TestCase):
         user = User.objects.create_user(username='employee_create_admin', password='secret123')
         UserProfile.objects.create(user=user, role=ROLE_ADMIN)
 
-        client = Client(HTTP_HOST='192.168.2.72')
+        client = Client(HTTP_HOST='192.168.101.6')
         client.force_login(user)
 
         response = client.get(reverse('employee-create-web'))
@@ -1292,7 +1292,7 @@ class EmployeeWebRoutingTests(TestCase):
             section=section,
         )
 
-        client = Client(HTTP_HOST='192.168.2.72')
+        client = Client(HTTP_HOST='192.168.101.6')
         client.force_login(user)
 
         response = client.get(reverse('employee-edit-web', kwargs={'slug': employee.slug}))
@@ -1348,7 +1348,7 @@ class EmployeeTemplateDeleteTests(TestCase):
                 base_image_path = employee.base_image.path
                 face_image_path = linked_profile.face_image.path
 
-                client = APIClient(HTTP_HOST='192.168.2.72')
+                client = APIClient(HTTP_HOST='192.168.101.6')
                 client.force_authenticate(user=admin)
 
                 response = client.delete(f'/api/template/employees/{employee.pk}/')
@@ -1367,7 +1367,7 @@ class EmployeeTemplateDeleteTests(TestCase):
                     base_image=build_test_image('old-base.jpg'),
                 )
 
-                client = APIClient(HTTP_HOST='192.168.2.72', HTTP_X_EMPLOYEE_SERVICE_KEY='dev-employee-service-key')
+                client = APIClient(HTTP_HOST='192.168.101.6', HTTP_X_EMPLOYEE_SERVICE_KEY='dev-employee-service-key')
                 response = client.patch(
                     f'/api/v1/employees/{employee.slug}/base-image/',
                     {'base_image': build_test_image('new-base.jpg')},
@@ -1405,7 +1405,7 @@ class LoginFaceVerifyTests(TestCase):
             base_image=build_test_image('employee-base.jpg'),
         )
 
-        client = Client(HTTP_HOST='192.168.2.72')
+        client = Client(HTTP_HOST='192.168.101.6')
         session = client.session
         session['pending_face_auth_user_id'] = user.id
         session['pending_face_auth_backend'] = 'django.contrib.auth.backends.ModelBackend'
@@ -1438,7 +1438,7 @@ class LoginFaceVerifyTests(TestCase):
             base_image=build_test_image('employee-base.jpg'),
         )
 
-        client = Client(HTTP_HOST='192.168.2.72')
+        client = Client(HTTP_HOST='192.168.101.6')
         session = client.session
         session['pending_face_auth_user_id'] = user.id
         session['pending_face_auth_backend'] = 'django.contrib.auth.backends.ModelBackend'
@@ -1486,7 +1486,7 @@ class LoginFaceVerifyTests(TestCase):
             base_image=build_test_image('employee-base.jpg'),
         )
 
-        client = Client(HTTP_HOST='192.168.2.72')
+        client = Client(HTTP_HOST='192.168.101.6')
         session = client.session
         session['pending_face_auth_user_id'] = user.id
         session['pending_face_auth_backend'] = 'django.contrib.auth.backends.ModelBackend'
@@ -1538,14 +1538,14 @@ class LoginFaceVerifyTests(TestCase):
             base_image=build_test_image('employee-base.jpg'),
         )
 
-        client = Client(HTTP_HOST='192.168.2.72')
+        client = Client(HTTP_HOST='192.168.101.6')
         session = client.session
         session['pending_face_auth_user_id'] = user.id
         session['pending_face_auth_backend'] = 'django.contrib.auth.backends.ModelBackend'
         session['pending_face_auth_next'] = ''
         session['pending_bnpzid_request'] = {
             'client_id': 'tb-project',
-            'redirect_uri': 'https://192.168.2.72:5175/auth/signin',
+            'redirect_uri': 'https://192.168.101.6:5175/auth/signin',
             'state': 'abc123',
         }
         session.save()
@@ -1595,7 +1595,7 @@ class EmployeeCertificateIssueTests(TestCase):
     def test_admin_can_issue_certificate(self):
         self.client.force_authenticate(user=self.admin_user)
 
-        response = self.client.post(f'/api/template/employees/{self.employee.pk}/certificate/', HTTP_HOST='192.168.2.72')
+        response = self.client.post(f'/api/template/employees/{self.employee.pk}/certificate/', HTTP_HOST='192.168.101.6')
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/x-pkcs12')
@@ -1606,8 +1606,8 @@ class EmployeeCertificateIssueTests(TestCase):
     def test_issuing_new_certificate_revokes_previous_one(self):
         self.client.force_authenticate(user=self.admin_user)
 
-        first_response = self.client.post(f'/api/template/employees/{self.employee.pk}/certificate/', HTTP_HOST='192.168.2.72')
-        second_response = self.client.post(f'/api/template/employees/{self.employee.pk}/certificate/', HTTP_HOST='192.168.2.72')
+        first_response = self.client.post(f'/api/template/employees/{self.employee.pk}/certificate/', HTTP_HOST='192.168.101.6')
+        second_response = self.client.post(f'/api/template/employees/{self.employee.pk}/certificate/', HTTP_HOST='192.168.101.6')
 
         self.assertEqual(first_response.status_code, 200)
         self.assertEqual(second_response.status_code, 200)
@@ -1619,7 +1619,7 @@ class EmployeeCertificateIssueTests(TestCase):
     def test_hr_cannot_issue_certificate(self):
         self.client.force_authenticate(user=self.hr_user)
 
-        response = self.client.post(f'/api/template/employees/{self.employee.pk}/certificate/', HTTP_HOST='192.168.2.72')
+        response = self.client.post(f'/api/template/employees/{self.employee.pk}/certificate/', HTTP_HOST='192.168.101.6')
 
         self.assertEqual(response.status_code, 403)
         self.assertFalse(EmployeeCertificate.objects.filter(employee=self.employee).exists())
@@ -1632,7 +1632,7 @@ class EmployeeCertificateIssueTests(TestCase):
         )
         self.client.force_authenticate(user=self.admin_user)
 
-        response = self.client.post(f'/api/template/employees/{employee_without_login.pk}/certificate/', HTTP_HOST='192.168.2.72')
+        response = self.client.post(f'/api/template/employees/{employee_without_login.pk}/certificate/', HTTP_HOST='192.168.101.6')
 
         self.assertEqual(response.status_code, 400)
         self.assertFalse(response.data['success'])
@@ -1664,7 +1664,7 @@ class ClientCertificateAuthenticationMiddlewareTests(TestCase):
         )
 
     def test_verified_client_certificate_logs_user_in(self):
-        client = Client(HTTP_HOST='192.168.2.72')
+        client = Client(HTTP_HOST='192.168.101.6')
 
         client.get(
             '/',
@@ -1677,7 +1677,7 @@ class ClientCertificateAuthenticationMiddlewareTests(TestCase):
     def test_revoked_certificate_does_not_log_user_in(self):
         self.certificate.revoked = True
         self.certificate.save(update_fields=['revoked'])
-        client = Client(HTTP_HOST='192.168.2.72')
+        client = Client(HTTP_HOST='192.168.101.6')
 
         client.get(
             '/',
@@ -1688,7 +1688,7 @@ class ClientCertificateAuthenticationMiddlewareTests(TestCase):
         self.assertNotIn('_auth_user_id', client.session)
 
     def test_unverified_handshake_does_not_log_user_in(self):
-        client = Client(HTTP_HOST='192.168.2.72')
+        client = Client(HTTP_HOST='192.168.101.6')
 
         client.get(
             '/',
