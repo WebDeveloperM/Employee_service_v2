@@ -45,6 +45,16 @@ class SectionsPageTests(TestCase):
         self.assertIn('let previousDepartmentId = null;', html)                 # саҳифанинг биринчи қатори доим полоса билан бошланади
         self.assertEqual(html.count('<th class="px-5 py-4 text-left">Цех</th>'), 1)   # «Цех» устуни ўз жойида
 
+    def test_inner_section_shows_its_id_before_the_name_instead_of_the_arrow(self):
+        html = self.client.get('/sections/').content.decode()
+
+        # «1. Юридик бўлим»: ички бўлимда ID номдан олдин (стрелка ўрнига); ID бўлмаса стрелка қолади; асосий бўлимда префикс йўқ.
+        self.assertIn("const innerCode = String(section.code ?? '').trim();", html)
+        self.assertIn('const innerMarker = depth > 0', html)
+        self.assertIn('<span class="inner-section-code" title="Ички бўлим ID си">${esc(innerCode)}.</span>', html)
+        self.assertIn('<i class="fas fa-turn-up rotate-90 text-xs text-slate-300"></i>', html)   # ID сиз ички бўлим учун
+        self.assertIn('${innerMarker}\n                        <span>${esc(section.name)}</span>${childrenBadge}', html.replace('\r\n', '\n'))
+
     def test_departments_page_keeps_its_departments_table(self):
         html = self.client.get('/departments/').content.decode()
 

@@ -17,9 +17,9 @@
                 <i class="fas fa-phone text-violet-600"></i>
                 Телефон рақамлари импорти
             </button> -->
-            <button onclick="exportEmployees()"
-                class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
-                <i class="fas fa-file-export text-emerald-600"></i>
+            <button id="exportButton" onclick="exportEmployees()"
+                class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60">
+                <i id="exportButtonIcon" class="fas fa-file-export text-emerald-600"></i>
                 Excel экспорти
             </button>
             <a href="/employees/create/"
@@ -1180,6 +1180,25 @@
         });
     }
 
+    // Жадвал ва Excel экспорти бир хил филтрлар билан ишлайди: қидирув, цех, бўлим, «Ҳолати», табель, телефон.
+    function employeeFilterParams() {
+        const params = new URLSearchParams();
+        const search = document.getElementById('globalSearchInput').value.trim();
+        if (search) params.set('search', search);
+        const departmentId = document.getElementById('filterDepartment').value;
+        const sectionId = document.getElementById('filterSection').value;
+        if (departmentId) params.set('department_id', departmentId);
+        if (sectionId) params.set('section_id', sectionId);
+        // «Ҳолати»: active — фақат фаол (сукут), inactive — фақат фаол эмас, бўш — барчаси.
+        const status = document.getElementById('statusFilter').value;
+        if (status) params.set('status', status);
+        const tabelNumber = document.getElementById('tabelFilter').value.trim();
+        if (tabelNumber) params.set('tabel_number', tabelNumber);
+        const phone = document.getElementById('phoneFilter').value.trim();
+        if (phone) params.set('phone', phone);
+        return params;
+    }
+
     let employeesRequestSeq = 0;
 
     async function loadEmployees(page = 1) {
@@ -1199,25 +1218,9 @@
         }
 
         try {
-            const search = document.getElementById('globalSearchInput').value.trim();
-            const params = new URLSearchParams();
+            const params = employeeFilterParams();
             params.set('page', String(page));
             params.set('page_size', String(pageSize));
-            if (search) {
-                params.set('search', search);
-            }
-            const departmentId = document.getElementById('filterDepartment').value;
-            const sectionId = document.getElementById('filterSection').value;
-
-            if (departmentId) params.set('department_id', departmentId);
-            if (sectionId) params.set('section_id', sectionId);
-            // «Ҳолати»: active — фақат фаол (сукут), inactive — фақат фаол эмас, бўш — барчаси.
-            const status = document.getElementById('statusFilter').value;
-            if (status) params.set('status', status);
-            const tabelNumber = document.getElementById('tabelFilter').value.trim();
-            if (tabelNumber) params.set('tabel_number', tabelNumber);
-            const phone = document.getElementById('phoneFilter').value.trim();
-            if (phone) params.set('phone', phone);
 
             const payload = await apiRequest(`/template/employees/?${params.toString()}`);
             if (!isLatest()) {
@@ -1405,12 +1408,58 @@
         childcare_leave: 'Бола парваришлаш таътилида',
     };
 
-    function exportEmployees() {
-        const rows = filteredEmployees.length ? filteredEmployees : employeesCache;
-        if (!rows.length) {
-            showToast('Экспорт учун ходимлар йўқ', 'info');
+    // Сервер бир сўровда кўпи билан 100 та ходим беради (StandardResultsSetPagination.max_page_size).
+    const EXPORT_PAGE_SIZE = 100;
+
+    // Жадвалдаги ҳозирги филтрларга мос БАРЧА ходимлар (фақат кўриниб турган саҳифа эмас), жадвалдаги тартибда.
+    async function fetchAllEmployeesForExport() {
+        const fetchPage = async (page) => {
+            const params = employeeFilterParams();
+            params.set('page', String(page));
+            params.set('page_size', String(EXPORT_PAGE_SIZE));
+            return apiRequest(`/template/employees/?${params.toString()}`);
+        };
+
+        const first = await fetchPage(1);
+        const rows = Array.isArray(first?.data) ? [...first.data] : [];
+        const pages = Math.ceil(Number(first?.count || 0) / EXPORT_PAGE_SIZE);
+        for (let page = 2; page <= pages; page++) {
+            const next = await fetchPage(page);
+            if (Array.isArray(next?.data)) rows.push(...next.data);
+        }
+        return rows;
+    }
+
+    let exportInProgress = false;
+
+    async function exportEmployees() {
+        if (exportInProgress) {
             return;
         }
+        exportInProgress = true;
+        const button = document.getElementById('exportButton');
+        const icon = document.getElementById('exportButtonIcon');
+        button.disabled = true;
+        icon.className = 'fas fa-spinner fa-spin text-emerald-600';
+
+        try {
+            const rows = await fetchAllEmployeesForExport();
+            if (!rows.length) {
+                showToast('Экспорт учун ходимлар йўқ', 'info');
+                return;
+            }
+            writeEmployeesWorkbook(rows);
+            showToast(`${rows.length} та ходим Excel файлга сақланди`, 'success');
+        } catch (error) {
+            // apiRequest хатони ўзи кўрсатган (toast); бу ерда фақат тугмани тиклаймиз.
+        } finally {
+            exportInProgress = false;
+            button.disabled = false;
+            icon.className = 'fas fa-file-export text-emerald-600';
+        }
+    }
+
+    function writeEmployeesWorkbook(rows) {
 
         const data = rows.map((employee, i) => ({
             '№': i + 1,

@@ -415,6 +415,14 @@
 
             const row = document.createElement('tr');
             const depth = Number(section.depth || 0);
+            // Ички бўлим номи олдидан унинг ID си «1.Юридик бўлим» кўринишида чиқади (стрелка ўрнига); ID си бўлмаса, жойлашувни
+            // кўрсатиш учун стрелка қолади. Асосий бўлимларда ID алоҳида «ID» устунида.
+            const innerCode = String(section.code ?? '').trim();
+            const innerMarker = depth > 0
+                ? (innerCode
+                    ? `<span class="inner-section-code" title="Ички бўлим ID си">${esc(innerCode)}.</span>`
+                    : '<i class="fas fa-turn-up rotate-90 text-xs text-slate-300"></i>')
+                : '';
             const childrenBadge = section.children_count
                 ? `<span class="ml-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700" title="Ички бўлимлар сони">${section.children_count}</span>`
                 : '';
@@ -425,8 +433,8 @@
                 <td class="px-5 py-4 text-slate-500">${pageOffset + index + 1}</td>
                 <td class="px-5 py-4 text-slate-600">${esc(section.code) || '—'}</td>
                 <td class="px-5 py-4 font-semibold text-slate-900">
-                    <div class="flex items-center gap-2" style="padding-left:${depth * 1.75}rem" title="${esc(section.path || section.name)}">
-                        ${depth > 0 ? '<i class="fas fa-turn-up rotate-90 text-xs text-slate-300"></i>' : ''}
+                    <div class="flex items-center gap-1.5" style="padding-left:${depth * 1.75}rem" title="${esc(section.path || section.name)}">
+                        ${innerMarker}
                         <span>${esc(section.name)}</span>${childrenBadge}
                     </div>
                 </td>
