@@ -159,12 +159,13 @@ class WorkStatusFormTests(TestCase):
         self.assertIn("formData.append('work_status', ['inactive', 'working'].includes(employeeStatus) ? '' : employeeStatus);", html)
         self.assertNotIn("getElementById('is_active')", html)     # эски танлов қолмаган
 
-    def test_excel_export_names_the_leave_status(self):
+    def test_excel_export_has_no_status_column(self):
         html = self.web.get('/employees/').content.decode()
+        export = html[html.index('function writeEmployeesWorkbook(rows)'):html.index("XLSX.writeFile(wb, 'ходимлар.xlsx')")]
 
-        self.assertIn("'Ҳолати': !employee.is_active ? 'Фаол эмас' : (WORK_STATUS_LABELS[employee.work_status] || 'Фаол'),", html)
-        for label in ('Меҳнат таътилида', 'Хизмат сафарида', 'Касаллик таътилида', 'Бола парваришлаш таътилида'):
-            self.assertIn(label, html)
+        # Экспортда «Ҳолати» устуни йўқ (фойдаланувчи сўрови), шунинг учун ҳолат матнлари рўйхати ҳам керак эмас.
+        self.assertNotIn("'Ҳолати':", export)
+        self.assertNotIn('WORK_STATUS_LABELS', html)
 
 
 class StatusChartTests(TestCase):

@@ -1,3 +1,5 @@
+import re
+
 from django.contrib.auth.models import User
 from django.test import Client, TestCase
 from rest_framework.test import APIClient
@@ -73,6 +75,15 @@ class EmployeeExcelExportTests(TestCase):
         # Жадвал ҳам, экспорт ҳам шу битта функциядан фойдаланади (ва фақат бир марта ўқийди).
         self.assertEqual(html.count('employeeFilterParams()'), 3)                 # таъриф + жадвал + экспорт
         self.assertEqual(html.count("params.set('tabel_number'"), 1)
+
+    def test_export_columns_are_numbered_name_department_section_position_without_date_and_status(self):
+        html = self.html()
+        sheet = html[html.index('function writeEmployeesWorkbook(rows)'):html.index("XLSX.writeFile(wb, 'ходимлар.xlsx')")]
+
+        columns = re.findall(r"^\s+'([^']+)': ", sheet, re.M)
+        self.assertEqual(columns, ['№', 'Табель рақами', 'Исм', 'Фамилия', 'Отасининг исми', 'Цех', 'Бўлим', 'Лавозим'])
+        self.assertNotIn('Ишга қабул қилинган сана', sheet)
+        self.assertNotIn('Ҳолати', sheet)
 
     def test_export_button_shows_progress_and_blocks_double_clicks(self):
         html = self.html()
