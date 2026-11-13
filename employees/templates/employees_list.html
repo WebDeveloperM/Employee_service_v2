@@ -1287,8 +1287,9 @@
             <tr class="staff-group-row staff-group-department">
                 <td colspan="${COLUMN_COUNT}" class="${BANNER_CELL} py-4 text-lg">${escapeHtml(name)}</td>
             </tr>`;
-        // ички бўлим: тўлиқ йўл («Бўлим / Ички бўлим»), шунда қайси бўлимга тегишли эканини кўриб туради
-        const sectionLabel = (section) => Number(section.depth || 0) > 0 ? (section.path || section.name) : section.name;
+        // Полосада фақат бўлимнинг ўз номи («Бош технолог бўлими»); ички бўлимнинг тўлиқ йўли («Раҳбарият / Бош технолог бўлими»)
+        // сичқонча устига борилганда title да кўринади. Номлар цех ичида ноёб, шунинг учун битта ном аниқ бўлимни билдиради.
+        const sectionLabel = (section) => section.name;
         const sectionBanner = (section) => `
             <tr class="staff-group-row staff-group-section">
                 <td colspan="${COLUMN_COUNT}" class="${BANNER_CELL} border-t border-white/40 py-3 text-base" title="${escapeHtml(section.path || section.name)}">${escapeHtml(sectionLabel(section))}</td>

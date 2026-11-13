@@ -71,6 +71,50 @@ class SectionNameConflictTests(HierarchyTestCase):
         self.assertIn('department_id', self.error(response))
         self.assertFalse(Section.objects.filter(name='Цехсиз').exists())
 
+    def test_the_move_request_sent_by_the_sections_page_works_with_the_chosen_id(self):
+        # «Ички бўлим қўшиш» да номи мавжуд асосий бўлим билан бир хил бўлса, саҳифа шуни юборади (departments.html, saveSection).
+        existing = self.make('Ходимларни тайёрлаш ва қайта тайёрлаш бўлими')
+        hr = self.make('HR хизмати')
+        self.make('Ташкилий ривожлантириш', parent=hr, code='1')
+        self.make('Персонал билан ишлаш', parent=hr, code='3')
+        payload = {'name': existing.name, 'department_id': self.department.pk, 'parent_id': hr.pk, 'code': '4'}
+
+        response = self.client.put(f'{SECTIONS_URL}{existing.pk}/', payload, format='json')
+
+        self.assertEqual(response.status_code, 200, response.content)
+        existing.refresh_from_db()
+        self.assertEqual((existing.parent_id, existing.code, existing.name), (hr.pk, '4', 'Ходимларни тайёрлаш ва қайта тайёрлаш бўлими'))
+        self.assertEqual(Section.objects.filter(name=existing.name).count(), 1)   # нусха яратилмаган, фақат кўчирилган
+
+    def test_moving_with_an_id_already_used_by_the_parents_children_is_rejected_clearly(self):
+        existing = self.make('Кўчириладиган бўлим')
+        hr = self.make('HR хизмати')
+        self.make('Бошқа ички бўлим', parent=hr, code='4')
+
+        response = self.client.put(
+            f'{SECTIONS_URL}{existing.pk}/',
+            {'name': existing.name, 'department_id': self.department.pk, 'parent_id': hr.pk, 'code': '4'}, format='json',
+        )
+
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertIn('Бу юқори бўлимда шундай ID ли ички бўлим аллақачон мавжуд', ' '.join(response.json()['code']))
+        existing.refresh_from_db()
+        self.assertIsNone(existing.parent_id)   # хато бўлса, бўлим жойида қолади
+
+    def test_sections_page_offers_to_move_instead_of_creating_a_duplicate(self):
+        from django.test import Client
+
+        web = Client(HTTP_HOST='192.168.101.6')
+        web.force_login(self.admin)
+
+        html = web.get('/sections/').content.decode()
+
+        self.assertIn('if (!sectionId && formData.parent_id) {', html)
+        self.assertIn('!section.parent_id', html)                                    # фақат АСОСИЙ бўлим билан тўқнашганда
+        self.assertIn('ичига кўчирайликми?', html)
+        self.assertIn('Бўлимнинг ходимлари ва лавозимлари сақланади.', html)
+        self.assertIn("method: 'PUT'", html)
+
     def test_existing_top_level_section_can_be_moved_inside_a_parent_keeping_its_employees(self):
         # Тавсия этилган йўл: янги нусха яратиш ўрнига мавжуд бўлимни таҳрирлаб «Юқори бўлим» танлаш.
         existing = self.make('Ходимларни тайёрлаш бўлими')

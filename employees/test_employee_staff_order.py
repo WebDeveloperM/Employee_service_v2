@@ -160,6 +160,9 @@ class EmployeeTableFollowsStaffTreeOrderTests(TestCase):
         self.assertIn('const NO_BANNER_DEPARTMENTS = [', html)
         self.assertIn('.some((pattern) => pattern.test(departmentName))', html)
         self.assertIn('if (!hasNoBanner(departmentName)) {', html)
+        # Полосада фақат бўлимнинг ўз номи («Бош технолог бўлими»), тўлиқ йўл («Раҳбарият / …») эмас; йўл title да қолади.
+        self.assertIn('const sectionLabel = (section) => section.name;', html)
+        self.assertIn('title="${escapeHtml(section.path || section.name)}"', html)
         # «Раҳбарият» нинг бўлимсиз ходимлари тепасида цех номи оддий бўлим полосаси («Юридик хизмати» каби) бўлиб чиқади,
         # «Раҳбарият» бўлими бўлса, такрорланмайди.
         self.assertIn('const LEADERSHIP_DEPARTMENT = /^\\s*ра[хҳ]барият/i;', html)

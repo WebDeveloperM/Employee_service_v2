@@ -651,6 +651,46 @@
             parent_id: document.getElementById('sectionParentId').value ? Number(document.getElementById('sectionParentId').value) : null,
         };
 
+        // Бўлим номи цех ичида ноёб. Янги ИЧКИ бўлим номи мавжуд АСОСИЙ бўлим номи билан бир хил бўлса, одатда бу
+        // янги нусха эмас, шу бўлимни юқори бўлим ичига кўчириш демак: яратиш ўрнига кўчиришни таклиф қиламиз
+        // (ходимлар ва лавозимлар шу бўлимга боғлиқ бўлиб қолади).
+        if (!sectionId && formData.parent_id) {
+            const existing = departmentSectionsCache.find((section) => !section.parent_id
+                && section.name === formData.name.trim()
+                && String(section.department ? section.department.id : '') === String(formData.department_id));
+            if (existing) {
+                const parent = departmentSectionsCache.find((section) => section.id === formData.parent_id);
+                const agreed = confirmAction(
+                    `Бу цехда «${existing.name}» номли асосий бўлим аллақачон мавжуд (бўлим номи цех бўйича ноёб бўлиши керак).\n\n`
+                    + `Уни янгидан яратиш ўрнига «${parent ? parent.name : 'танланган бўлим'}» ичига кўчирайликми?\n`
+                    + 'Бўлимнинг ходимлари ва лавозимлари сақланади.',
+                );
+                if (!agreed) {
+                    return;
+                }
+                setLoading(button, true);
+                try {
+                    await apiRequest(`/template/sections/${existing.id}/`, {
+                        method: 'PUT',
+                        body: JSON.stringify({
+                            name: existing.name,
+                            department_id: formData.department_id,
+                            parent_id: formData.parent_id,
+                            code: formData.code || existing.code || '',
+                        }),
+                    });
+                    showToast(`«${existing.name}» бўлими «${parent ? parent.name : 'танланган бўлим'}» ичига кўчирилди`);
+                    hideSectionModal();
+                    await loadSections(sectionsCurrentPage);
+                } catch (error) {
+                    console.error('Бўлимни кўчиришда хато:', error);
+                } finally {
+                    setLoading(button, false);
+                }
+                return;
+            }
+        }
+
         setLoading(button, true);
         try {
             if (sectionId) {
