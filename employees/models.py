@@ -14,6 +14,24 @@ ROLE_CHOICES = [
     (ROLE_USER, 'Фойдаланувчи'),
 ]
 
+# Ходимнинг иш ҳолати (is_active=True бўлган ходим учун): иш жойида ёки вақтинча йўқ.
+# NULL — оддий иш ҳолати («Фаол», ишда). Ходим бу ҳолатларда ҳам фаол ҳисобланади: штатдаги ўрнини банд қилиб туради.
+WORK_STATUS_VACATION = 'vacation'
+WORK_STATUS_BUSINESS_TRIP = 'business_trip'
+WORK_STATUS_SICK_LEAVE = 'sick_leave'
+WORK_STATUS_CHILDCARE_LEAVE = 'childcare_leave'
+WORK_STATUS_CHOICES = [
+    (WORK_STATUS_VACATION, 'Меҳнат таътилида'),
+    (WORK_STATUS_BUSINESS_TRIP, 'Хизмат сафарида'),
+    (WORK_STATUS_SICK_LEAVE, 'Касаллик таътилида'),
+    (WORK_STATUS_CHILDCARE_LEAVE, 'Бола парваришлаш таътилида'),
+]
+
+# Ходим формасидаги «Ҳолати» танлови: Фаол + юқоридаги ҳолатлар + Фаол эмас.
+STATUS_WORKING = 'working'
+STATUS_INACTIVE = 'inactive'
+EMPLOYEE_STATUS_CHOICES = [(STATUS_WORKING, 'Фаол'), *WORK_STATUS_CHOICES, (STATUS_INACTIVE, 'Фаол эмас')]
+
 
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile', verbose_name='Пользователь')
@@ -175,6 +193,8 @@ class Employee(models.Model):
     date_of_change_position = models.DateField(null=True, blank=True, verbose_name='Дата изменения должности')
     slug = models.SlugField(unique=True, blank=True, verbose_name='Слаг')
     is_active = models.BooleanField(default=True, verbose_name='Активен')
+    # Иш ҳолати (таътил, хизмат сафари, касаллик, бола парвариши). NULL — оддий иш ҳолати. Янги nullable устун, эски маълумотга таъсир қилмайди.
+    work_status = models.CharField(max_length=20, choices=WORK_STATUS_CHOICES, null=True, blank=True, verbose_name='Статус работы')
     is_deleted = models.BooleanField(default=False, verbose_name='Удален')
     requires_face_id_checkout = models.BooleanField(default=True, verbose_name='Требует проверку по лицу')
     metadata = models.JSONField(default=dict, blank=True, verbose_name='Метаданные')
@@ -194,6 +214,13 @@ class Employee(models.Model):
     def __str__(self):
         parts = [self.last_name, self.first_name, self.surname]
         return ' '.join(part for part in parts if part).strip() or self.tabel_number
+
+    @property
+    def status_key(self):
+        """Формадаги «Ҳолати» қиймати: inactive / vacation / … / working."""
+        if not self.is_active:
+            return STATUS_INACTIVE
+        return self.work_status or STATUS_WORKING
 
     def save(self, *args, **kwargs):
         if not self.slug:

@@ -189,9 +189,11 @@
                     </div>
                     <div>
                         <label class="mb-2 block text-sm font-bold text-slate-700">Ҳолати</label>
-                        <select id="is_active" class="table-filter" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
-                            <option value="true" {% if employee.is_active %}selected{% endif %}>Фаол</option>
-                            <option value="false" {% if not employee.is_active %}selected{% endif %}>Фаол эмас</option>
+                        {# Фаол + иш ҳолатлари (таътил, хизмат сафари, касаллик, бола парвариши) + Фаол эмас. Сақлашда is_active ва work_status га ажратилади. #}
+                        <select id="employee_status" class="table-filter" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
+                            {% for value, label in status_choices %}
+                            <option value="{{ value }}" {% if value == employee.status_key %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
                         </select>
                     </div>
 
@@ -784,7 +786,10 @@
             formData.append('password_confirm', passwordConfirmVal);
         }
 
-        formData.append('is_active', document.getElementById('is_active').value === 'true');
+        // «Ҳолати» танлови: «inactive» — фаол эмас; «working» — фаол (ишда); қолганлари фаол + иш ҳолати (таътил, сафар, …).
+        const employeeStatus = document.getElementById('employee_status').value;
+        formData.append('is_active', employeeStatus !== 'inactive');
+        formData.append('work_status', ['inactive', 'working'].includes(employeeStatus) ? '' : employeeStatus);
 
         const faceIdCheckoutField = document.getElementById('requires_face_id_checkout');
         if (faceIdCheckoutField) {

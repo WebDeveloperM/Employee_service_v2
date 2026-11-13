@@ -1397,6 +1397,14 @@
         loadEmployees(page);
     }
 
+    // Ходим формасидаги «Ҳолати» (models.py даги WORK_STATUS_CHOICES билан бир хил): таътил, хизмат сафари, касаллик, бола парвариши.
+    const WORK_STATUS_LABELS = {
+        vacation: 'Меҳнат таътилида',
+        business_trip: 'Хизмат сафарида',
+        sick_leave: 'Касаллик таътилида',
+        childcare_leave: 'Бола парваришлаш таътилида',
+    };
+
     function exportEmployees() {
         const rows = filteredEmployees.length ? filteredEmployees : employeesCache;
         if (!rows.length) {
@@ -1414,7 +1422,7 @@
             'Бўлим': employee.section?.name || '',
             'Лавозим': employee.position || '',
             'Ишга қабул қилинган сана': employee.date_of_employment || '',
-            'Ҳолати': employee.is_active ? 'Фаол' : 'Фаол эмас',
+            'Ҳолати': !employee.is_active ? 'Фаол эмас' : (WORK_STATUS_LABELS[employee.work_status] || 'Фаол'),
         }));
 
         const ws = XLSX.utils.json_to_sheet(data);

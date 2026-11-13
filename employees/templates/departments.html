@@ -400,7 +400,19 @@
         tableBody.innerHTML = '';
         sectionsById = new Map(sections.map((section) => [section.id, section]));
 
+        let previousDepartmentId = null;   // null — саҳифадаги биринчи қатор: тепасида ҳар доим цех номи туради
         sections.forEach((section, index) => {
+            // «Бўлимлар» саҳифасида бўлимлар цехлар бўйича гуруҳланган (сервер шундай тартиблайди): ҳар бир цехнинг биринчи
+            // бўлими тепасида цех номи полоса бўлиб туради (Ходимлар рўйхатидаги каби). Қатор рақами полосалар билан бузилмайди.
+            const departmentId = section.department ? String(section.department.id) : '';
+            if (SECTIONS_ONLY && departmentId !== previousDepartmentId) {
+                const banner = document.createElement('tr');
+                banner.className = 'section-department-row';
+                banner.innerHTML = `<td colspan="5" class="bg-[var(--primary)] px-5 py-3.5 text-center text-base font-semibold text-white">${esc(section.department ? section.department.name : 'Цех кўрсатилмаган')}</td>`;
+                tableBody.appendChild(banner);
+            }
+            previousDepartmentId = departmentId;
+
             const row = document.createElement('tr');
             const depth = Number(section.depth || 0);
             const childrenBadge = section.children_count

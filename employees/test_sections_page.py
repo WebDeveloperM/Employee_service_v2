@@ -35,6 +35,16 @@ class SectionsPageTests(TestCase):
             self.assertNotIn(departments_only, html)
         self.assertIn('<title>Бўлимлар - Ходимлар хизмати</title>', html)
 
+    def test_sections_page_puts_the_department_name_banner_above_each_departments_first_section(self):
+        html = self.client.get('/sections/').content.decode()
+
+        # Банner фақат «Бўлимлар» саҳифасида (SECTIONS_ONLY), ҳар бир цехнинг биринчи бўлими тепасида, 5 устунга чўзилади.
+        self.assertIn('if (SECTIONS_ONLY && departmentId !== previousDepartmentId) {', html)
+        self.assertIn("banner.className = 'section-department-row';", html)
+        self.assertIn('<td colspan="5" class="bg-[var(--primary)]', html)
+        self.assertIn('let previousDepartmentId = null;', html)                 # саҳифанинг биринчи қатори доим полоса билан бошланади
+        self.assertEqual(html.count('<th class="px-5 py-4 text-left">Цех</th>'), 1)   # «Цех» устуни ўз жойида
+
     def test_departments_page_keeps_its_departments_table(self):
         html = self.client.get('/departments/').content.decode()
 

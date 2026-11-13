@@ -56,9 +56,34 @@
         </div>
         {% endfor %}
     </div>
+
+    {# Тизимдаги ходимлар ҳолати: карталар қаторидан пастда алоҳида катта карта — диаграмма чапда, жадвал ўнгда. Маълумот реал: ходим формасидаги «Ҳолати» дан. #}
+    <div class="rounded-xl border border-slate-100 bg-white p-5 shadow-sm sm:p-6">
+        <h3 class="font-display text-lg font-bold text-slate-800">{{ status_chart.title }}</h3>
+        <div class="mt-2 grid items-center gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)] lg:gap-10">
+            <div class="pie-chart relative w-full" data-chart="{{ status_chart.key }}" role="img" aria-label="{{ status_chart.title }}"></div>
+            <div>
+                <table class="w-full border border-slate-200 text-sm text-slate-700">
+                    <tbody>
+                        {% for item in status_chart.rows %}
+                        <tr class="{% if not forloop.first %}border-t border-slate-200 {% endif %}{% if forloop.counter0|divisibleby:2 %}bg-white{% else %}bg-slate-50{% endif %}">
+                            <td class="px-3 py-2.5">
+                                {% if item.color %}<span class="mr-2 inline-block h-2.5 w-2.5 rounded-full align-middle" style="background: {{ item.color }}"></span>{% endif %}{{ item.label }}
+                            </td>
+                            <td class="w-1/4 border-l border-slate-200 px-3 py-2.5 font-semibold text-slate-900">{{ item.value }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% if status_chart.note %}
+                <p class="mt-2 text-xs font-semibold text-slate-400">{{ status_chart.note }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
 </section>
 
-{{ charts|json_script:"dashboardChartsData" }}
+{{ all_charts|json_script:"dashboardChartsData" }}
 
 <script>
     // 3D доира диаграммалар (кутубхонасиз, SVG): ташқарида ёзувлар, устига олиб борилганда тўлиқ маълумот.
@@ -171,7 +196,12 @@
             const depth = rx * DEPTH;
             const cx = width / 2;
             const cy = (height - (2 * ry + depth)) / 2 + ry;   // шакл вертикал бўйича ўртада
+            // «Бублик» (тешикли) диаграмма: hole — тешикнинг ташқи радиусга нисбати (0 — оддий доира).
+            const hole = Math.min(0.8, Math.max(0, Number(chart.hole) || 0));
+            const irx = rx * hole;
+            const iry = ry * hole;
             const point = (angle, dy = 0) => [cx + rx * Math.cos(angle), cy + ry * Math.sin(angle) + dy];
+            const innerPoint = (angle, dy = 0) => [cx + irx * Math.cos(angle), cy + iry * Math.sin(angle) + dy];
 
             // Кенглик 100%: SVG ҳеч қачон контейнерни кенгайтирмайди (эски чизма вақтинча кичраяди, кейин қайта чизилади).
             const svg = svgElement('svg', { width: '100%', height, viewBox: `0 0 ${width} ${height}`, 'aria-hidden': 'true' });
@@ -190,51 +220,86 @@
                 return item;
             });
 
+            // Қатламлар: аввал барча деворлар, кейин устки юзалар — бўлаклар бир-бирининг деворини нотўғри ёпиб қўймайди.
+            const wallLayer = svgElement('g', {}, svg);
+            const topLayer = svgElement('g', {}, svg);
+
             const hitAreas = [];
             items.forEach(item => {
-                const group = svgElement('g', {}, svg);
-                group.style.transition = 'transform 0.15s ease-out';
+                const elements = [];    // шу бўлакнинг кўринадиган қисмлари: сичқонча устида бирга кўтарилади
                 const hitShapes = [];
+                const addElement = (layer, attributes) => {
+                    const element = svgElement('path', attributes, layer);
+                    element.style.transition = 'transform 0.15s ease-out';
+                    elements.push(element);
+                    hitShapes.push(attributes.d);
+                };
 
-                // Ён девор: фақат олдинги (пастки) ярим эллипсда кўринади.
+                // Ташқи девор: фақат олдинги (пастки) ярим эллипсда кўринади.
                 const wallStart = Math.max(item.start, 0);
                 const wallEnd = Math.min(item.end, Math.PI);
                 if (wallEnd > wallStart) {
                     const [x0, y0] = point(wallStart);
                     const [x1, y1] = point(wallEnd);
-                    const wallPath = `M${x0} ${y0} A${rx} ${ry} 0 0 1 ${x1} ${y1} L${x1} ${y1 + depth} A${rx} ${ry} 0 0 0 ${x0} ${y0 + depth} Z`;
-                    svgElement('path', { d: wallPath, fill: darken(item.slice.color, 0.22) }, group);
-                    hitShapes.push(wallPath);
+                    addElement(wallLayer, {
+                        d: `M${x0} ${y0} A${rx} ${ry} 0 0 1 ${x1} ${y1} L${x1} ${y1 + depth} A${rx} ${ry} 0 0 0 ${x0} ${y0 + depth} Z`,
+                        fill: darken(item.slice.color, 0.22),
+                    });
                 }
 
+                // Ички девор («бублик» тешигининг орқа томони): тешик орқали фақат орқа ярим эллипс кўринади.
+                if (hole > 0) {
+                    [[-Math.PI / 2, 0], [Math.PI, 1.5 * Math.PI]].forEach(([from, to]) => {
+                        const innerStart = Math.max(item.start, from);
+                        const innerEnd = Math.min(item.end, to);
+                        if (innerEnd > innerStart) {
+                            const [x0, y0] = innerPoint(innerStart);
+                            const [x1, y1] = innerPoint(innerEnd);
+                            addElement(wallLayer, {
+                                d: `M${x0} ${y0} A${irx} ${iry} 0 0 1 ${x1} ${y1} L${x1} ${y1 + depth} A${irx} ${iry} 0 0 0 ${x0} ${y0 + depth} Z`,
+                                fill: darken(item.slice.color, 0.32),
+                            });
+                        }
+                    });
+                }
+
+                // Устки юза: доира бўлаги ёки (тешикли бўлса) ҳалқа бўлаги.
                 const [x0, y0] = point(item.start);
                 const [x1, y1] = point(item.end);
-                const topPath = `M${cx} ${cy} L${x0} ${y0} A${rx} ${ry} 0 ${item.end - item.start > Math.PI ? 1 : 0} 1 ${x1} ${y1} Z`;
-                svgElement('path', {
+                const large = item.end - item.start > Math.PI ? 1 : 0;
+                let topPath;
+                if (hole > 0) {
+                    const [ix0, iy0] = innerPoint(item.start);
+                    const [ix1, iy1] = innerPoint(item.end);
+                    topPath = `M${x0} ${y0} A${rx} ${ry} 0 ${large} 1 ${x1} ${y1} L${ix1} ${iy1} A${irx} ${iry} 0 ${large} 0 ${ix0} ${iy0} Z`;
+                } else {
+                    topPath = `M${cx} ${cy} L${x0} ${y0} A${rx} ${ry} 0 ${large} 1 ${x1} ${y1} Z`;
+                }
+                addElement(topLayer, {
                     d: topPath,
                     fill: item.slice.color,
                     stroke: 'rgba(255, 255, 255, 0.45)',
                     'stroke-width': 1,
                     'stroke-linejoin': 'round',
-                }, group);
-                hitShapes.push(topPath);
+                });
 
-                hitAreas.push({ item, group, hitShapes });
+                hitAreas.push({ item, elements, hitShapes });
             });
 
             // Кўринмас, жойидан қўзғалмайдиган ҳодиса қатлами: бўлак кўтарилса ҳам курсор шу соҳада қолади.
-            hitAreas.forEach(({ item, group, hitShapes }) => {
+            hitAreas.forEach(({ item, elements, hitShapes }) => {
                 const hit = svgElement('g', { fill: 'transparent' }, svg);
                 hit.style.pointerEvents = 'all';
                 hitShapes.forEach(d => svgElement('path', { d }, hit));
 
+                const lift = (transform) => elements.forEach(element => { element.style.transform = transform; });
                 hit.addEventListener('pointerenter', event => {
-                    group.style.transform = `translate(${Math.cos(item.mid) * 7}px, ${Math.sin(item.mid) * 7 * 0.62}px)`;
+                    lift(`translate(${Math.cos(item.mid) * 7}px, ${Math.sin(item.mid) * 7 * 0.62}px)`);
                     showTooltip(chart, event, item);
                 });
                 hit.addEventListener('pointermove', event => showTooltip(chart, event, item));
                 hit.addEventListener('pointerleave', () => {
-                    group.style.transform = '';
+                    lift('');
                     tooltip.classList.add('hidden');
                 });
             });
@@ -308,7 +373,7 @@
             // Контейнер баландлиги доимий ва ичидагиси ташқарига чиқмайди: диаграмма саҳифа ўлчамига таъсир қилмайди.
             container.style.height = `${CHART_HEIGHT}px`;
             container.style.overflow = 'hidden';
-            const chart = { container, slices: data ? data.slices : [], tooltip: createTooltip(), width: 0 };
+            const chart = { container, slices: data ? data.slices : [], hole: data ? data.hole : 0, tooltip: createTooltip(), width: 0 };
             drawChart(chart);
             return chart;
         });

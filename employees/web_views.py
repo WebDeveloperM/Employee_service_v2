@@ -16,7 +16,7 @@ from rest_framework.response import Response
 
 from .bnpzid import build_bnpzid_redirect, get_bnpzid_authorize_request
 from .dashboard_stats import build_dashboard_charts
-from .models import Department, Employee, Section, ROLE_ADMIN, ROLE_CHOICES, ROLE_HR, UserProfile
+from .models import Department, EMPLOYEE_STATUS_CHOICES, Employee, Section, ROLE_ADMIN, ROLE_CHOICES, ROLE_HR, UserProfile
 from .ordering import order_sections_by_code
 from .permissions import is_admin_or_hr
 from .sections_tree import annotate_path_labels, order_depth_first
@@ -310,9 +310,13 @@ class DashboardView(AuthenticatedTemplateView):
                 'data': self.get_dashboard_data()
             })
         
+        charts = build_dashboard_charts(include_staff=is_admin_or_hr(request.user))
         return render(request, self.template_name, {
             'stats': self.get_dashboard_data(),
-            'charts': build_dashboard_charts(include_staff=is_admin_or_hr(request.user)),
+            # Штат/ёш/жинс — карталар қаторида; «Тизимдаги ходимлар ҳолати» — пастда алоҳида катта картада.
+            'charts': [chart for chart in charts if chart['key'] != 'status'],
+            'status_chart': next(chart for chart in charts if chart['key'] == 'status'),
+            'all_charts': charts,
         })
 
     def get_dashboard_data(self):
@@ -386,6 +390,7 @@ class EmployeeDetailWebView(AuthenticatedTemplateView):
         return render(request, self.template_name, {
             'employee': employee,
             'page_mode': 'view',
+            'status_choices': EMPLOYEE_STATUS_CHOICES,
             'can_edit_sizes_only': can_edit_sizes_only,
             'departments': Department.objects.order_by('sort_order', 'name'),
             'sections': get_section_choices(),
@@ -410,6 +415,7 @@ class EmployeeEditWebView(AuthenticatedTemplateView):
         return render(request, self.template_name, {
             'employee': employee,
             'page_mode': 'edit',
+            'status_choices': EMPLOYEE_STATUS_CHOICES,
             'can_edit_sizes_only': False,
             'departments': Department.objects.order_by('sort_order', 'name'),
             'sections': get_section_choices(),

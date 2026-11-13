@@ -2,9 +2,13 @@
 
 Только читает базу. Считаются активные (не удалённые) сотрудники — так же, как «занято» в штате.
 """
+from collections import Counter
+
 from django.utils import timezone
 
-from .models import Employee
+from .models import (
+    Employee, WORK_STATUS_BUSINESS_TRIP, WORK_STATUS_CHILDCARE_LEAVE, WORK_STATUS_SICK_LEAVE, WORK_STATUS_VACATION,
+)
 from .staff import collect_staff_stats, plain_number
 
 
@@ -34,9 +38,9 @@ def age_on(today, born):
     return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
 
 
-def make_chart(key, title, rows, slices=None, note=''):
-    """rows — строки таблицы под диаграммой; slices — доли круга (по умолчанию все строки)."""
-    return {'key': key, 'title': title, 'rows': rows, 'slices': rows if slices is None else slices, 'note': note}
+def make_chart(key, title, rows, slices=None, note='', hole=0):
+    """rows — строки таблицы под диаграммой; slices — доли круга (по умолчанию все строки); hole — доля отверстия (0 — круг, 0.5 — «бублик»)."""
+    return {'key': key, 'title': title, 'rows': rows, 'slices': rows if slices is None else slices, 'note': note, 'hole': hole}
 
 
 def row(label, value, color=None):
@@ -91,9 +95,29 @@ def gender_chart():
     return make_chart('gender', 'Эркаклар & Аёллар', rows, note=note)
 
 
+def status_chart():
+    """Тизимдаги ходимлар ҳолати: фаол ходимлар иш ҳолати бўйича (ишда, таътил, хизмат сафари, касаллик, бола парвариши).
+
+    Ходим формасидаги «Ҳолати» дан олинади: work_status бўш (NULL) бўлса — «ишда». «Фаол эмас» ходимлар диаграммага
+    кирмайди, лекин жами тушунарли бўлиши учун изоҳда санаб қўйилади.
+    """
+    counts = Counter(active_employees().values_list('work_status', flat=True).iterator())
+    working = sum(count for status, count in counts.items() if not status)   # NULL ва бўш қатор
+    rows = [
+        row('Ишдаги ходимлар', working, BLUE),
+        row('Меҳнат таътилидаги ходимлар', counts[WORK_STATUS_VACATION], ORANGE),
+        row('Хизмат сафаридаги ходимлар', counts[WORK_STATUS_BUSINESS_TRIP], LIGHT_BLUE),
+        row('Касаллик таътилида', counts[WORK_STATUS_SICK_LEAVE], DARK_BLUE),
+        row('Бола парваришлаш таътилида', counts[WORK_STATUS_CHILDCARE_LEAVE], GRAY),
+    ]
+    inactive = Employee.objects.filter(is_deleted=False, is_active=False).count()
+    note = f'Фаол эмас ходимлар (диаграммага кирмайди): {inactive}' if inactive else ''
+    return make_chart('status', 'Тизимдаги ходимлар ҳолати', rows, note=note, hole=0.52)
+
+
 def build_dashboard_charts(*, include_staff, today=None):
-    """Штат — фақат администратор/HR учун (худди штат API си каби)."""
+    """Штат — фақат администратор/HR учун (худди штат API си каби). Ҳолат диаграммаси доим охирида (алоҳида катта карта)."""
     today = today or timezone.localdate()
     charts = [staff_chart()] if include_staff else []
-    charts.extend([age_chart(today), gender_chart()])
+    charts.extend([age_chart(today), gender_chart(), status_chart()])
     return charts

@@ -9,7 +9,7 @@ from django.core.files.base import ContentFile
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
-from .models import Department, Employee, Section, StaffPosition, UserProfile, ROLE_CHOICES, ROLE_USER
+from .models import Department, Employee, Section, StaffPosition, UserProfile, ROLE_CHOICES, ROLE_USER, WORK_STATUS_CHOICES
 from .sections_tree import MAX_SECTION_DEPTH, SectionIndex
 from .staff import collect_staff_stats, vacant_places
 
@@ -479,6 +479,11 @@ class EmployeeSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, allow_blank=True)
     password_confirm = serializers.CharField(write_only=True, required=False, allow_blank=True)
     role = serializers.ChoiceField(choices=ROLE_CHOICES, default=ROLE_USER, write_only=True, required=False)
+    # Иш ҳолати: бўш/null — оддий «Фаол» (ишда); қолганлари — таътил, хизмат сафари, касаллик, бола парвариши.
+    work_status = serializers.ChoiceField(
+        choices=WORK_STATUS_CHOICES, required=False, allow_null=True, allow_blank=True,
+        error_messages={'invalid_choice': 'Номаълум ҳолат танланган.'},
+    )
 
     class Meta:
         model = Employee
@@ -519,6 +524,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'date_of_change_position',
             'slug',
             'is_active',
+            'work_status',
             'is_deleted',
             'requires_face_id_checkout',
             'metadata',
@@ -527,7 +533,14 @@ class EmployeeSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['slug', 'created_at', 'updated_at', 'password_hash']
 
+    def validate_work_status(self, value):
+        return value or None   # бўш қатор ва null — «ишда» (NULL сақланади)
+
     def validate(self, attrs):
+        # «Фаол эмас» ходимда таътил/сафар ҳолати бўлмайди: у ишдан чиққан.
+        is_active = attrs.get('is_active', self.instance.is_active if self.instance is not None else True)
+        if not is_active:
+            attrs['work_status'] = None   # фаол эмас қилинса, эски ҳолат (масалан, таътил) ҳам тозаланади
         department = attrs.get('department', getattr(self.instance, 'department', None))
         section = attrs.get('section', getattr(self.instance, 'section', None))
         if department and section and section.department_id != department.id:
