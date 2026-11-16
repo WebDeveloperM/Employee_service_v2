@@ -5,6 +5,9 @@ from django.contrib.auth.models import User, Group
 from django.template.defaultfilters import slugify
 
 
+# Ходим разряди: 1–2 хонали рақам ва охирида ихтиёрий «*» (4, 12, 12*).
+GRADE_RE = re.compile(r'(\d{1,2})(\*?)')
+
 ROLE_ADMIN = 'admin'
 ROLE_HR = 'hr'
 ROLE_USER = 'user'
@@ -188,7 +191,8 @@ class Employee(models.Model):
     department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True, related_name='employees', verbose_name='Цех')
     section = models.ForeignKey(Section, on_delete=models.SET_NULL, null=True, blank=True, related_name='employees', verbose_name='Отдел')
     position = models.TextField(blank=True, default='', verbose_name='Должность')
-    grade = models.PositiveSmallIntegerField(null=True, blank=True, verbose_name='Разряд')
+    # Разряд: 1–2 хонали рақам, охирида ихтиёрий «*» (масалан, 4, 12, 12*). NULL — разряд йўқ.
+    grade = models.CharField(max_length=10, null=True, blank=True, verbose_name='Разряд')
     date_of_employment = models.DateField(null=True, blank=True, verbose_name='Дата приема на работу')
     date_of_change_position = models.DateField(null=True, blank=True, verbose_name='Дата изменения должности')
     slug = models.SlugField(unique=True, blank=True, verbose_name='Слаг')

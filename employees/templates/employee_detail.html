@@ -140,7 +140,7 @@
                         </div>
                         <div>
                             <label class="mb-2 block text-sm font-bold text-slate-700">Даража (разряд)</label>
-                            <input type="number" id="grade" min="0" max="99" step="1" inputmode="numeric" value="{{ employee.grade|default_if_none:'' }}" class="table-filter" placeholder="№" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
+                            <input type="text" id="grade" maxlength="3" inputmode="tel" autocomplete="off" oninput="this.value = this.value.replace(/[^0-9*]/g, '')" value="{{ employee.grade|default_if_none:'' }}" title="Рақам, охирида «*» бўлиши мумкин: 12 ёки 12*" class="table-filter" placeholder="№" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
                         </div>
                     </div>
                     <div>

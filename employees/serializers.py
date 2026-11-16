@@ -9,7 +9,7 @@ from django.core.files.base import ContentFile
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
-from .models import Department, Employee, Section, StaffPosition, UserProfile, ROLE_CHOICES, ROLE_USER, WORK_STATUS_CHOICES
+from .models import Department, Employee, Section, StaffPosition, UserProfile, GRADE_RE, ROLE_CHOICES, ROLE_USER, WORK_STATUS_CHOICES
 from .sections_tree import MAX_SECTION_DEPTH, SectionIndex
 from .staff import collect_staff_stats, vacant_places
 
@@ -535,6 +535,16 @@ class EmployeeSerializer(serializers.ModelSerializer):
 
     def validate_work_status(self, value):
         return value or None   # бўш қатор ва null — «ишда» (NULL сақланади)
+
+    def validate_grade(self, value):
+        value = (value or '').strip()
+        if not value:
+            return None   # бўш — разряд йўқ (NULL сақланади)
+        match = GRADE_RE.fullmatch(value)
+        if not match:
+            raise serializers.ValidationError('Даража 1–2 хонали рақам бўлиши керак, охирида «*» қўйиш мумкин (масалан: 12 ёки 12*).')
+        digits, star = match.groups()
+        return f'{int(digits)}{star}'   # «04» → «4», «04*» → «4*»
 
     def validate(self, attrs):
         # «Фаол эмас» ходимда таътил/сафар ҳолати бўлмайди: у ишдан чиққан.

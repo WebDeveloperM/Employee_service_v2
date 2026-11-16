@@ -998,15 +998,42 @@ class EmployeeGradeTests(TestCase):
 
         response = client.patch(f'/api/v1/employees/{self.employee.slug}/', {'grade': '4'}, format='multipart')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['grade'], 4)
+        self.assertEqual(response.data['grade'], '4')
         self.employee.refresh_from_db()
-        self.assertEqual(self.employee.grade, 4)
+        self.assertEqual(self.employee.grade, '4')
+
+        response = client.patch(f'/api/v1/employees/{self.employee.slug}/', {'grade': '12*'}, format='multipart')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['grade'], '12*')
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.grade, '12*')
 
         # The edit form always submits the field, empty when left blank.
         response = client.patch(f'/api/v1/employees/{self.employee.slug}/', {'grade': ''}, format='multipart')
         self.assertEqual(response.status_code, 200)
         self.employee.refresh_from_db()
         self.assertIsNone(self.employee.grade)
+
+    def test_grade_rejects_invalid_values(self):
+        client = APIClient(HTTP_HOST='192.168.101.6')
+        client.force_authenticate(user=self.admin)
+
+        for bad in ['abc', '*', '*12', '1*2', '12**', '123', '-4']:
+            with self.subTest(grade=bad):
+                response = client.patch(f'/api/v1/employees/{self.employee.slug}/', {'grade': bad}, format='multipart')
+                self.assertEqual(response.status_code, 400)
+                self.assertIn('grade', response.data)
+        self.employee.refresh_from_db()
+        self.assertIsNone(self.employee.grade)
+
+    def test_grade_leading_zero_is_normalized(self):
+        client = APIClient(HTTP_HOST='192.168.101.6')
+        client.force_authenticate(user=self.admin)
+
+        response = client.patch(f'/api/v1/employees/{self.employee.slug}/', {'grade': ' 04* '}, format='multipart')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['grade'], '4*')
 
     def test_grade_is_optional_on_create(self):
         client = APIClient(HTTP_HOST='192.168.101.6')
