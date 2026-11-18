@@ -805,6 +805,35 @@ class EmployeeExcelImportTemplateViewTests(TestCase):
         self.assertEqual(response.status_code, 201, response.data)
         self.assertTrue(Employee.objects.filter(tabel_number='EMP-913').exists())
 
+    def test_import_excel_accepts_a_file_exported_by_the_employees_page(self):
+        """«Excel экспорти» файли (барча устунлар) қайта юкланади: ўқиладиганлар сақланади, қолганлари ўтказиб юборилади."""
+        response = self.client.post(
+            '/api/template/employees/import-excel/',
+            {
+                'rows': [{
+                    '№': 1, 'Табель рақами': 'EXP-1', 'Исм': 'Аҳмад', 'Фамилия': 'Раҳматов', 'Отасининг исми': 'Хасаналиевич',
+                    'Жинси': 'Аёл', 'Туғилган сана': '07.03.1985', 'Телефон 1': '+998901234567', 'Телефон 2': '+998712345678',
+                    'Цех': 'Сув цехи', 'Цех раҳбари': 'Бобоев Б.Б.', 'Бўлим': 'Лаборатория', 'Лавозим': 'Слесарь',
+                    'Даража (разряд)': '12*', 'Лавозим тоифаси': 'Мутахассис', 'Ходимлар тоифаси': 'Техник ходимлар',
+                    'Иш тартиби': 'Сменада', 'Ҳолати': 'Меҳнат таътилида', 'Ишга қабул қилинган сана': '20.01.2015',
+                    'Лавозим ўзгарган сана': '01.06.2020', 'Логин': 'rahmatov', 'Махсус кийим': '52', 'Оёқ кийим': '42',
+                    'Куртка': 'L', 'Футболка': 'XL', 'Халат': '54', 'Фотосурат (ҳавола)': 'http://example.com/a.jpg',
+                }],
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        employee = Employee.objects.get(tabel_number='EXP-1')
+        self.assertEqual((employee.first_name, employee.last_name, employee.surname, employee.gender), ('Аҳмад', 'Раҳматов', 'Хасаналиевич', 'F'))
+        self.assertEqual((str(employee.date_of_birth), str(employee.date_of_employment), str(employee.date_of_change_position)), ('1985-03-07', '2015-01-20', '2020-06-01'))
+        self.assertEqual((employee.phone_number_1, employee.phone_number_2), ('+998901234567', '+998712345678'))
+        self.assertEqual((employee.department.name, employee.section.name, employee.position), ('Сув цехи', 'Лаборатория', 'Слесарь'))
+        self.assertEqual(
+            (employee.special_clothing_size, employee.shoe_size, employee.jacket_size, employee.tshirt_size, employee.clothe_size),
+            ('52', '42', 'L', 'XL', '54'),
+        )
+
     def test_import_excel_rejects_duplicate_uploaded_image_names(self):
         response = self.client.post(
             '/api/template/employees/import-excel/',

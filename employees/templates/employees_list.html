@@ -1451,21 +1451,66 @@
         }
     }
 
-    function writeEmployeesWorkbook(rows) {
-        const data = rows.map((employee, i) => ({
-            '№': i + 1,
+    // «Ҳолати» ходим карточкасидаги каби: Фаол / таътил, сафар, касаллик, бола парвариши / Фаол эмас.
+    const EXPORT_WORK_STATUS_LABELS = {
+        vacation: 'Меҳнат таътилида',
+        business_trip: 'Хизмат сафарида',
+        sick_leave: 'Касаллик таътилида',
+        childcare_leave: 'Бола парваришлаш таътилида',
+    };
+    const EXPORT_GENDER_LABELS = { M: 'Эркак', F: 'Аёл' };
+
+    function exportStatusLabel(employee) {
+        if (employee.is_active === false) return 'Фаол эмас';
+        return EXPORT_WORK_STATUS_LABELS[employee.work_status] || 'Фаол';
+    }
+
+    // API санани «дд/мм/гггг» беради; Excel файлда «дд.мм.гггг» (бу ёзув импортда ҳам ўқилади).
+    function exportDate(value) {
+        return value ? String(value).replace(/\//g, '.') : '';
+    }
+
+    // Ходим карточкасидаги барча маълумотлар. Сарлавҳалар импорт кутадиганлар билан бир хил (файлни қайта юклаш мумкин):
+    // импорт билмайдиган устунлар (Даража, тоифалар, Иш тартиби, Ҳолати ва ҳ.к.) шунчаки ўтказиб юборилади.
+    function employeeExportRow(employee, index) {
+        return {
+            '№': index + 1,
             'Табель рақами': employee.tabel_number || '',
             'Исм': employee.first_name || '',
             'Фамилия': employee.last_name || '',
             'Отасининг исми': employee.surname || '',
+            'Жинси': EXPORT_GENDER_LABELS[employee.gender] || '',
+            'Туғилган сана': exportDate(employee.date_of_birth),
+            'Телефон 1': employee.phone_number_1 || '',
+            'Телефон 2': employee.phone_number_2 || '',
             'Цех': employee.department?.name || '',
+            'Цех раҳбари': employee.department?.boss_full_name || '',
             'Бўлим': employee.section?.name || '',
             'Лавозим': employee.position || '',
-        }));
+            'Даража (разряд)': employee.grade || '',
+            'Лавозим тоифаси': employee.position_category?.name || '',
+            'Ходимлар тоифаси': employee.employee_category?.name || '',
+            'Иш тартиби': employee.work_schedule?.name || '',
+            'Ҳолати': exportStatusLabel(employee),
+            'Ишга қабул қилинган сана': exportDate(employee.date_of_employment),
+            'Лавозим ўзгарган сана': exportDate(employee.date_of_change_position),
+            'Логин': employee.login || '',
+            'Махсус кийим': employee.special_clothing_size || '',
+            'Оёқ кийим': employee.shoe_size || '',
+            'Куртка': employee.jacket_size || '',
+            'Футболка': employee.tshirt_size || '',
+            'Халат': employee.clothe_size || '',
+            'Фотосурат (ҳавола)': employee.base_image_url || '',
+        };
+    }
+
+    function writeEmployeesWorkbook(rows) {
+        const data = rows.map(employeeExportRow);
 
         const ws = XLSX.utils.json_to_sheet(data);
+        const MAX_COLUMN_WIDTH = 60;
         const colWidths = Object.keys(data[0]).map(key => ({
-            wch: Math.max(key.length, ...data.map(r => String(r[key]).length)) + 2
+            wch: Math.min(MAX_COLUMN_WIDTH, data.reduce((width, row) => Math.max(width, String(row[key]).length), key.length) + 2)
         }));
         ws['!cols'] = colWidths;
 

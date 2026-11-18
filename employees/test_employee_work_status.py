@@ -6,7 +6,7 @@ from django.test import Client, TestCase
 from rest_framework.test import APIClient
 
 from .dashboard_stats import build_dashboard_charts
-from .models import EMPLOYEE_STATUS_CHOICES, Employee, ROLE_ADMIN, UserProfile
+from .models import EMPLOYEE_STATUS_CHOICES, Employee, ROLE_ADMIN, UserProfile, WORK_STATUS_CHOICES
 
 
 def make_employee(tabel, **fields):
@@ -159,13 +159,16 @@ class WorkStatusFormTests(TestCase):
         self.assertIn("formData.append('work_status', ['inactive', 'working'].includes(employeeStatus) ? '' : employeeStatus);", html)
         self.assertNotIn("getElementById('is_active')", html)     # эски танлов қолмаган
 
-    def test_excel_export_has_no_status_column(self):
+    def test_excel_export_has_the_status_column_with_the_card_labels(self):
         html = self.web.get('/employees/').content.decode()
-        export = html[html.index('function writeEmployeesWorkbook(rows)'):html.index("XLSX.writeFile(wb, 'ходимлар.xlsx')")]
+        row = html[html.index('function employeeExportRow(employee, index)'):html.index('function writeEmployeesWorkbook(rows)')]
+        labels = html[html.index('const EXPORT_WORK_STATUS_LABELS'):html.index('function employeeExportRow(employee, index)')]
 
-        # Экспортда «Ҳолати» устуни йўқ (фойдаланувчи сўрови), шунинг учун ҳолат матнлари рўйхати ҳам керак эмас.
-        self.assertNotIn("'Ҳолати':", export)
-        self.assertNotIn('WORK_STATUS_LABELS', html)
+        # Экспортда барча устунлар бор (фойдаланувчи сўрови): «Ҳолати» ходим карточкасидаги ёзувлар билан чиқади.
+        self.assertIn("'Ҳолати': exportStatusLabel(employee)", row)
+        for _, label in WORK_STATUS_CHOICES:
+            self.assertIn(label, labels)
+        self.assertIn("'Фаол эмас'", labels)
 
 
 class StatusChartTests(TestCase):

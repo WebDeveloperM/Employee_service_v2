@@ -11,7 +11,7 @@ from rest_framework.validators import UniqueValidator
 
 from .models import Department, Employee, EmployeeCategory, PositionCategory, Section, StaffPosition, UserProfile, WorkSchedule, GRADE_RE, ROLE_CHOICES, ROLE_USER, WORK_STATUS_CHOICES
 from .sections_tree import MAX_SECTION_DEPTH, SectionIndex
-from .staff import collect_staff_stats, vacant_places
+from .staff import collect_staff_stats, is_no_staff_section_name, vacant_places
 
 from django.contrib.auth.models import User as AuthUser
 
@@ -439,6 +439,8 @@ class StaffPositionSerializer(serializers.ModelSerializer):
             if section is not None:
                 if department is not None and department.pk != section.department_id:
                     raise serializers.ValidationError('Танланган бўлим бошқа цехга тегишли.')
+                if is_no_staff_section_name(section.name):
+                    raise serializers.ValidationError('Бу бўлим учун штат ажратилмайди: лавозим қўшиб бўлмайди.')
                 department = section.department
                 attrs['department'] = department
             if department is None:

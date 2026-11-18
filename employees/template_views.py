@@ -613,6 +613,7 @@ class EmployeeImportExcelTemplateView(APIView):
         'махсус_кийим': 'special_clothing_size',
         'кийим_ўлчами': 'clothe_size',
         'оёқ_кийим': 'shoe_size',
+        'оеқ_кийим': 'shoe_size',   # _normalize_header «ё» ни «е» га алмаштиради, шунинг учун «Оёқ кийим» шу кўринишда келади
         'пойабзал': 'shoe_size',
         'парол': 'password',
         'парол_тасдиғи': 'password_confirm',

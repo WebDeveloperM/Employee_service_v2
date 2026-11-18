@@ -38,6 +38,8 @@ from .staff_views import (
     StaffPositionEmployeeDetailTemplateView,
     StaffPositionEmployeesTemplateView,
     StaffPositionListCreateTemplateView,
+    StaffSectionEmployeeDetailTemplateView,
+    StaffSectionEmployeesTemplateView,
     StaffTreeTemplateView,
 )
 from .web_views import (
@@ -101,6 +103,8 @@ urlpatterns = [
     path('api/template/staff/positions/<int:pk>/', StaffPositionDetailTemplateView.as_view()),
     path('api/template/staff/positions/<int:pk>/employees/', StaffPositionEmployeesTemplateView.as_view()),
     path('api/template/staff/positions/<int:pk>/employees/<int:employee_id>/', StaffPositionEmployeeDetailTemplateView.as_view()),
+    path('api/template/staff/sections/<int:pk>/employees/', StaffSectionEmployeesTemplateView.as_view()),
+    path('api/template/staff/sections/<int:pk>/employees/<int:employee_id>/', StaffSectionEmployeeDetailTemplateView.as_view()),
     path('api/template/staff/employee-lookup/', StaffEmployeeLookupTemplateView.as_view()),
     path('api/template/employees/', EmployeeListCreateTemplateView.as_view()),
     path('api/template/employees/import-excel/', EmployeeImportExcelTemplateView.as_view()),

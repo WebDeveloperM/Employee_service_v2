@@ -46,6 +46,22 @@ def position_unit(department_id, section_id):
     return (UNIT_DEPARTMENT, department_id)
 
 
+# Бўлимлар, учун штат ажратилмайди («Шогиртлар»): уларнинг ходимлари рўйхатга қўшилади, лекин штат ва бўш иш
+# ўринларига кирмайди. Бўлим номининг боши бўйича аниқланади (катта-кичик ҳарф ва қўшимча бўшлиқлар аҳамиятсиз),
+# шунда ҳар бир цехдаги ва янги қўшиладиган «Шогиртлар» бўлими ўзи шундай ҳисобланади.
+NO_STAFF_SECTION_PREFIXES = ('шогиртлар', 'шогирдлар', 'shogirtlar', 'shogirdlar')
+
+
+def is_no_staff_section_name(name):
+    return normalize_position(name).startswith(NO_STAFF_SECTION_PREFIXES)
+
+
+def no_staff_section_ids(section_ids):
+    """Какие из отделов section_ids — без штата (по названию)."""
+    names = Section.objects.filter(pk__in=section_ids).values_list('id', 'name')
+    return {section_id for section_id, name in names if is_no_staff_section_name(name)}
+
+
 @dataclass
 class StaffStats:
     # (тип единицы, id единицы, нормализованная должность) -> сколько сотрудников с таким названием в единице
@@ -106,6 +122,10 @@ def collect_staff_stats():
     """Один проход по должностям и по активным сотрудникам с заполненной должностью."""
     stats = StaffStats()
     positions = list(StaffPosition.objects.order_by('id').values('id', 'department_id', 'section_id', 'name', 'staff_count'))
+    # Штат ажратилмайдиган бўлимлар («Шогиртлар») ҳисобга кирмайди: уларда лавозим бўлса ҳам, штат ва бўш жой 0 қолади.
+    skipped = no_staff_section_ids({position['section_id'] for position in positions if position['section_id']})
+    if skipped:
+        positions = [position for position in positions if position['section_id'] not in skipped]
     if not positions:
         return stats
 
@@ -181,6 +201,29 @@ def employees_of_position(position):
     index = next(i for i, item in enumerate(group) if item.pk == position.pk)
     start = sum(shares[:index])
     return employees[start:start + shares[index]]
+
+
+def section_employees(section):
+    """Все активные сотрудники отдела — список отдела без штата («Шогиртлар»), где должности не нужны."""
+    return list(
+        Employee.objects
+        .filter(section=section, is_deleted=False, is_active=True)
+        .select_related('department', 'section')
+        .order_by('last_name', 'first_name', 'surname', 'tabel_number')
+    )
+
+
+def assign_employee_to_section(employee, section):
+    """Добавить сотрудника в отдел без штата: меняются только цех и отдел, название должности остаётся как было."""
+    employee.department_id = section.department_id
+    employee.section_id = section.pk
+    employee.save(update_fields=['department', 'section', 'updated_at'])
+
+
+def remove_employee_from_section(employee):
+    """Убрать сотрудника из отдела без штата: он остаётся в цехе, очищается только отдел."""
+    employee.section_id = None
+    employee.save(update_fields=['section', 'updated_at'])
 
 
 def assign_employee_to_position(employee, position):
@@ -311,6 +354,7 @@ def build_staff_tree(stats=None):
             'name': section.name,
             'code': section.code,
             'parent_id': section.parent_id,
+            'no_staff': is_no_staff_section_name(section.name),
             'staff_total': own['staff'] + sum(child['staff_total'] for child in children),
             'vacant_total': own['vacant'] + sum(child['vacant_total'] for child in children),
             'children': children,

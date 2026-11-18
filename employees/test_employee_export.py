@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 from django.test import Client, TestCase
 from rest_framework.test import APIClient
 
-from .models import Employee, ROLE_ADMIN, UserProfile
+from .models import Department, Employee, EmployeeCategory, PositionCategory, ROLE_ADMIN, Section, UserProfile, WorkSchedule
 
 
 EMPLOYEES_URL = '/api/template/employees/'
@@ -76,14 +76,49 @@ class EmployeeExcelExportTests(TestCase):
         self.assertEqual(html.count('employeeFilterParams()'), 3)                 # таъриф + жадвал + экспорт
         self.assertEqual(html.count("params.set('tabel_number'"), 1)
 
-    def test_export_columns_are_numbered_name_department_section_position_without_date_and_status(self):
+    def test_export_has_every_column_of_the_employee_card(self):
         html = self.html()
-        sheet = html[html.index('function writeEmployeesWorkbook(rows)'):html.index("XLSX.writeFile(wb, 'ходимлар.xlsx')")]
+        row = html[html.index('function employeeExportRow(employee, index)'):html.index('function writeEmployeesWorkbook(rows)')]
 
-        columns = re.findall(r"^\s+'([^']+)': ", sheet, re.M)
-        self.assertEqual(columns, ['№', 'Табель рақами', 'Исм', 'Фамилия', 'Отасининг исми', 'Цех', 'Бўлим', 'Лавозим'])
-        self.assertNotIn('Ишга қабул қилинган сана', sheet)
-        self.assertNotIn('Ҳолати', sheet)
+        columns = re.findall(r"^\s+'([^']+)': ", row, re.M)
+        self.assertEqual(columns, [
+            '№', 'Табель рақами', 'Исм', 'Фамилия', 'Отасининг исми', 'Жинси', 'Туғилган сана', 'Телефон 1', 'Телефон 2',
+            'Цех', 'Цех раҳбари', 'Бўлим', 'Лавозим', 'Даража (разряд)', 'Лавозим тоифаси', 'Ходимлар тоифаси', 'Иш тартиби',
+            'Ҳолати', 'Ишга қабул қилинган сана', 'Лавозим ўзгарган сана', 'Логин', 'Махсус кийим', 'Оёқ кийим', 'Куртка',
+            'Футболка', 'Халат', 'Фотосурат (ҳавола)',
+        ])
+        # Парол ва техник майдонлар (хеш, metadata, Face ID) файлга тушмайди.
+        for secret in ('password', 'metadata', 'requires_face_id'):
+            self.assertNotIn(secret, row)
+
+    def test_every_exported_column_is_returned_by_the_employees_api(self):
+        """Экспорт жадвал сўрови (/api/template/employees/) жавобидан ўқийди: керакли майдонлар шу жавобда бўлиши шарт."""
+        department =Department.objects.create(name='4-Цех', boss_full_name='Бобоев Б.Б.')
+        section = Section.objects.create(department=department, name='Лаборатория')
+        Employee.objects.create(
+            first_name='Аҳмад', last_name='Раҳматов', surname='Хасан', tabel_number='E1', gender='M', date_of_birth='1985-03-07',
+            phone_number_1='+998901234567', phone_number_2='+998712345678', department=department, section=section, position='Слесарь',
+            grade='12*', position_category=PositionCategory.objects.get_or_create(name='Мутахассис')[0],
+            employee_category=EmployeeCategory.objects.get_or_create(name='Техник ходимлар')[0],
+            work_schedule=WorkSchedule.objects.get_or_create(name='Сменада')[0], date_of_employment='2015-01-20',
+            date_of_change_position='2020-06-01', login='rahmatov', special_clothing_size='52', shoe_size='42',
+            jacket_size='L', tshirt_size='XL', clothe_size='54', work_status='vacation',
+        )
+
+        item = self.page(page=1, page_size=100)['data'][0]
+
+        self.assertEqual((item['first_name'], item['last_name'], item['surname'], item['tabel_number'], item['gender']), ('Аҳмад', 'Раҳматов', 'Хасан', 'E1', 'M'))
+        self.assertEqual((item['date_of_birth'], item['date_of_employment'], item['date_of_change_position']), ('07/03/1985', '20/01/2015', '01/06/2020'))
+        self.assertEqual((item['phone_number_1'], item['phone_number_2'], item['login']), ('+998901234567', '+998712345678', 'rahmatov'))
+        self.assertEqual((item['department']['name'], item['department']['boss_full_name'], item['section']['name'], item['position']), ('4-Цех', 'Бобоев Б.Б.', 'Лаборатория', 'Слесарь'))
+        self.assertEqual((item['grade'], item['position_category']['name'], item['employee_category']['name'], item['work_schedule']['name']), ('12*', 'Мутахассис', 'Техник ходимлар', 'Сменада'))
+        self.assertEqual((item['is_active'], item['work_status']), (True, 'vacation'))
+        self.assertEqual(
+            (item['special_clothing_size'], item['shoe_size'], item['jacket_size'], item['tshirt_size'], item['clothe_size']),
+            ('52', '42', 'L', 'XL', '54'),
+        )
+        self.assertIn('base_image_url', item)
+        self.assertNotIn('password_hash', item)
 
     def test_export_button_shows_progress_and_blocks_double_clicks(self):
         html = self.html()

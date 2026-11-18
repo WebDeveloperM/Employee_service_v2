@@ -13,12 +13,16 @@ from .staff import (
     UNIT_DEPARTMENT,
     UNIT_SECTION,
     assign_employee_to_position,
+    assign_employee_to_section,
     build_staff_tree,
     collect_staff_stats,
     employees_of_position,
     employees_with_position_name,
+    is_no_staff_section_name,
     normalize_position,
     remove_employee_from_position,
+    remove_employee_from_section,
+    section_employees,
     unit_position_options,
     unit_totals,
     vacant_places,
@@ -52,6 +56,40 @@ def get_position(pk, *, for_update=False):
         # of=('self',): строка section может быть NULL (LEFT JOIN), блокировать её нельзя.
         queryset = queryset.select_for_update(of=('self',))
     return get_object_or_404(queryset, pk=pk)
+
+
+def section_unit_payload(section):
+    """Описание отдела для правой панели: название, цех и путь «Цех / Родитель / Отдел»."""
+    index = SectionIndex()
+    return {
+        'type': UNIT_SECTION,
+        'id': section.id,
+        'name': section.name,
+        'department_id': section.department_id,
+        'department_name': section.department.name,
+        # «Цех / Юридик хизмати» — где в иерархии находится вложенный отдел.
+        'breadcrumb': ' / '.join([section.department.name, *[index.rows[i]['name'] for i in index.ancestors(section.id)]]),
+        'boss_full_name': '',
+        # Штат ажратилмайдиган бўлим («Шогиртлар»): ходимлар рўйхати лавозимларсиз кўрсатилади.
+        'no_staff': is_no_staff_section_name(section.name),
+    }
+
+
+def get_no_staff_section(pk):
+    section = get_object_or_404(Section.objects.select_related('department'), pk=pk)
+    if not is_no_staff_section_name(section.name):
+        raise ValidationError({'detail': 'Бу бўлим учун штат ажратилади: ходимларни лавозим орқали қўшинг.'})
+    return section
+
+
+def section_employees_payload(section, employees, request, message):
+    return {
+        'success': True,
+        'message': message,
+        'unit': section_unit_payload(section),
+        'count': len(employees),
+        'data': [serialize_staff_employee(employee, request) for employee in employees],
+    }
 
 
 def position_employees_payload(position, employees, request, message):
@@ -133,17 +171,7 @@ class StaffPositionListCreateTemplateView(generics.ListCreateAPIView):
         serializer = self.get_serializer(page if page is not None else queryset, many=True)
 
         if unit_type == UNIT_SECTION:
-            index = SectionIndex()
-            unit_payload = {
-                'type': UNIT_SECTION,
-                'id': unit.id,
-                'name': unit.name,
-                'department_id': unit.department_id,
-                'department_name': unit.department.name,
-                # «Цех / Юридик хизмати» — где в иерархии находится вложенный отдел.
-                'breadcrumb': ' / '.join([unit.department.name, *[index.rows[i]['name'] for i in index.ancestors(unit.id)]]),
-                'boss_full_name': '',
-            }
+            unit_payload = section_unit_payload(unit)
         else:
             unit_payload = {
                 'type': UNIT_DEPARTMENT,
@@ -307,6 +335,53 @@ class StaffPositionEmployeeDetailTemplateView(APIView):
         return Response(position_employees_payload(position, employees, request, 'Ходим лавозимдан чиқарилди'))
 
 
+class StaffSectionEmployeesTemplateView(APIView):
+    """Ходимлар бўлимда штатсиз («Шогиртлар»): рўйхат ва ходимни бўлимга қўшиш. Лавозим ва штат текширилмайди."""
+
+    permission_classes = STAFF_PERMISSIONS
+
+    def get(self, request, pk, *args, **kwargs):
+        section = get_no_staff_section(pk)
+        return Response(section_employees_payload(section, section_employees(section), request, 'Ходимлар муваффақиятли олинди'))
+
+    def post(self, request, pk, *args, **kwargs):
+        try:
+            employee_id = int(request.data.get('employee_id'))
+        except (TypeError, ValueError):
+            raise ValidationError({'detail': 'Ходимни танланг.'})
+
+        with transaction.atomic():
+            section = get_no_staff_section(pk)
+            employee = get_object_or_404(
+                Employee.objects.select_related('department', 'section'),
+                pk=employee_id, is_deleted=False, is_active=True,
+            )
+            if employee.section_id == section.pk:
+                raise ValidationError({'detail': 'Бу ходим аллақачон шу бўлимда.'})
+            assign_employee_to_section(employee, section)
+
+        return Response(
+            section_employees_payload(section, section_employees(section), request, 'Ходим бўлимга қўшилди'),
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class StaffSectionEmployeeDetailTemplateView(APIView):
+    """Ходимни штатсиз бўлимдан чиқариш: у цехда қолади, фақат бўлим олиб ташланади."""
+
+    permission_classes = STAFF_PERMISSIONS
+
+    def delete(self, request, pk, employee_id, *args, **kwargs):
+        with transaction.atomic():
+            section = get_no_staff_section(pk)
+            employee = Employee.objects.filter(pk=employee_id, section=section, is_deleted=False, is_active=True).first()
+            if employee is None:
+                raise NotFound('Ходим бу бўлимда топилмади.')
+            remove_employee_from_section(employee)
+
+        return Response(section_employees_payload(section, section_employees(section), request, 'Ходим бўлимдан чиқарилди'))
+
+
 class StaffEmployeeLookupTemplateView(APIView):
     """Поиск сотрудника по табельному номеру для добавления на должность."""
 
@@ -334,6 +409,12 @@ class StaffEmployeeLookupTemplateView(APIView):
         if position_id.isdigit():
             position = get_object_or_404(StaffPosition.objects.select_related('department', 'section'), pk=int(position_id))
             already_here = {employee.pk for employee in employees_with_position_name(position)}
+        section_id = str(request.query_params.get('section_id', '') or '').strip()
+        if section_id.isdigit():
+            # Штатсиз бўлим («Шогиртлар»): унда аллақачон бор ходимлар «Қўшилган» деб белгиланади.
+            already_here |= set(
+                Employee.objects.filter(section_id=int(section_id), is_deleted=False, is_active=True).values_list('pk', flat=True)
+            )
 
         data = []
         for employee in employees:
