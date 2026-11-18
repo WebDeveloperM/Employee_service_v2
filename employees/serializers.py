@@ -406,9 +406,6 @@ class StaffPositionSerializer(serializers.ModelSerializer):
     class Meta:
         model = StaffPosition
         fields = ['id', 'department_id', 'section_id', 'name', 'staff_count', 'salary', 'occupied', 'vacant']
-        # DRF 3.15 сам разворачивает условные UniqueConstraint модели и делает department_id
-        # и section_id обязательными одновременно. Дубли проверяет validate() (без учёта регистра).
-        validators = []
 
     def _occupied_for(self, obj):
         # Список передаёт готовую статистику в context; для одиночных ответов
@@ -416,7 +413,7 @@ class StaffPositionSerializer(serializers.ModelSerializer):
         stats = self.context.get('staff_stats')
         if stats is None:
             stats = self.context['staff_stats'] = collect_staff_stats()
-        return stats.occupied_for(obj.department_id, obj.section_id, obj.name)
+        return stats.occupied_for(obj)
 
     def get_occupied(self, obj):
         return self._occupied_for(obj)
@@ -447,13 +444,8 @@ class StaffPositionSerializer(serializers.ModelSerializer):
             if department is None:
                 raise serializers.ValidationError('Цех ёки бўлимни танланг.')
 
-        name = attrs.get('name', getattr(self.instance, 'name', ''))
-        duplicates = StaffPosition.objects.filter(name__iexact=name)
-        duplicates = duplicates.filter(section=section) if section is not None else duplicates.filter(department=department, section__isnull=True)
-        if self.instance is not None:
-            duplicates = duplicates.exclude(pk=self.instance.pk)
-        if duplicates.exists():
-            raise serializers.ValidationError({'name': 'Бу лавозим танланган бирликда аллақачон мавжуд.'})
+        # Бир цех/бўлимда бир хил номли лавозимни яна қўшиш мумкин: такрор текширилмайди
+        # (бундай қаторлар учун банд жойларни тақсимлаш — staff.split_occupancy).
         return attrs
 
 

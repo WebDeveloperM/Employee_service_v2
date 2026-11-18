@@ -166,17 +166,20 @@ class StaffPositionApiTests(StaffTestCase):
                 self.assertEqual(response.status_code, 400, response.content)
         self.assertFalse(StaffPosition.objects.exists())
 
-    def test_duplicate_name_is_rejected_per_unit_case_insensitively(self):
+    def test_same_name_can_be_added_again_in_the_same_unit(self):
         self.make_position('Слесарь')
 
-        duplicate = self.client.post(POSITIONS_URL, {'department_id': self.department.pk, 'name': ' слесарь '}, format='json')
+        same_department = self.client.post(POSITIONS_URL, {'department_id': self.department.pk, 'name': ' слесарь '}, format='json')
+        exact = self.client.post(POSITIONS_URL, {'department_id': self.department.pk, 'name': 'Слесарь'}, format='json')
         other_department = self.client.post(POSITIONS_URL, {'department_id': self.other_department.pk, 'name': 'Слесарь'}, format='json')
         in_section = self.client.post(POSITIONS_URL, {'section_id': self.section.pk, 'name': 'Слесарь'}, format='json')
+        in_section_again = self.client.post(POSITIONS_URL, {'section_id': self.section.pk, 'name': 'Слесарь'}, format='json')
 
-        self.assertEqual(duplicate.status_code, 400, duplicate.content)
-        self.assertEqual(other_department.status_code, 201, other_department.content)
-        self.assertEqual(in_section.status_code, 201, in_section.content)
-        self.assertEqual(StaffPosition.objects.count(), 3)
+        for response in (same_department, exact, other_department, in_section, in_section_again):
+            self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(same_department.json()['data']['name'], 'слесарь')   # ортиқча бўшлиқлар олинади
+        self.assertEqual(StaffPosition.objects.count(), 6)   # 1 та олдиндан + 5 та қўшилган
+        self.assertEqual(StaffPosition.objects.filter(department=self.department, section__isnull=True).count(), 3)
 
     def test_update_changes_values_but_never_moves_position(self):
         position = self.make_position('Слесарь', staff_count=2)
@@ -194,15 +197,15 @@ class StaffPositionApiTests(StaffTestCase):
         self.assertEqual(position.department_id, self.department.pk)
         self.assertIsNone(position.section_id)
 
-    def test_update_to_existing_name_is_rejected(self):
+    def test_update_to_an_existing_name_is_allowed(self):
         self.make_position('Слесарь')
         other = self.make_position('Токарь')
 
         response = self.client.patch(f'{POSITIONS_URL}{other.pk}/', {'name': 'слесарь'}, format='json')
 
-        self.assertEqual(response.status_code, 400, response.content)
+        self.assertEqual(response.status_code, 200, response.content)
         other.refresh_from_db()
-        self.assertEqual(other.name, 'Токарь')
+        self.assertEqual(other.name, 'слесарь')
 
     def test_delete_position(self):
         position = self.make_position('Слесарь')

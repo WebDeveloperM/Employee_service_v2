@@ -16,6 +16,8 @@ from .staff import (
     build_staff_tree,
     collect_staff_stats,
     employees_of_position,
+    employees_with_position_name,
+    normalize_position,
     remove_employee_from_position,
     unit_position_options,
     unit_totals,
@@ -235,10 +237,10 @@ class StaffPositionEmployeesTemplateView(APIView):
                 Employee.objects.select_related('department', 'section'),
                 pk=employee_id, is_deleted=False, is_active=True,
             )
-            current = employees_of_position(position)
-            if any(item.pk == employee.pk for item in current):
+            # Бир хил номли лавозимлар битта умумий рўйхат: ходим уларнинг бирида бўлса, шу лавозимда ҳисобланади.
+            if any(item.pk == employee.pk for item in employees_with_position_name(position)):
                 raise ValidationError({'detail': 'Бу ходим аллақачон шу лавозимда.'})
-            if len(current) >= position.staff_count:
+            if len(employees_of_position(position)) >= position.staff_count:
                 raise ValidationError({'detail': 'Бу лавозимда бўш иш ўрни йўқ. Аввал штатлар сонини кўпайтиринг.'})
 
             assign_employee_to_position(employee, position)
@@ -280,7 +282,8 @@ class StaffPositionEmployeeDetailTemplateView(APIView):
             employee = next((item for item in employees_of_position(source) if item.pk == employee_id), None)
             if employee is None:
                 raise NotFound('Ходим бу лавозимда топилмади.')
-            if target.pk == source.pk:
+            # Номи бир хил бўлган лавозимга ўтказиш ходимнинг маълумотини ўзгартирмайди: у аллақачон шу лавозимда.
+            if target.pk == source.pk or normalize_position(target.name) == normalize_position(source.name):
                 raise ValidationError({'detail': 'Ходим аллақачон шу лавозимда.'})
             if len(employees_of_position(target)) >= target.staff_count:
                 raise ValidationError({'detail': 'Танланган лавозимда бўш иш ўрни йўқ. Аввал штатлар сонини кўпайтиринг.'})
@@ -330,7 +333,7 @@ class StaffEmployeeLookupTemplateView(APIView):
         position_id = str(request.query_params.get('position_id', '') or '').strip()
         if position_id.isdigit():
             position = get_object_or_404(StaffPosition.objects.select_related('department', 'section'), pk=int(position_id))
-            already_here = {employee.pk for employee in employees_of_position(position)}
+            already_here = {employee.pk for employee in employees_with_position_name(position)}
 
         data = []
         for employee in employees:

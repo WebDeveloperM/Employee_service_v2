@@ -6,7 +6,7 @@
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
-from decimal import Decimal
+from decimal import ROUND_CEILING, Decimal
 
 from django.db.models import Prefetch
 
@@ -48,14 +48,16 @@ def position_unit(department_id, section_id):
 
 @dataclass
 class StaffStats:
-    # (тип единицы, id единицы, нормализованная должность) -> сколько сотрудников её занимают
+    # (тип единицы, id единицы, нормализованная должность) -> сколько сотрудников с таким названием в единице
     occupied: dict = field(default_factory=lambda: defaultdict(int))
+    # id штатной должности -> сколько из этих сотрудников приходится именно на неё (см. split_occupancy)
+    by_position: dict = field(default_factory=dict)
     # (тип единицы, id единицы) -> {'staff': штат, 'vacant': вакансии} только по своим должностям
     own: dict = field(default_factory=lambda: defaultdict(lambda: {'staff': 0, 'vacant': 0}))
 
-    def occupied_for(self, department_id, section_id, name):
-        unit_type, unit_id = position_unit(department_id, section_id)
-        return self.occupied.get((unit_type, unit_id, normalize_position(name)), 0)
+    def occupied_for(self, position):
+        """Занятые места именно этой штатной должности (если в единице есть одноимённые — их доля)."""
+        return self.by_position.get(position.pk, 0)
 
 
 def to_decimal(value):
@@ -68,6 +70,32 @@ def vacant_places(staff_count, occupied):
     return max(to_decimal(staff_count) - to_decimal(occupied), Decimal(0))
 
 
+def place_capacity(staff_count):
+    """Сколько сотрудников вмещает должность: штат округляется вверх (0,5 → 1; 1,5 → 2).
+
+    Так же работает и назначение: сотрудника можно добавить, пока занято меньше, чем штат.
+    """
+    return int(to_decimal(staff_count).to_integral_value(rounding=ROUND_CEILING))
+
+
+def split_occupancy(staff_counts, total):
+    """Как делятся занятые места между одноимёнными должностями одной единицы.
+
+    Сотрудники хранят только название должности, поэтому одноимённые строки («Слесарь» дважды в одном цехе)
+    для них неразличимы и работают как один общий пул. Чтобы один и тот же сотрудник не считался дважды,
+    места заполняются по порядку: первая должность занимается первой, остаток переходит ко второй и т. д.;
+    всё, что сверх штата, остаётся на последней. Для единственной должности это просто `total`.
+    """
+    shares = []
+    remaining = total
+    for index, staff_count in enumerate(staff_counts):
+        is_last = index == len(staff_counts) - 1
+        taken = remaining if is_last else min(remaining, place_capacity(staff_count))
+        shares.append(taken)
+        remaining -= taken
+    return shares
+
+
 def plain_number(value):
     """Decimal → int, если число целое, иначе float: шаблон и JSON показывают 3 или 3.5, а не 3.00 или строку '3.50'."""
     value = to_decimal(value)
@@ -77,7 +105,7 @@ def plain_number(value):
 def collect_staff_stats():
     """Один проход по должностям и по активным сотрудникам с заполненной должностью."""
     stats = StaffStats()
-    positions = list(StaffPosition.objects.values('department_id', 'section_id', 'name', 'staff_count'))
+    positions = list(StaffPosition.objects.order_by('id').values('id', 'department_id', 'section_id', 'name', 'staff_count'))
     if not positions:
         return stats
 
@@ -94,17 +122,38 @@ def collect_staff_stats():
             unit_type, unit_id = position_unit(department_id, section_id)
             stats.occupied[(unit_type, unit_id, name)] += 1
 
+    # Должности с одним названием в одной единице делят занятые места между собой (split_occupancy), порядок — по id.
+    groups = defaultdict(list)
     for position in positions:
         unit = position_unit(position['department_id'], position['section_id'])
-        occupied = stats.occupied.get((*unit, normalize_position(position['name'])), 0)
-        stats.own[unit]['staff'] += position['staff_count']
-        stats.own[unit]['vacant'] += vacant_places(position['staff_count'], occupied)
+        groups[(*unit, normalize_position(position['name']))].append(position)
+
+    for key, rows in groups.items():
+        unit = key[:2]
+        shares = split_occupancy([row['staff_count'] for row in rows], stats.occupied.get(key, 0))
+        for row, occupied in zip(rows, shares):
+            stats.by_position[row['id']] = occupied
+            stats.own[unit]['staff'] += row['staff_count']
+            stats.own[unit]['vacant'] += vacant_places(row['staff_count'], occupied)
 
     return stats
 
 
-def employees_of_position(position):
-    """Сотрудники, занимающие должность: те же правила, что и при подсчёте «занято» в collect_staff_stats."""
+def unit_positions(position):
+    """Штатные должности той же единицы (цеха или отдела), что и position, по порядку id."""
+    queryset = StaffPosition.objects.all()
+    if position.section_id:
+        queryset = queryset.filter(section_id=position.section_id)
+    else:
+        queryset = queryset.filter(department_id=position.department_id, section__isnull=True)
+    return queryset.order_by('id')
+
+
+def employees_with_position_name(position):
+    """Все сотрудники единицы с названием должности, как у position: общий пул одноимённых строк.
+
+    Те же правила, что и при подсчёте «занято» в collect_staff_stats.
+    """
     queryset = Employee.objects.filter(is_deleted=False, is_active=True)
     if position.section_id:
         queryset = queryset.filter(section_id=position.section_id)
@@ -114,6 +163,24 @@ def employees_of_position(position):
     wanted = normalize_position(position.name)
     queryset = queryset.select_related('department', 'section').order_by('last_name', 'first_name', 'surname', 'tabel_number')
     return [employee for employee in queryset if normalize_position(employee.position) == wanted]
+
+
+def employees_of_position(position):
+    """Сотрудники, занимающие именно эту штатную должность.
+
+    Если в единице есть одноимённые должности, пул сотрудников делится между ними так же, как «занято»
+    в collect_staff_stats (split_occupancy), поэтому число сотрудников в списке всегда совпадает с таблицей.
+    """
+    employees = employees_with_position_name(position)
+    wanted = normalize_position(position.name)
+    group = [item for item in unit_positions(position) if normalize_position(item.name) == wanted]
+    if len(group) < 2:
+        return employees
+
+    shares = split_occupancy([item.staff_count for item in group], len(employees))
+    index = next(i for i, item in enumerate(group) if item.pk == position.pk)
+    start = sum(shares[:index])
+    return employees[start:start + shares[index]]
 
 
 def assign_employee_to_position(employee, position):
@@ -135,20 +202,14 @@ def remove_employee_from_position(employee):
 
 def unit_position_options(position, stats):
     """Все должности того же цеха/отдела с числом свободных мест — для перевода внутри единицы."""
-    queryset = StaffPosition.objects.all()
-    if position.section_id:
-        queryset = queryset.filter(section_id=position.section_id)
-    else:
-        queryset = queryset.filter(department_id=position.department_id, section__isnull=True)
-
     return [
         {
             'id': item.pk,
             'name': item.name,
             'staff_count': item.staff_count,
-            'vacant': vacant_places(item.staff_count, stats.occupied_for(item.department_id, item.section_id, item.name)),
+            'vacant': vacant_places(item.staff_count, stats.occupied_for(item)),
         }
-        for item in queryset.order_by('id')
+        for item in unit_positions(position)
     ]
 
 

@@ -160,6 +160,10 @@ class StaffPosition(models.Model):
 
     section=NULL означает должность самого цеха; иначе должность отдела
     (department при этом всегда равен section.department).
+
+    Название в пределах цеха/отдела может повторяться. Сотрудник хранит только название должности, поэтому
+    одноимённые строки для него неразличимы: они делят общих сотрудников по порядку id (первая заполняется
+    первой), а остаток уходит на последнюю.
     """
 
     department = models.ForeignKey(Department, on_delete=models.CASCADE, related_name='staff_positions', verbose_name='Цех')
@@ -175,20 +179,8 @@ class StaffPosition(models.Model):
         ordering = ['id']
         verbose_name = 'Штатная должность'
         verbose_name_plural = 'Штатные должности'
-        constraints = [
-            # unique_together не защищает от дублей, когда section IS NULL,
-            # поэтому два условных ограничения: одно на цех, другое на отдел.
-            models.UniqueConstraint(
-                fields=['department', 'name'],
-                condition=models.Q(section__isnull=True),
-                name='employees_staffposition_department_name_unique',
-            ),
-            models.UniqueConstraint(
-                fields=['section', 'name'],
-                condition=models.Q(section__isnull=False),
-                name='employees_staffposition_section_name_unique',
-            ),
-        ]
+        # Уникальности названия нет намеренно: в одном цехе/отделе можно завести должность с тем же
+        # названием ещё раз (занятые места делятся между такими строками — staff.split_occupancy).
 
     def __str__(self):
         unit = self.section if self.section_id else self.department
