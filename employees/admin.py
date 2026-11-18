@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BnpzIdClient, Department, Employee, EmployeeCertificate, Section, StaffPosition, UserProfile
+from .models import BnpzIdClient, Department, Employee, EmployeeCertificate, PositionCategory, Section, StaffPosition, UserProfile
 
 
 @admin.register(UserProfile)
@@ -30,6 +30,12 @@ class UserProfileAdmin(admin.ModelAdmin):
 class DepartmentAdmin(admin.ModelAdmin):
     list_display = ('id', 'name', 'boss_full_name')
     search_fields = ('name', 'boss_full_name')
+
+
+@admin.register(PositionCategory)
+class PositionCategoryAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name')
+    search_fields = ('name',)
 
 
 @admin.register(Section)

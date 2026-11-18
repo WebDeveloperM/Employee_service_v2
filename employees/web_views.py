@@ -16,7 +16,7 @@ from rest_framework.response import Response
 
 from .bnpzid import build_bnpzid_redirect, get_bnpzid_authorize_request
 from .dashboard_stats import build_dashboard_charts
-from .models import Department, EMPLOYEE_STATUS_CHOICES, Employee, Section, ROLE_ADMIN, ROLE_CHOICES, ROLE_HR, UserProfile
+from .models import Department, EMPLOYEE_STATUS_CHOICES, Employee, PositionCategory, Section, ROLE_ADMIN, ROLE_CHOICES, ROLE_HR, UserProfile, WORK_SCHEDULE_CHOICES
 from .ordering import order_sections_by_code
 from .permissions import is_admin_or_hr
 from .sections_tree import annotate_path_labels, order_depth_first
@@ -35,7 +35,7 @@ def get_section_choices():
 
 
 def get_employee_web_queryset():
-    return Employee.objects.select_related('department', 'section', 'section__department').filter(is_deleted=False)
+    return Employee.objects.select_related('department', 'section', 'section__department', 'position_category').filter(is_deleted=False)
 
 
 def get_safe_redirect_url(request, fallback_url):
@@ -365,6 +365,8 @@ class EmployeeCreateWebView(AuthenticatedTemplateView):
         return render(request, self.template_name, {
             'departments': Department.objects.order_by('sort_order', 'name'),
             'sections': get_section_choices(),
+            'work_schedule_choices': WORK_SCHEDULE_CHOICES,
+            'position_categories': PositionCategory.objects.all(),
         })
 
 
@@ -391,6 +393,8 @@ class EmployeeDetailWebView(AuthenticatedTemplateView):
             'employee': employee,
             'page_mode': 'view',
             'status_choices': EMPLOYEE_STATUS_CHOICES,
+            'work_schedule_choices': WORK_SCHEDULE_CHOICES,
+            'position_categories': PositionCategory.objects.all(),
             'can_edit_sizes_only': can_edit_sizes_only,
             'departments': Department.objects.order_by('sort_order', 'name'),
             'sections': get_section_choices(),
@@ -416,6 +420,8 @@ class EmployeeEditWebView(AuthenticatedTemplateView):
             'employee': employee,
             'page_mode': 'edit',
             'status_choices': EMPLOYEE_STATUS_CHOICES,
+            'work_schedule_choices': WORK_SCHEDULE_CHOICES,
+            'position_categories': PositionCategory.objects.all(),
             'can_edit_sizes_only': False,
             'departments': Department.objects.order_by('sort_order', 'name'),
             'sections': get_section_choices(),

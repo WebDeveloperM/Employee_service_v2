@@ -16,6 +16,7 @@ from .views import (
 )
 from .template_views import (
     DepartmentListCreateTemplateView,
+    PositionCategoryListCreateTemplateView,
     DepartmentDetailTemplateView,
     SectionListCreateTemplateView,
     SectionDetailTemplateView,
@@ -88,6 +89,7 @@ urlpatterns = [
     
     path('api/template/departments/', DepartmentListCreateTemplateView.as_view()),
     path('api/template/departments/<int:pk>/', DepartmentDetailTemplateView.as_view()),
+    path('api/template/position-categories/', PositionCategoryListCreateTemplateView.as_view()),
     path('api/template/sections/', SectionListCreateTemplateView.as_view()),
     path('api/template/sections/<int:pk>/', SectionDetailTemplateView.as_view()),
     path('api/template/staff/tree/', StaffTreeTemplateView.as_view()),

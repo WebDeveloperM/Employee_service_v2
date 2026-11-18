@@ -9,7 +9,7 @@ from django.core.files.base import ContentFile
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
-from .models import Department, Employee, Section, StaffPosition, UserProfile, GRADE_RE, ROLE_CHOICES, ROLE_USER, WORK_STATUS_CHOICES
+from .models import Department, Employee, PositionCategory, Section, StaffPosition, UserProfile, GRADE_RE, ROLE_CHOICES, ROLE_USER, WORK_SCHEDULE_CHOICES, WORK_STATUS_CHOICES
 from .sections_tree import MAX_SECTION_DEPTH, SectionIndex
 from .staff import collect_staff_stats, vacant_places
 
@@ -228,6 +228,19 @@ class DepartmentSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'boss_full_name', 'sort_order']
 
 
+class PositionCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PositionCategory
+        fields = ['id', 'name']
+
+    def validate_name(self, value):
+        name = ' '.join(value.split())   # ортиқча бўшлиқлар битта бўшлиққа айланади
+        # Катта-кичик ҳарфни Python томонда солиштирамиз: тоифалар кам, ҳар қандай базада кирилл ҳарфлар ҳам тўғри ишлайди.
+        if any(existing.casefold() == name.casefold() for existing in PositionCategory.objects.values_list('name', flat=True)):
+            raise serializers.ValidationError('Бундай тоифа аллақачон мавжуд.')
+        return name
+
+
 class SectionSerializer(serializers.ModelSerializer):
     department = DepartmentSerializer(read_only=True)
     department_id = serializers.PrimaryKeyRelatedField(
@@ -421,6 +434,7 @@ class StaffPositionSerializer(serializers.ModelSerializer):
 class EmployeeSerializer(serializers.ModelSerializer):
     department = DepartmentSerializer(read_only=True)
     section = SectionSerializer(read_only=True)
+    position_category = PositionCategorySerializer(read_only=True)
     tabel_number = serializers.CharField(
         validators=[
             UniqueValidator(
@@ -470,6 +484,13 @@ class EmployeeSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    position_category_id = serializers.PrimaryKeyRelatedField(
+        queryset=PositionCategory.objects.all(),
+        source='position_category',
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
     department_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
     section_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
     boss_full_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
@@ -483,6 +504,11 @@ class EmployeeSerializer(serializers.ModelSerializer):
     work_status = serializers.ChoiceField(
         choices=WORK_STATUS_CHOICES, required=False, allow_null=True, allow_blank=True,
         error_messages={'invalid_choice': 'Номаълум ҳолат танланган.'},
+    )
+    # Иш тартиби: «five_day» — 5 кунлик иш ҳафтаси, «shift» — сменада; бўш/null — танланмаган.
+    work_schedule = serializers.ChoiceField(
+        choices=WORK_SCHEDULE_CHOICES, required=False, allow_null=True, allow_blank=True,
+        error_messages={'invalid_choice': 'Номаълум иш тартиби танланган.'},
     )
 
     class Meta:
@@ -519,12 +545,15 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'section_name',
             'boss_full_name',
             'position',
+            'position_category',
+            'position_category_id',
             'grade',
             'date_of_employment',
             'date_of_change_position',
             'slug',
             'is_active',
             'work_status',
+            'work_schedule',
             'is_deleted',
             'requires_face_id_checkout',
             'metadata',
@@ -535,6 +564,9 @@ class EmployeeSerializer(serializers.ModelSerializer):
 
     def validate_work_status(self, value):
         return value or None   # бўш қатор ва null — «ишда» (NULL сақланади)
+
+    def validate_work_schedule(self, value):
+        return value or None   # бўш қатор ва null — танланмаган (NULL сақланади)
 
     def validate_grade(self, value):
         value = (value or '').strip()

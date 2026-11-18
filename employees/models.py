@@ -35,6 +35,14 @@ STATUS_WORKING = 'working'
 STATUS_INACTIVE = 'inactive'
 EMPLOYEE_STATUS_CHOICES = [(STATUS_WORKING, 'Фаол'), *WORK_STATUS_CHOICES, (STATUS_INACTIVE, 'Фаол эмас')]
 
+# Ходимнинг иш тартиби. NULL — танланмаган.
+WORK_SCHEDULE_FIVE_DAY = 'five_day'
+WORK_SCHEDULE_SHIFT = 'shift'
+WORK_SCHEDULE_CHOICES = [
+    (WORK_SCHEDULE_FIVE_DAY, '5 кунлик иш ҳафтасида'),
+    (WORK_SCHEDULE_SHIFT, 'Сменада'),
+]
+
 
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile', verbose_name='Пользователь')
@@ -78,6 +86,17 @@ class Department(models.Model):
                 self.sort_order = max_sort_order + 1
 
         super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
+
+
+class PositionCategory(models.Model):
+    """Лавозим тоифаси (Раҳбар, Мутахассис, Ишчи, Хизматчи, …). Рўйхатни администратор ходим формасидан тўлдиради."""
+    name = models.CharField(max_length=100, unique=True, verbose_name='Название категории должности')
+
+    class Meta:
+        ordering = ['id']   # бошланғич тоифалар берилган тартибда, янгилари охирида
 
     def __str__(self):
         return self.name
@@ -191,6 +210,11 @@ class Employee(models.Model):
     department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True, related_name='employees', verbose_name='Цех')
     section = models.ForeignKey(Section, on_delete=models.SET_NULL, null=True, blank=True, related_name='employees', verbose_name='Отдел')
     position = models.TextField(blank=True, default='', verbose_name='Должность')
+    # PROTECT: тоифани ходим бириктирилган бўлса «жим» ўчириб бўлмайди. NULL — тоифа танланмаган (эски ходимлар).
+    position_category = models.ForeignKey(
+        PositionCategory, on_delete=models.PROTECT, null=True, blank=True,
+        related_name='employees', verbose_name='Категория должности',
+    )
     # Разряд: 1–2 хонали рақам, охирида ихтиёрий «*» (масалан, 4, 12, 12*). NULL — разряд йўқ.
     grade = models.CharField(max_length=10, null=True, blank=True, verbose_name='Разряд')
     date_of_employment = models.DateField(null=True, blank=True, verbose_name='Дата приема на работу')
@@ -199,6 +223,8 @@ class Employee(models.Model):
     is_active = models.BooleanField(default=True, verbose_name='Активен')
     # Иш ҳолати (таътил, хизмат сафари, касаллик, бола парвариши). NULL — оддий иш ҳолати. Янги nullable устун, эски маълумотга таъсир қилмайди.
     work_status = models.CharField(max_length=20, choices=WORK_STATUS_CHOICES, null=True, blank=True, verbose_name='Статус работы')
+    # Иш тартиби: 5 кунлик иш ҳафтаси ёки сменали. Янги nullable устун, эски ходимларда NULL (танланмаган).
+    work_schedule = models.CharField(max_length=20, choices=WORK_SCHEDULE_CHOICES, null=True, blank=True, verbose_name='Иш тартиби')
     is_deleted = models.BooleanField(default=False, verbose_name='Удален')
     requires_face_id_checkout = models.BooleanField(default=True, verbose_name='Требует проверку по лицу')
     metadata = models.JSONField(default=dict, blank=True, verbose_name='Метаданные')
