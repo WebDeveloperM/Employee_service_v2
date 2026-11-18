@@ -18,14 +18,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.pagination import PageNumberPagination
 
-from .models import Department, Employee, EmployeeCategory, EmployeeCertificate, PositionCategory, Section, UserProfile, ROLE_ADMIN, ROLE_HR, ROLE_USER
+from .models import Department, Employee, EmployeeCategory, EmployeeCertificate, PositionCategory, Section, UserProfile, WorkSchedule, ROLE_ADMIN, ROLE_HR, ROLE_USER
 from .ordering import order_sections_by_code
 from .permissions import is_admin_or_hr
 from .pki import generate_employee_pfx
 from .sections_tree import SectionIndex, delete_section_or_400, order_depth_first
 from .serializers import (
     DepartmentSerializer, EmployeeCategorySerializer, EmployeeSerializer, PositionCategorySerializer,
-    SectionSerializer, UserProfileSerializer,
+    SectionSerializer, UserProfileSerializer, WorkScheduleSerializer,
 )
 from .staff import StaffTreeOrder
 
@@ -130,6 +130,14 @@ class EmployeeCategoryListCreateTemplateView(CategoryListCreateTemplateView):
     list_message = 'Ходимлар тоифалари муваффақиятли олинди'
     create_message = 'Ходимлар тоифаси муваффақиятли қўшилди'
     denied_message = 'Ходимлар тоифасини фақат администратор ёки HR қўша олади.'
+
+
+class WorkScheduleListCreateTemplateView(CategoryListCreateTemplateView):
+    queryset = WorkSchedule.objects.all()
+    serializer_class = WorkScheduleSerializer
+    list_message = 'Иш тартиблари муваффақиятли олинди'
+    create_message = 'Иш тартиби муваффақиятли қўшилди'
+    denied_message = 'Иш тартибини фақат администратор ёки HR қўша олади.'
 
 
 class DepartmentDetailTemplateView(generics.RetrieveUpdateDestroyAPIView):
@@ -289,7 +297,7 @@ class EmployeeListCreateTemplateView(generics.ListCreateAPIView):
     def get_queryset(self):
         # Порядок цех → отдел → должность задаёт StaffTreeOrder в list(); здесь — порядок внутри одного места.
         queryset = Employee.objects.select_related(
-            'department', 'section', 'section__department', 'position_category', 'employee_category'
+            'department', 'section', 'section__department', 'position_category', 'employee_category', 'work_schedule'
         ).filter(is_deleted=False).order_by(
             'last_name',
             'first_name',
@@ -371,7 +379,7 @@ class EmployeeListCreateTemplateView(generics.ListCreateAPIView):
 
     def employees_in_tree_order(self, ids):
         """Сотрудники по списку id — ровно в этом порядке (одним запросом)."""
-        by_id = Employee.objects.select_related('department', 'section', 'section__department', 'position_category', 'employee_category').in_bulk(ids)
+        by_id = Employee.objects.select_related('department', 'section', 'section__department', 'position_category', 'employee_category', 'work_schedule').in_bulk(ids)
         return [by_id[employee_id] for employee_id in ids if employee_id in by_id]
 
     def list(self, request, *args, **kwargs):
@@ -411,7 +419,7 @@ class EmployeeListCreateTemplateView(generics.ListCreateAPIView):
 
 class EmployeeDetailTemplateView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Employee.objects.select_related(
-        'department', 'section', 'section__department', 'position_category', 'employee_category'
+        'department', 'section', 'section__department', 'position_category', 'employee_category', 'work_schedule'
     ).filter(is_deleted=False)
     serializer_class = EmployeeSerializer
     permission_classes = [IsAuthenticated]

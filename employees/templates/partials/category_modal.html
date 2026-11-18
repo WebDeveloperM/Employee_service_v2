@@ -1,5 +1,5 @@
-{# Bitta «рўйхатга янги тоифа қўшиш» ойнаси. Параметрлар: kind (position/employee), title, hint, label, placeholder. Мантиқ — category_modals.html даги скриптда. #}
-<div id="{{ kind }}CategoryModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/75 px-4">
+{# Bitta «рўйхатга янги қиймат қўшиш» ойнаси. Параметрлар: kind (position/employee/schedule), title, hint, label, placeholder. Мантиқ — category_modals.html даги скриптда. #}
+<div id="{{ kind }}AddModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/75 px-4">
     <div class="w-full max-w-lg rounded-[28px] bg-white p-6 shadow-2xl">
         <div class="flex items-start justify-between gap-4">
             <div>
@@ -13,12 +13,12 @@
 
         <form class="mt-5 space-y-4" onsubmit="saveCategory(event, '{{ kind }}')">
             <div>
-                <label class="mb-2 block text-sm font-bold text-slate-700" for="{{ kind }}CategoryName">{{ label }} <span class="text-red-500">*</span></label>
-                <input type="text" id="{{ kind }}CategoryName" required maxlength="100" autocomplete="off" class="table-filter" placeholder="{{ placeholder }}">
+                <label class="mb-2 block text-sm font-bold text-slate-700" for="{{ kind }}AddName">{{ label }} <span class="text-red-500">*</span></label>
+                <input type="text" id="{{ kind }}AddName" required maxlength="100" autocomplete="off" class="table-filter" placeholder="{{ placeholder }}">
             </div>
             <div class="flex justify-end gap-3">
                 <button type="button" onclick="closeCategoryModal('{{ kind }}')" class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">Бекор қилиш</button>
-                <button type="submit" id="{{ kind }}CategorySaveButton" class="rounded-xl bg-[var(--info)] px-4 py-2 text-sm font-bold text-white">Сақлаш</button>
+                <button type="submit" id="{{ kind }}AddSaveButton" class="rounded-xl bg-[var(--info)] px-4 py-2 text-sm font-bold text-white">Сақлаш</button>
             </div>
         </form>
     </div>

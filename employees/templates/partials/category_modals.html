@@ -1,51 +1,54 @@
-{# Ходим формасидаги «+» тугмалари очадиган ойналар: «Лавозим тоифаси» (#position_category_id) ва «Ходимлар тоифаси» (#employee_category_id). Формага бир марта қўшилади. #}
+{# Ходим формасидаги «+» тугмалари очадиган ойналар: «Лавозим тоифаси» (#position_category_id), «Ходимлар тоифаси» (#employee_category_id) ва «Иш тартиби» (#work_schedule_id). Формага бир марта қўшилади. #}
 {% include 'partials/category_modal.html' with kind='position' title='Лавозим тоифасини қўшиш' hint='Лавозим тоифасини қўшинг, у рўйхатда дарҳол танланади.' label='Тоифа номи' placeholder='Масалан, Раҳбар' %}
 {% include 'partials/category_modal.html' with kind='employee' title='Ходимлар тоифасини қўшиш' hint='Ходимлар тоифасини қўшинг, у рўйхатда дарҳол танланади.' label='Тоифа номи' placeholder='Масалан, Техник ходимлар' %}
+{% include 'partials/category_modal.html' with kind='schedule' title='Иш тартибини қўшиш' hint='Иш тартибини қўшинг, у рўйхатда дарҳол танланади.' label='Иш тартиби номи' placeholder='Масалан, 2 сменали' %}
 
 <script>
-    // kind -> ходим формасидаги селект ва янги тоифа қўшиладиган API
+    // kind -> ходим формасидаги селект, янги қиймат қўшиладиган API ва хабарлар
     const CATEGORY_KINDS = {
-        position: { select: 'position_category_id', url: '/template/position-categories/' },
-        employee: { select: 'employee_category_id', url: '/template/employee-categories/' },
+        position: { select: 'position_category_id', url: '/template/position-categories/', added: 'Тоифа муваффақиятли қўшилди', failed: 'Тоифа қўшилмади' },
+        employee: { select: 'employee_category_id', url: '/template/employee-categories/', added: 'Тоифа муваффақиятли қўшилди', failed: 'Тоифа қўшилмади' },
+        schedule: { select: 'work_schedule_id', url: '/template/work-schedules/', added: 'Иш тартиби муваффақиятли қўшилди', failed: 'Иш тартиби қўшилмади' },
     };
 
     function openCategoryModal(kind) {
-        const modal = document.getElementById(`${kind}CategoryModal`);
+        const modal = document.getElementById(`${kind}AddModal`);
         modal.classList.remove('hidden');
         modal.classList.add('flex');
-        window.setTimeout(() => document.getElementById(`${kind}CategoryName`).focus(), 0);
+        window.setTimeout(() => document.getElementById(`${kind}AddName`).focus(), 0);
     }
 
     function closeCategoryModal(kind) {
-        const modal = document.getElementById(`${kind}CategoryModal`);
+        const modal = document.getElementById(`${kind}AddModal`);
         modal.classList.add('hidden');
         modal.classList.remove('flex');
-        document.getElementById(`${kind}CategoryName`).value = '';
+        document.getElementById(`${kind}AddName`).value = '';
     }
 
     async function saveCategory(event, kind) {
         event.preventDefault();
 
-        const saveButton = document.getElementById(`${kind}CategorySaveButton`);
+        const config = CATEGORY_KINDS[kind];
+        const saveButton = document.getElementById(`${kind}AddSaveButton`);
         setLoading(saveButton, true, 'Сақланмоқда...');
 
         try {
-            const response = await fetch(`${API_BASE}${CATEGORY_KINDS[kind].url}`, {
+            const response = await fetch(`${API_BASE}${config.url}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': getCookie('csrftoken'),
                 },
-                body: JSON.stringify({ name: document.getElementById(`${kind}CategoryName`).value.trim() }),
+                body: JSON.stringify({ name: document.getElementById(`${kind}AddName`).value.trim() }),
             });
 
             const payload = await response.json().catch(() => null);   // JSON бўлмаган жавобда (масалан, сервер хатоси) умумий хабар чиқади
             if (!response.ok) {
-                throw new Error(extractApiErrorMessage(payload) || 'Тоифа қўшилмади');
+                throw new Error(extractApiErrorMessage(payload) || config.failed);
             }
 
-            // Янги тоифани рўйхат охирига қўшиб, ходимга дарҳол танлаймиз.
-            const select = document.getElementById(CATEGORY_KINDS[kind].select);
+            // Янги қийматни рўйхат охирига қўшиб, ходимга дарҳол танлаймиз.
+            const select = document.getElementById(config.select);
             const option = document.createElement('option');
             option.value = String(payload.data.id);
             option.textContent = payload.data.name;
@@ -53,7 +56,7 @@
             select.value = option.value;
 
             closeCategoryModal(kind);
-            showToast('Тоифа муваффақиятли қўшилди');
+            showToast(config.added);
         } catch (error) {
             showToast(error.message, 'error');
         } finally {

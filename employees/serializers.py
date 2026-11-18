@@ -9,7 +9,7 @@ from django.core.files.base import ContentFile
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
-from .models import Department, Employee, EmployeeCategory, PositionCategory, Section, StaffPosition, UserProfile, GRADE_RE, ROLE_CHOICES, ROLE_USER, WORK_SCHEDULE_CHOICES, WORK_STATUS_CHOICES
+from .models import Department, Employee, EmployeeCategory, PositionCategory, Section, StaffPosition, UserProfile, WorkSchedule, GRADE_RE, ROLE_CHOICES, ROLE_USER, WORK_STATUS_CHOICES
 from .sections_tree import MAX_SECTION_DEPTH, SectionIndex
 from .staff import collect_staff_stats, vacant_places
 
@@ -229,13 +229,21 @@ class DepartmentSerializer(serializers.ModelSerializer):
 
 
 class CategorySerializer(serializers.ModelSerializer):
-    """Оддий «номи» рўйхатлари (лавозим тоифаси, ходимлар тоифаси) учун умумий асос: номи такрорланмайди."""
+    """Оддий «номи» рўйхатлари (лавозим тоифаси, ходимлар тоифаси, иш тартиби) учун умумий асос: номи такрорланмайди."""
+    duplicate_message = 'Бундай тоифа аллақачон мавжуд.'
+
+    def get_extra_kwargs(self):
+        # Моделдаги unique=True DRF UniqueValidator қўшади: у инглизча хабар беради ва фақат айни ҳарфли такрорни тутади.
+        # Такрорни validate_name ўзи (катта-кичик ҳарфсиз, ўзбекча хабар билан) текширади.
+        extra_kwargs = super().get_extra_kwargs()
+        extra_kwargs.setdefault('name', {})['validators'] = []
+        return extra_kwargs
 
     def validate_name(self, value):
         name = ' '.join(value.split())   # ортиқча бўшлиқлар битта бўшлиққа айланади
         # Катта-кичик ҳарфни Python томонда солиштирамиз: тоифалар кам, ҳар қандай базада кирилл ҳарфлар ҳам тўғри ишлайди.
         if any(existing.casefold() == name.casefold() for existing in self.Meta.model.objects.values_list('name', flat=True)):
-            raise serializers.ValidationError('Бундай тоифа аллақачон мавжуд.')
+            raise serializers.ValidationError(self.duplicate_message)
         return name
 
 
@@ -248,6 +256,14 @@ class PositionCategorySerializer(CategorySerializer):
 class EmployeeCategorySerializer(CategorySerializer):
     class Meta:
         model = EmployeeCategory
+        fields = ['id', 'name']
+
+
+class WorkScheduleSerializer(CategorySerializer):
+    duplicate_message = 'Бундай иш тартиби аллақачон мавжуд.'
+
+    class Meta:
+        model = WorkSchedule
         fields = ['id', 'name']
 
 
@@ -523,10 +539,14 @@ class EmployeeSerializer(serializers.ModelSerializer):
         choices=WORK_STATUS_CHOICES, required=False, allow_null=True, allow_blank=True,
         error_messages={'invalid_choice': 'Номаълум ҳолат танланган.'},
     )
-    # Иш тартиби: «five_day» — 5 кунлик иш ҳафтаси, «shift» — сменада; бўш/null — танланмаган.
-    work_schedule = serializers.ChoiceField(
-        choices=WORK_SCHEDULE_CHOICES, required=False, allow_null=True, allow_blank=True,
-        error_messages={'invalid_choice': 'Номаълум иш тартиби танланган.'},
+    # Иш тартиби: ўқишда {id, name}, ёзишда work_schedule_id (бўш/null — танланмаган).
+    work_schedule = WorkScheduleSerializer(read_only=True)
+    work_schedule_id = serializers.PrimaryKeyRelatedField(
+        queryset=WorkSchedule.objects.all(),
+        source='work_schedule',
+        write_only=True,
+        required=False,
+        allow_null=True,
     )
 
     class Meta:
@@ -574,6 +594,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'is_active',
             'work_status',
             'work_schedule',
+            'work_schedule_id',
             'is_deleted',
             'requires_face_id_checkout',
             'metadata',
@@ -584,9 +605,6 @@ class EmployeeSerializer(serializers.ModelSerializer):
 
     def validate_work_status(self, value):
         return value or None   # бўш қатор ва null — «ишда» (NULL сақланади)
-
-    def validate_work_schedule(self, value):
-        return value or None   # бўш қатор ва null — танланмаган (NULL сақланади)
 
     def validate_grade(self, value):
         value = (value or '').strip()

@@ -18,7 +18,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from .bnpzid import issue_bnpzid_code
-from .models import Department, Employee, EmployeeBaseImageChangeLog, EmployeeCategory, EmployeeCertificate, PositionCategory, ROLE_ADMIN, ROLE_HR, ROLE_USER, Section, UserProfile
+from .models import Department, Employee, EmployeeBaseImageChangeLog, EmployeeCategory, EmployeeCertificate, PositionCategory, ROLE_ADMIN, ROLE_HR, ROLE_USER, Section, UserProfile, WorkSchedule
 from .pki import generate_employee_pfx
 from .serializers import EmployeeSerializer
 
@@ -1072,9 +1072,15 @@ class EmployeeGradeTests(TestCase):
 
 
 class EmployeeWorkScheduleTests(TestCase):
+    """«Иш тартиби» — алоҳида рўйхат (бошқа тоифалар каби); администратор янги қиймат қўшади."""
+    URL = '/api/template/work-schedules/'
+    DEFAULTS = ['5 кунлик иш ҳафтасида', 'Сменада']
+
     def setUp(self):
         self.admin = User.objects.create_user(username='schedule_admin', password='secret123')
         UserProfile.objects.create(user=self.admin, role=ROLE_ADMIN)
+        self.hr_user = User.objects.create_user(username='schedule_hr', password='secret123')
+        UserProfile.objects.create(user=self.hr_user, role=ROLE_HR)
         self.worker_user = User.objects.create_user(username='schedule_worker', password='secret123')
         UserProfile.objects.create(user=self.worker_user, role=ROLE_USER)
         self.employee = Employee.objects.create(
@@ -1086,61 +1092,120 @@ class EmployeeWorkScheduleTests(TestCase):
             position='Operator',
         )
 
+    def api(self, user):
+        client = APIClient(HTTP_HOST='192.168.101.6')
+        client.force_authenticate(user=user)
+        return client
+
+    def test_default_schedules_are_seeded_in_order(self):
+        self.assertEqual(list(WorkSchedule.objects.values_list('name', flat=True)), self.DEFAULTS)
+
     def test_existing_employee_has_no_work_schedule(self):
-        self.assertIsNone(self.employee.work_schedule)
+        self.assertIsNone(self.employee.work_schedule_id)
+
+    def test_any_logged_in_user_can_list_schedules(self):
+        response = self.api(self.worker_user).get(self.URL)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item['name'] for item in response.data['data']], self.DEFAULTS)
+
+    def test_admin_and_hr_can_add_schedule_which_goes_last(self):
+        response = self.api(self.admin).post(self.URL, {'name': '  2   сменали '}, format='json')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['data']['name'], '2 сменали')
+        self.assertEqual(self.api(self.hr_user).post(self.URL, {'name': 'Тунги смена'}, format='json').status_code, 201)
+
+        names = [item['name'] for item in self.api(self.admin).get(self.URL).data['data']]
+        self.assertEqual(names[-2:], ['2 сменали', 'Тунги смена'])
+
+    def test_regular_user_cannot_add_schedule(self):
+        response = self.api(self.worker_user).post(self.URL, {'name': 'Бошқа'}, format='json')
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(WorkSchedule.objects.filter(name='Бошқа').exists())
+
+    def test_duplicate_and_blank_names_are_rejected_with_own_message(self):
+        client = self.api(self.admin)
+        for bad in ['Сменада', 'сменада', ' 5  КУНЛИК иш ҳафтасида ', '', '   ']:
+            with self.subTest(name=bad):
+                response = client.post(self.URL, {'name': bad}, format='json')
+                self.assertEqual(response.status_code, 400)
+                self.assertIn('name', response.data)
+        self.assertEqual(WorkSchedule.objects.count(), 2)
+        duplicate = client.post(self.URL, {'name': 'Сменада'}, format='json')
+        self.assertEqual(str(duplicate.data['name'][0]), 'Бундай иш тартиби аллақачон мавжуд.')
 
     def test_admin_can_set_and_clear_work_schedule(self):
-        client = APIClient(HTTP_HOST='192.168.101.6')
-        client.force_authenticate(user=self.admin)
+        client = self.api(self.admin)
         url = f'/api/v1/employees/{self.employee.slug}/'
+        shift = WorkSchedule.objects.get(name='Сменада')
 
-        for value in ['shift', 'five_day']:
-            response = client.patch(url, {'work_schedule': value}, format='multipart')
-            self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.data['work_schedule'], value)
-            self.employee.refresh_from_db()
-            self.assertEqual(self.employee.work_schedule, value)
+        response = client.patch(url, {'work_schedule_id': str(shift.id)}, format='multipart')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['work_schedule'], {'id': shift.id, 'name': 'Сменада'})
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.work_schedule_id, shift.id)
 
         # Форма «Танланмаган» танланганда бўш қатор юборади.
-        response = client.patch(url, {'work_schedule': ''}, format='multipart')
+        response = client.patch(url, {'work_schedule_id': ''}, format='multipart')
         self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data['work_schedule'])
         self.employee.refresh_from_db()
-        self.assertIsNone(self.employee.work_schedule)
+        self.assertIsNone(self.employee.work_schedule_id)
+
+    def test_admin_added_schedule_can_be_assigned(self):
+        client = self.api(self.admin)
+        created = client.post(self.URL, {'name': '2 сменали'}, format='json').data['data']
+
+        response = client.patch(
+            f'/api/v1/employees/{self.employee.slug}/', {'work_schedule_id': str(created['id'])}, format='multipart',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['work_schedule'], {'id': created['id'], 'name': '2 сменали'})
 
     def test_unknown_work_schedule_is_rejected(self):
-        client = APIClient(HTTP_HOST='192.168.101.6')
-        client.force_authenticate(user=self.admin)
-
-        response = client.patch(f'/api/v1/employees/{self.employee.slug}/', {'work_schedule': 'night'}, format='multipart')
+        response = self.api(self.admin).patch(
+            f'/api/v1/employees/{self.employee.slug}/', {'work_schedule_id': '99999'}, format='multipart',
+        )
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn('work_schedule', response.data)
+        self.assertIn('work_schedule_id', response.data)
 
     def test_work_schedule_on_create(self):
-        client = APIClient(HTTP_HOST='192.168.101.6')
-        client.force_authenticate(user=self.admin)
+        shift = WorkSchedule.objects.get(name='Сменада')
 
-        response = client.post(
+        response = self.api(self.admin).post(
             '/api/v1/employees/',
-            {'first_name': 'Shift', 'last_name': 'Man', 'tabel_number': 'EMP-SCHED-2', 'position': 'Fitter', 'work_schedule': 'shift'},
+            {'first_name': 'Shift', 'last_name': 'Man', 'tabel_number': 'EMP-SCHED-2', 'position': 'Fitter', 'work_schedule_id': str(shift.id)},
             format='multipart',
         )
 
         self.assertEqual(response.status_code, 201)
-        self.assertEqual(Employee.objects.get(tabel_number='EMP-SCHED-2').work_schedule, 'shift')
+        self.assertEqual(Employee.objects.get(tabel_number='EMP-SCHED-2').work_schedule_id, shift.id)
 
     def test_regular_user_cannot_change_work_schedule(self):
-        client = APIClient(HTTP_HOST='192.168.101.6')
-        client.force_authenticate(user=self.worker_user)
+        shift = WorkSchedule.objects.get(name='Сменада')
 
-        response = client.patch(f'/api/v1/employees/{self.employee.slug}/', {'work_schedule': 'shift'}, format='multipart')
+        response = self.api(self.worker_user).patch(
+            f'/api/v1/employees/{self.employee.slug}/', {'work_schedule_id': str(shift.id)}, format='multipart',
+        )
 
         self.assertEqual(response.status_code, 403)
         self.employee.refresh_from_db()
-        self.assertIsNone(self.employee.work_schedule)
+        self.assertIsNone(self.employee.work_schedule_id)
 
-    def test_edit_page_renders_select_after_status_with_saved_value(self):
-        self.employee.work_schedule = 'shift'
+    def test_schedule_in_use_cannot_be_deleted(self):
+        shift = WorkSchedule.objects.get(name='Сменада')
+        self.employee.work_schedule = shift
+        self.employee.save(update_fields=['work_schedule'])
+
+        with self.assertRaises(ProtectedError):
+            shift.delete()
+
+    def test_edit_page_renders_select_after_status_with_saved_value_and_plus_button(self):
+        shift = WorkSchedule.objects.get(name='Сменада')
+        self.employee.work_schedule = shift
         self.employee.save(update_fields=['work_schedule'])
         client = Client(HTTP_HOST='192.168.101.6')
         client.force_login(self.admin)
@@ -1149,20 +1214,37 @@ class EmployeeWorkScheduleTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         html = response.content.decode('utf-8')
-        self.assertIn('<select id="work_schedule"', html)
-        self.assertLess(html.index('id="employee_status"'), html.index('id="work_schedule"'))
-        self.assertIn('5 кунлик иш ҳафтасида', html)
-        self.assertIn('<option value="shift" selected>Сменада</option>', html)
+        self.assertIn('<select id="work_schedule_id"', html)
+        self.assertLess(html.index('id="employee_status"'), html.index('id="work_schedule_id"'))
+        for name in self.DEFAULTS:
+            self.assertIn(f'>{name}</option>', html)
+        self.assertIn(f'<option value="{shift.id}" selected>Сменада</option>', html)
+        self.assertIn('id="openWorkScheduleModalButton"', html)
+        self.assertIn('id="scheduleAddModal"', html)
 
-    def test_create_page_renders_select(self):
+    def test_view_page_shows_disabled_select_without_plus_button(self):
+        client = Client(HTTP_HOST='192.168.101.6')
+        client.force_login(self.admin)
+
+        response = client.get(reverse('employee-detail-web', kwargs={'slug': self.employee.slug}))
+
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode('utf-8')
+        self.assertIn('<select id="work_schedule_id" class="table-filter" disabled>', html)
+        self.assertNotIn('id="openWorkScheduleModalButton"', html)
+        self.assertNotIn('id="scheduleAddModal"', html)
+
+    def test_create_page_renders_select_and_modal(self):
         client = Client(HTTP_HOST='192.168.101.6')
         client.force_login(self.admin)
 
         response = client.get('/employees/create/')
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<select id="work_schedule"')
-        self.assertContains(response, '<option value="five_day">5 кунлик иш ҳафтасида</option>', html=False)
+        self.assertContains(response, '<select id="work_schedule_id"')
+        self.assertContains(response, 'id="openWorkScheduleModalButton"')
+        self.assertContains(response, 'id="scheduleAddModal"')
+        self.assertContains(response, '>5 кунлик иш ҳафтасида</option>')
 
 
 class PositionCategoryTests(TestCase):
@@ -1225,6 +1307,9 @@ class PositionCategoryTests(TestCase):
                 self.assertEqual(response.status_code, 400)
                 self.assertIn('name', response.data)
         self.assertEqual(PositionCategory.objects.count(), 4)
+        # Айни такрор ҳам ўзбекча хабар беради (DRF нинг инглизча UniqueValidator хабари эмас).
+        exact = client.post(self.URL, {'name': 'Ишчи'}, format='json')
+        self.assertEqual(str(exact.data['name'][0]), 'Бундай тоифа аллақачон мавжуд.')
 
     def test_admin_can_set_and_clear_employee_category(self):
         client = self.api(self.admin)
@@ -1296,12 +1381,12 @@ class PositionCategoryTests(TestCase):
         html = response.content.decode('utf-8')
         self.assertIn('<select id="position_category_id"', html)
         self.assertLess(html.index('id="employee_status"'), html.index('id="position_category_id"'))
-        self.assertLess(html.index('id="position_category_id"'), html.index('id="work_schedule"'))
+        self.assertLess(html.index('id="position_category_id"'), html.index('id="work_schedule_id"'))
         for name in ['Раҳбар', 'Мутахассис', 'Ишчи', 'Хизматчи']:
             self.assertIn(f'>{name}</option>', html)
         self.assertIn(f'<option value="{specialist.id}" selected>Мутахассис</option>', html)
         self.assertIn('id="openPositionCategoryModalButton"', html)
-        self.assertIn('id="positionCategoryModal"', html)
+        self.assertIn('id="positionAddModal"', html)
 
     def test_view_page_shows_disabled_select_without_plus_button(self):
         client = Client(HTTP_HOST='192.168.101.6')
@@ -1313,7 +1398,7 @@ class PositionCategoryTests(TestCase):
         html = response.content.decode('utf-8')
         self.assertIn('<select id="position_category_id" class="table-filter" disabled>', html)
         self.assertNotIn('id="openPositionCategoryModalButton"', html)
-        self.assertNotIn('id="positionCategoryModal"', html)
+        self.assertNotIn('id="positionAddModal"', html)
 
     def test_create_page_renders_select_and_modal(self):
         client = Client(HTTP_HOST='192.168.101.6')
@@ -1324,7 +1409,7 @@ class PositionCategoryTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '<select id="position_category_id"')
         self.assertContains(response, 'id="openPositionCategoryModalButton"')
-        self.assertContains(response, 'id="positionCategoryModal"')
+        self.assertContains(response, 'id="positionAddModal"')
         self.assertContains(response, '>Хизматчи</option>')
 
 
@@ -1388,6 +1473,8 @@ class EmployeeCategoryTests(TestCase):
                 self.assertEqual(response.status_code, 400)
                 self.assertIn('name', response.data)
         self.assertEqual(EmployeeCategory.objects.count(), 5)
+        exact = client.post(self.URL, {'name': 'Мутахассислар'}, format='json')
+        self.assertEqual(str(exact.data['name'][0]), 'Бундай тоифа аллақачон мавжуд.')
 
     def test_admin_can_set_and_clear_employee_category(self):
         client = self.api(self.admin)
@@ -1462,13 +1549,13 @@ class EmployeeCategoryTests(TestCase):
         self.assertEqual(response.status_code, 200)
         html = response.content.decode('utf-8')
         self.assertIn('<select id="employee_category_id"', html)
-        self.assertLess(html.index('id="work_schedule"'), html.index('id="employee_category_id"'))
+        self.assertLess(html.index('id="work_schedule_id"'), html.index('id="employee_category_id"'))
         for name in self.DEFAULTS:
             self.assertIn(f'>{name}</option>', html)
         self.assertIn(f'<option value="{specialists.id}" selected>Мутахассислар</option>', html)
         self.assertIn('id="openEmployeeCategoryModalButton"', html)
-        self.assertIn('id="employeeCategoryModal"', html)
-        self.assertIn('id="positionCategoryModal"', html)   # иккала ойна ҳам бор
+        self.assertIn('id="employeeAddModal"', html)
+        self.assertIn('id="positionAddModal"', html)   # иккала ойна ҳам бор
 
     def test_view_page_shows_disabled_select_without_plus_button(self):
         client = Client(HTTP_HOST='192.168.101.6')
@@ -1480,7 +1567,7 @@ class EmployeeCategoryTests(TestCase):
         html = response.content.decode('utf-8')
         self.assertIn('<select id="employee_category_id" class="table-filter" disabled>', html)
         self.assertNotIn('id="openEmployeeCategoryModalButton"', html)
-        self.assertNotIn('id="employeeCategoryModal"', html)
+        self.assertNotIn('id="employeeAddModal"', html)
 
     def test_create_page_renders_select_and_modal(self):
         client = Client(HTTP_HOST='192.168.101.6')
@@ -1491,7 +1578,7 @@ class EmployeeCategoryTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '<select id="employee_category_id"')
         self.assertContains(response, 'id="openEmployeeCategoryModalButton"')
-        self.assertContains(response, 'id="employeeCategoryModal"')
+        self.assertContains(response, 'id="employeeAddModal"')
         self.assertContains(response, '>Ишлаб чиқариш ходимлари</option>')
 
 

@@ -324,7 +324,7 @@ class EmployeeListCreateApiView(generics.ListCreateAPIView):
     pagination_class = EmployeeResultsSetPagination
 
     def get_queryset(self):
-        queryset = Employee.objects.select_related('department', 'section', 'section__department', 'position_category', 'employee_category').filter(is_deleted=False)
+        queryset = Employee.objects.select_related('department', 'section', 'section__department', 'position_category', 'employee_category', 'work_schedule').filter(is_deleted=False)
         source_system = self.request.query_params.get('source_system')
         tabel_number = self.request.query_params.get('tabel_number')
         external_id = self.request.query_params.get('external_id')
@@ -375,7 +375,7 @@ class EmployeeListCreateApiView(generics.ListCreateAPIView):
 
 
 class EmployeeDetailApiView(generics.RetrieveUpdateAPIView):
-    queryset = Employee.objects.select_related('department', 'section', 'section__department', 'position_category', 'employee_category').all()
+    queryset = Employee.objects.select_related('department', 'section', 'section__department', 'position_category', 'employee_category', 'work_schedule').all()
     serializer_class = EmployeeSerializer
     permission_classes = [ServiceApiAuthenticatedPermission]
     lookup_field = 'slug'
@@ -413,7 +413,7 @@ class EmployeeDetailApiView(generics.RetrieveUpdateAPIView):
 
 
 class EmployeeBaseImageUpdateApiView(APIView):
-    queryset = Employee.objects.select_related('department', 'section', 'section__department', 'position_category', 'employee_category').all()
+    queryset = Employee.objects.select_related('department', 'section', 'section__department', 'position_category', 'employee_category', 'work_schedule').all()
     permission_classes = [IsAuthenticated]
 
     def get_object(self):
