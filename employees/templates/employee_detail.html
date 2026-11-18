@@ -200,7 +200,7 @@
                         <div class="mb-2 flex h-8 items-center justify-between gap-3">
                             <label class="block text-sm font-bold text-slate-700">Лавозим тоифаси</label>
                             {% if page_mode == 'edit' and not can_edit_sizes_only %}
-                            <button type="button" id="openPositionCategoryModalButton" onclick="openPositionCategoryModal()"
+                            <button type="button" id="openPositionCategoryModalButton" onclick="openCategoryModal('position')"
                                 class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-[var(--info)] transition hover:border-blue-300 hover:bg-blue-100"
                                 title="Тоифа қўшиш" aria-label="Тоифа қўшиш">
                                 <i class="fas fa-plus"></i>
@@ -215,11 +215,29 @@
                         </select>
                     </div>
                     <div>
-                        <label class="mb-2 block text-sm font-bold text-slate-700">Иш тартиби</label>
+                        <div class="mb-2 flex h-8 items-center"><label class="block text-sm font-bold text-slate-700">Иш тартиби</label></div>
                         <select id="work_schedule" class="table-filter" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
                             <option value="">Танланмаган</option>
                             {% for value, label in work_schedule_choices %}
                             <option value="{{ value }}" {% if value == employee.work_schedule %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <div class="mb-2 flex h-8 items-center justify-between gap-3">
+                            <label class="block text-sm font-bold text-slate-700">Ходимлар тоифаси</label>
+                            {% if page_mode == 'edit' and not can_edit_sizes_only %}
+                            <button type="button" id="openEmployeeCategoryModalButton" onclick="openCategoryModal('employee')"
+                                class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-[var(--info)] transition hover:border-blue-300 hover:bg-blue-100"
+                                title="Тоифа қўшиш" aria-label="Тоифа қўшиш">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                        <select id="employee_category_id" class="table-filter" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
+                            <option value="">Тоифани танланг</option>
+                            {% for category in employee_categories %}
+                            <option value="{{ category.id }}" {% if employee.employee_category_id == category.id %}selected{% endif %}>{{ category.name }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -402,7 +420,7 @@
         </div>
     </div>
 
-    {% if not can_edit_sizes_only %}{% include 'partials/position_category_modal.html' %}{% endif %}
+    {% if not can_edit_sizes_only %}{% include 'partials/category_modals.html' %}{% endif %}
 
     <div id="inlineSectionModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/75 px-4">
         <div class="w-full max-w-lg rounded-[28px] bg-white p-6 shadow-2xl">
@@ -795,7 +813,7 @@
         setLoading(saveButton, true, 'Сақланмоқда...');
 
         const formData = new FormData();
-        ['first_name', 'last_name', 'surname', 'tabel_number', 'gender', 'date_of_birth', 'position', 'grade', 'boss_full_name', 'special_clothing_size', 'shoe_size', 'jacket_size', 'tshirt_size', 'date_of_employment', 'work_schedule', 'position_category_id', 'phone_number_1', 'phone_number_2', 'login'].forEach(id => {
+        ['first_name', 'last_name', 'surname', 'tabel_number', 'gender', 'date_of_birth', 'position', 'grade', 'boss_full_name', 'special_clothing_size', 'shoe_size', 'jacket_size', 'tshirt_size', 'date_of_employment', 'work_schedule', 'position_category_id', 'employee_category_id', 'phone_number_1', 'phone_number_2', 'login'].forEach(id => {
             formData.append(id, document.getElementById(id).value);
         });
         const adminClotheInput = document.getElementById('clothe_size_admin');

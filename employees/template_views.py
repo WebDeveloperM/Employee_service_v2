@@ -18,12 +18,15 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.pagination import PageNumberPagination
 
-from .models import Department, Employee, EmployeeCertificate, PositionCategory, Section, UserProfile, ROLE_ADMIN, ROLE_HR, ROLE_USER
+from .models import Department, Employee, EmployeeCategory, EmployeeCertificate, PositionCategory, Section, UserProfile, ROLE_ADMIN, ROLE_HR, ROLE_USER
 from .ordering import order_sections_by_code
 from .permissions import is_admin_or_hr
 from .pki import generate_employee_pfx
 from .sections_tree import SectionIndex, delete_section_or_400, order_depth_first
-from .serializers import DepartmentSerializer, EmployeeSerializer, PositionCategorySerializer, SectionSerializer, UserProfileSerializer
+from .serializers import (
+    DepartmentSerializer, EmployeeCategorySerializer, EmployeeSerializer, PositionCategorySerializer,
+    SectionSerializer, UserProfileSerializer,
+)
 from .staff import StaffTreeOrder
 
 
@@ -84,32 +87,49 @@ class DepartmentListCreateTemplateView(generics.ListCreateAPIView):
         }, status=status.HTTP_201_CREATED, headers=headers)
 
 
-class PositionCategoryListCreateTemplateView(generics.ListCreateAPIView):
-    """Лавозим тоифалари: рўйхатни барча кирганлар кўради, янги тоифани фақат администратор/HR қўшади."""
-    queryset = PositionCategory.objects.all()
-    serializer_class = PositionCategorySerializer
+class CategoryListCreateTemplateView(generics.ListCreateAPIView):
+    """«Номи» рўйхатлари: рўйхатни барча кирганлар кўради, янги тоифани фақат администратор/HR қўшади."""
     permission_classes = [IsAuthenticated]
     pagination_class = None   # тоифалар кам: селектга бутун рўйхат керак
+    list_message = ''
+    create_message = ''
+    denied_message = ''
 
     def list(self, request, *args, **kwargs):
         serializer = self.get_serializer(self.filter_queryset(self.get_queryset()), many=True)
         return Response({
             'success': True,
-            'message': 'Лавозим тоифалари муваффақиятли олинди',
+            'message': self.list_message,
             'data': serializer.data,
         })
 
     def create(self, request, *args, **kwargs):
         if not is_admin_or_hr(request.user):
-            raise PermissionDenied('Лавозим тоифасини фақат администратор ёки HR қўша олади.')
+            raise PermissionDenied(self.denied_message)
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         return Response({
             'success': True,
-            'message': 'Лавозим тоифаси муваффақиятли қўшилди',
+            'message': self.create_message,
             'data': serializer.data,
         }, status=status.HTTP_201_CREATED)
+
+
+class PositionCategoryListCreateTemplateView(CategoryListCreateTemplateView):
+    queryset = PositionCategory.objects.all()
+    serializer_class = PositionCategorySerializer
+    list_message = 'Лавозим тоифалари муваффақиятли олинди'
+    create_message = 'Лавозим тоифаси муваффақиятли қўшилди'
+    denied_message = 'Лавозим тоифасини фақат администратор ёки HR қўша олади.'
+
+
+class EmployeeCategoryListCreateTemplateView(CategoryListCreateTemplateView):
+    queryset = EmployeeCategory.objects.all()
+    serializer_class = EmployeeCategorySerializer
+    list_message = 'Ходимлар тоифалари муваффақиятли олинди'
+    create_message = 'Ходимлар тоифаси муваффақиятли қўшилди'
+    denied_message = 'Ходимлар тоифасини фақат администратор ёки HR қўша олади.'
 
 
 class DepartmentDetailTemplateView(generics.RetrieveUpdateDestroyAPIView):
@@ -269,7 +289,7 @@ class EmployeeListCreateTemplateView(generics.ListCreateAPIView):
     def get_queryset(self):
         # Порядок цех → отдел → должность задаёт StaffTreeOrder в list(); здесь — порядок внутри одного места.
         queryset = Employee.objects.select_related(
-            'department', 'section', 'section__department', 'position_category'
+            'department', 'section', 'section__department', 'position_category', 'employee_category'
         ).filter(is_deleted=False).order_by(
             'last_name',
             'first_name',
@@ -351,7 +371,7 @@ class EmployeeListCreateTemplateView(generics.ListCreateAPIView):
 
     def employees_in_tree_order(self, ids):
         """Сотрудники по списку id — ровно в этом порядке (одним запросом)."""
-        by_id = Employee.objects.select_related('department', 'section', 'section__department', 'position_category').in_bulk(ids)
+        by_id = Employee.objects.select_related('department', 'section', 'section__department', 'position_category', 'employee_category').in_bulk(ids)
         return [by_id[employee_id] for employee_id in ids if employee_id in by_id]
 
     def list(self, request, *args, **kwargs):
@@ -391,7 +411,7 @@ class EmployeeListCreateTemplateView(generics.ListCreateAPIView):
 
 class EmployeeDetailTemplateView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Employee.objects.select_related(
-        'department', 'section', 'section__department', 'position_category'
+        'department', 'section', 'section__department', 'position_category', 'employee_category'
     ).filter(is_deleted=False)
     serializer_class = EmployeeSerializer
     permission_classes = [IsAuthenticated]

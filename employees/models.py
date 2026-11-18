@@ -102,6 +102,17 @@ class PositionCategory(models.Model):
         return self.name
 
 
+class EmployeeCategory(models.Model):
+    """Ходимлар тоифаси (Бошқарув ходимлари, Мутахассислар, Техник ходимлар, …). Рўйхатни администратор ходим формасидан тўлдиради."""
+    name = models.CharField(max_length=100, unique=True, verbose_name='Название категории сотрудников')
+
+    class Meta:
+        ordering = ['id']   # бошланғич тоифалар берилган тартибда, янгилари охирида
+
+    def __str__(self):
+        return self.name
+
+
 class Section(models.Model):
     department = models.ForeignKey(Department, on_delete=models.CASCADE, related_name='sections', verbose_name='Цех')
     name = models.CharField(max_length=255, verbose_name='Название отдела')
@@ -214,6 +225,11 @@ class Employee(models.Model):
     position_category = models.ForeignKey(
         PositionCategory, on_delete=models.PROTECT, null=True, blank=True,
         related_name='employees', verbose_name='Категория должности',
+    )
+    # Ходимлар тоифаси — «Лавозим тоифаси»дан алоҳида рўйхат. PROTECT ва NULL — юқоридаги каби.
+    employee_category = models.ForeignKey(
+        EmployeeCategory, on_delete=models.PROTECT, null=True, blank=True,
+        related_name='employees', verbose_name='Категория сотрудников',
     )
     # Разряд: 1–2 хонали рақам, охирида ихтиёрий «*» (масалан, 4, 12, 12*). NULL — разряд йўқ.
     grade = models.CharField(max_length=10, null=True, blank=True, verbose_name='Разряд')

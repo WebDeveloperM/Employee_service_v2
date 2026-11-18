@@ -9,7 +9,7 @@ from django.core.files.base import ContentFile
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
-from .models import Department, Employee, PositionCategory, Section, StaffPosition, UserProfile, GRADE_RE, ROLE_CHOICES, ROLE_USER, WORK_SCHEDULE_CHOICES, WORK_STATUS_CHOICES
+from .models import Department, Employee, EmployeeCategory, PositionCategory, Section, StaffPosition, UserProfile, GRADE_RE, ROLE_CHOICES, ROLE_USER, WORK_SCHEDULE_CHOICES, WORK_STATUS_CHOICES
 from .sections_tree import MAX_SECTION_DEPTH, SectionIndex
 from .staff import collect_staff_stats, vacant_places
 
@@ -228,17 +228,27 @@ class DepartmentSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'boss_full_name', 'sort_order']
 
 
-class PositionCategorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PositionCategory
-        fields = ['id', 'name']
+class CategorySerializer(serializers.ModelSerializer):
+    """Оддий «номи» рўйхатлари (лавозим тоифаси, ходимлар тоифаси) учун умумий асос: номи такрорланмайди."""
 
     def validate_name(self, value):
         name = ' '.join(value.split())   # ортиқча бўшлиқлар битта бўшлиққа айланади
         # Катта-кичик ҳарфни Python томонда солиштирамиз: тоифалар кам, ҳар қандай базада кирилл ҳарфлар ҳам тўғри ишлайди.
-        if any(existing.casefold() == name.casefold() for existing in PositionCategory.objects.values_list('name', flat=True)):
+        if any(existing.casefold() == name.casefold() for existing in self.Meta.model.objects.values_list('name', flat=True)):
             raise serializers.ValidationError('Бундай тоифа аллақачон мавжуд.')
         return name
+
+
+class PositionCategorySerializer(CategorySerializer):
+    class Meta:
+        model = PositionCategory
+        fields = ['id', 'name']
+
+
+class EmployeeCategorySerializer(CategorySerializer):
+    class Meta:
+        model = EmployeeCategory
+        fields = ['id', 'name']
 
 
 class SectionSerializer(serializers.ModelSerializer):
@@ -435,6 +445,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
     department = DepartmentSerializer(read_only=True)
     section = SectionSerializer(read_only=True)
     position_category = PositionCategorySerializer(read_only=True)
+    employee_category = EmployeeCategorySerializer(read_only=True)
     tabel_number = serializers.CharField(
         validators=[
             UniqueValidator(
@@ -487,6 +498,13 @@ class EmployeeSerializer(serializers.ModelSerializer):
     position_category_id = serializers.PrimaryKeyRelatedField(
         queryset=PositionCategory.objects.all(),
         source='position_category',
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    employee_category_id = serializers.PrimaryKeyRelatedField(
+        queryset=EmployeeCategory.objects.all(),
+        source='employee_category',
         write_only=True,
         required=False,
         allow_null=True,
@@ -547,6 +565,8 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'position',
             'position_category',
             'position_category_id',
+            'employee_category',
+            'employee_category_id',
             'grade',
             'date_of_employment',
             'date_of_change_position',

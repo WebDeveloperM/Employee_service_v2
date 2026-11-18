@@ -18,7 +18,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from .bnpzid import issue_bnpzid_code
-from .models import Department, Employee, EmployeeBaseImageChangeLog, EmployeeCertificate, PositionCategory, ROLE_ADMIN, ROLE_HR, ROLE_USER, Section, UserProfile
+from .models import Department, Employee, EmployeeBaseImageChangeLog, EmployeeCategory, EmployeeCertificate, PositionCategory, ROLE_ADMIN, ROLE_HR, ROLE_USER, Section, UserProfile
 from .pki import generate_employee_pfx
 from .serializers import EmployeeSerializer
 
@@ -1326,6 +1326,173 @@ class PositionCategoryTests(TestCase):
         self.assertContains(response, 'id="openPositionCategoryModalButton"')
         self.assertContains(response, 'id="positionCategoryModal"')
         self.assertContains(response, '>Хизматчи</option>')
+
+
+class EmployeeCategoryTests(TestCase):
+    """«Ходимлар тоифаси» — «Лавозим тоифаси»дан алоҳида рўйхат (бошқа жадвал, бошқа майдон)."""
+    URL = '/api/template/employee-categories/'
+    DEFAULTS = ['Бошқарув ходимлари', 'Мутахассислар', 'Техник ходимлар', 'Хизмат кўрсатувчи ходимлар', 'Ишлаб чиқариш ходимлари']
+
+    def setUp(self):
+        self.admin = User.objects.create_user(username='ecat_admin', password='secret123')
+        UserProfile.objects.create(user=self.admin, role=ROLE_ADMIN)
+        self.hr_user = User.objects.create_user(username='ecat_hr', password='secret123')
+        UserProfile.objects.create(user=self.hr_user, role=ROLE_HR)
+        self.worker_user = User.objects.create_user(username='ecat_worker', password='secret123')
+        UserProfile.objects.create(user=self.worker_user, role=ROLE_USER)
+        self.employee = Employee.objects.create(
+            first_name='Ecat', last_name='Worker', tabel_number='EMP-ECAT-1',
+            login='ecat_worker', user=self.worker_user, position='Operator',
+        )
+
+    def api(self, user):
+        client = APIClient(HTTP_HOST='192.168.101.6')
+        client.force_authenticate(user=user)
+        return client
+
+    def test_default_categories_are_seeded_in_order(self):
+        self.assertEqual(list(EmployeeCategory.objects.values_list('name', flat=True)), self.DEFAULTS)
+
+    def test_existing_employee_has_no_category(self):
+        self.assertIsNone(self.employee.employee_category_id)
+
+    def test_lists_are_independent_of_position_categories(self):
+        self.assertEqual([i['name'] for i in self.api(self.worker_user).get(self.URL).data['data']], self.DEFAULTS)
+
+        response = self.api(self.admin).post(self.URL, {'name': 'Бошқа'}, format='json')
+
+        self.assertEqual(response.status_code, 201)
+        self.assertFalse(PositionCategory.objects.filter(name='Бошқа').exists())
+        self.assertEqual(PositionCategory.objects.count(), 4)
+
+    def test_admin_and_hr_can_add_category_which_goes_last(self):
+        response = self.api(self.admin).post(self.URL, {'name': '  Ёрдамчи   ходимлар '}, format='json')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['data']['name'], 'Ёрдамчи ходимлар')
+        self.assertEqual(self.api(self.hr_user).post(self.URL, {'name': 'Стажёрлар'}, format='json').status_code, 201)
+
+        names = [i['name'] for i in self.api(self.admin).get(self.URL).data['data']]
+        self.assertEqual(names[-2:], ['Ёрдамчи ходимлар', 'Стажёрлар'])
+
+    def test_regular_user_cannot_add_category(self):
+        response = self.api(self.worker_user).post(self.URL, {'name': 'Бошқа'}, format='json')
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(EmployeeCategory.objects.filter(name='Бошқа').exists())
+
+    def test_duplicate_and_blank_names_are_rejected(self):
+        client = self.api(self.admin)
+        for bad in ['Мутахассислар', 'мутахассислар', ' ТЕХНИК  ХОДИМЛАР ', '', '   ']:
+            with self.subTest(name=bad):
+                response = client.post(self.URL, {'name': bad}, format='json')
+                self.assertEqual(response.status_code, 400)
+                self.assertIn('name', response.data)
+        self.assertEqual(EmployeeCategory.objects.count(), 5)
+
+    def test_admin_can_set_and_clear_employee_category(self):
+        client = self.api(self.admin)
+        url = f'/api/v1/employees/{self.employee.slug}/'
+        technical = EmployeeCategory.objects.get(name='Техник ходимлар')
+        position = PositionCategory.objects.get(name='Ишчи')
+
+        response = client.patch(
+            url, {'employee_category_id': str(technical.id), 'position_category_id': str(position.id)}, format='multipart',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['employee_category'], {'id': technical.id, 'name': 'Техник ходимлар'})
+        self.assertEqual(response.data['position_category'], {'id': position.id, 'name': 'Ишчи'})   # иккови бир-бирига халақит бермайди
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.employee_category_id, technical.id)
+
+        response = client.patch(url, {'employee_category_id': ''}, format='multipart')
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data['employee_category'])
+        self.employee.refresh_from_db()
+        self.assertIsNone(self.employee.employee_category_id)
+        self.assertEqual(self.employee.position_category_id, position.id)   # лавозим тоифаси ўзгармади
+
+    def test_unknown_category_id_is_rejected(self):
+        response = self.api(self.admin).patch(
+            f'/api/v1/employees/{self.employee.slug}/', {'employee_category_id': '99999'}, format='multipart',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('employee_category_id', response.data)
+
+    def test_category_on_employee_create(self):
+        boss = EmployeeCategory.objects.get(name='Бошқарув ходимлари')
+
+        response = self.api(self.admin).post(
+            '/api/v1/employees/',
+            {'first_name': 'Big', 'last_name': 'Boss', 'tabel_number': 'EMP-ECAT-2', 'position': 'Chief', 'employee_category_id': str(boss.id)},
+            format='multipart',
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(Employee.objects.get(tabel_number='EMP-ECAT-2').employee_category_id, boss.id)
+
+    def test_regular_user_cannot_change_own_category(self):
+        technical = EmployeeCategory.objects.get(name='Техник ходимлар')
+
+        response = self.api(self.worker_user).patch(
+            f'/api/v1/employees/{self.employee.slug}/', {'employee_category_id': str(technical.id)}, format='multipart',
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.employee.refresh_from_db()
+        self.assertIsNone(self.employee.employee_category_id)
+
+    def test_category_in_use_cannot_be_deleted(self):
+        technical = EmployeeCategory.objects.get(name='Техник ходимлар')
+        self.employee.employee_category = technical
+        self.employee.save(update_fields=['employee_category'])
+
+        with self.assertRaises(ProtectedError):
+            technical.delete()
+
+    def test_edit_page_renders_select_after_work_schedule_with_saved_value(self):
+        specialists = EmployeeCategory.objects.get(name='Мутахассислар')
+        self.employee.employee_category = specialists
+        self.employee.save(update_fields=['employee_category'])
+        client = Client(HTTP_HOST='192.168.101.6')
+        client.force_login(self.admin)
+
+        response = client.get(reverse('employee-edit-web', kwargs={'slug': self.employee.slug}))
+
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode('utf-8')
+        self.assertIn('<select id="employee_category_id"', html)
+        self.assertLess(html.index('id="work_schedule"'), html.index('id="employee_category_id"'))
+        for name in self.DEFAULTS:
+            self.assertIn(f'>{name}</option>', html)
+        self.assertIn(f'<option value="{specialists.id}" selected>Мутахассислар</option>', html)
+        self.assertIn('id="openEmployeeCategoryModalButton"', html)
+        self.assertIn('id="employeeCategoryModal"', html)
+        self.assertIn('id="positionCategoryModal"', html)   # иккала ойна ҳам бор
+
+    def test_view_page_shows_disabled_select_without_plus_button(self):
+        client = Client(HTTP_HOST='192.168.101.6')
+        client.force_login(self.admin)
+
+        response = client.get(reverse('employee-detail-web', kwargs={'slug': self.employee.slug}))
+
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode('utf-8')
+        self.assertIn('<select id="employee_category_id" class="table-filter" disabled>', html)
+        self.assertNotIn('id="openEmployeeCategoryModalButton"', html)
+        self.assertNotIn('id="employeeCategoryModal"', html)
+
+    def test_create_page_renders_select_and_modal(self):
+        client = Client(HTTP_HOST='192.168.101.6')
+        client.force_login(self.admin)
+
+        response = client.get('/employees/create/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '<select id="employee_category_id"')
+        self.assertContains(response, 'id="openEmployeeCategoryModalButton"')
+        self.assertContains(response, 'id="employeeCategoryModal"')
+        self.assertContains(response, '>Ишлаб чиқариш ходимлари</option>')
 
 
 class SectionCodeTests(TestCase):
