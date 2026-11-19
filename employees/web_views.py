@@ -311,11 +311,13 @@ class DashboardView(AuthenticatedTemplateView):
             })
         
         charts = build_dashboard_charts(include_staff=is_admin_or_hr(request.user))
+        by_key = {chart['key']: chart for chart in charts}
         return render(request, self.template_name, {
             'stats': self.get_dashboard_data(),
-            # Штат/ёш/жинс — карталар қаторида; «Тизимдаги ходимлар ҳолати» — пастда алоҳида катта картада.
-            'charts': [chart for chart in charts if chart['key'] != 'status'],
-            'status_chart': next(chart for chart in charts if chart['key'] == 'status'),
+            # Қаторлар: штат/ёш/жинс; ҳолат (чапда) ва иш тартиби (ўнгда); лавозим тоифаси ва ходимлар тоифаси (50% / 50%).
+            'charts': [by_key[key] for key in ('staff', 'age', 'gender') if key in by_key],
+            'status_row': [by_key[key] for key in ('status', 'work_schedule')],
+            'category_row': [by_key[key] for key in ('position_category', 'employee_category')],
             'all_charts': charts,
         })
 

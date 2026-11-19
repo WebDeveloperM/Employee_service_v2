@@ -1528,7 +1528,35 @@
 
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Ходимлар');
-        XLSX.writeFile(wb, 'ходимлар.xlsx');
+        XLSX.writeFile(wb, exportFileName());
+    }
+
+    // Файл номи жадвалдаги танловга мос: «Цех - Бўлим.xlsx», фақат цех танланса «Цех.xlsx», танлов бўлмаса «ходимлар.xlsx».
+    // Ички бўлимлар тўлиқ йўли билан ёзилади («Цех - Бош бўлим - Ички бўлим.xlsx»): бир хил номли бўлимлар фарқлансин.
+    const EXPORT_FILE_NAME_MAX_LENGTH = 120;
+
+    // Windows/macOS файл номида тақиқланган белгилар (\ / : * ? " < > | ва бошқарув белгилари) бўшлиққа алмаштирилади.
+    function safeFileNamePart(text) {
+        return String(text || '')
+            .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .replace(/^\.+|\.+$/g, '')
+            .trim();
+    }
+
+    function exportFileName() {
+        const section = resolveSectionById(document.getElementById('filterSection').value);
+        const department = resolveDepartmentById(document.getElementById('filterDepartment').value)
+            || (section ? resolveDepartmentById(section.department?.id || section.department_id) : null);
+
+        const parts = [department?.name];
+        if (section) {
+            // section.path = «Бош бўлим / Ички бўлим»; ҳар бир бўлим номи алоҳида тозаланади.
+            parts.push(...String(section.path || section.name || '').split(' / '));
+        }
+        const base = parts.map(safeFileNamePart).filter(Boolean).join(' - ').slice(0, EXPORT_FILE_NAME_MAX_LENGTH).trim();
+        return `${base || 'ходимлар'}.xlsx`;
     }
 
 </script>

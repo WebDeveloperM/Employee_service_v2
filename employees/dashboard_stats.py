@@ -7,7 +7,8 @@ from collections import Counter
 from django.utils import timezone
 
 from .models import (
-    Employee, WORK_STATUS_BUSINESS_TRIP, WORK_STATUS_CHILDCARE_LEAVE, WORK_STATUS_SICK_LEAVE, WORK_STATUS_VACATION,
+    Employee, EmployeeCategory, PositionCategory, WorkSchedule,
+    WORK_STATUS_BUSINESS_TRIP, WORK_STATUS_CHILDCARE_LEAVE, WORK_STATUS_SICK_LEAVE, WORK_STATUS_VACATION,
 )
 from .staff import collect_staff_stats, plain_number
 
@@ -18,6 +19,13 @@ LIGHT_BLUE = '#7fb2ec'
 DARK_BLUE = '#1b4a96'
 ORANGE = '#eb6834'
 GRAY = '#94a3b8'
+
+# Рўйхат қийматлари (иш тартиби, лавозим ва ходимлар тоифаси) учун ранглар: сайт палитрасининг кўк ва тўқ сариғи,
+# кейин унинг давоми (кўрсатилган тартибда, такрорланмайди). Ранг қийматнинг рўйхатдаги жойига (id тартиби) боғланган:
+# қийматда ходим бўлмаса ҳам ранги сақланади, бошқа қиймат қўшилса, мавжудлари қайта бўялмайди.
+CATEGORY_COLORS = (BLUE, ORANGE, '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948')
+OTHER_COLOR = '#64748b'    # 8 тадан ортиқ қиймат «Бошқалар»га қўшилади: янги ранг ясалмайди
+UNSET_LABEL = 'Танланмаган'
 
 # (название, от, до включительно (None — без верхней границы), цвет)
 AGE_GROUPS = (
@@ -115,9 +123,46 @@ def status_chart():
     return make_chart('status', 'Тизимдаги ходимлар ҳолати', rows, note=note, hole=0.52)
 
 
+def dictionary_chart(key, title, model, field):
+    """Фаол ходимлар рўйхат қиймати бўйича: ҳар бир қиймат (ходими бўлмаса ҳам) жадвалда, танланмаганлар — охирида.
+
+    Жадвал қаторлари йиғиндиси фаол ходимлар сонига тенг («Ходимлар ҳолати» диаграммаси билан бир хил асос).
+    """
+    counts = Counter(active_employees().values_list(f'{field}_id', flat=True).iterator())
+    values = list(model.objects.order_by('id').values_list('id', 'name'))
+
+    rows = [row(name, counts[pk], CATEGORY_COLORS[index]) for index, (pk, name) in enumerate(values[:len(CATEGORY_COLORS)])]
+    rest = values[len(CATEGORY_COLORS):]
+    if rest:
+        rows.append(row('Бошқалар', sum(counts[pk] for pk, _ in rest), OTHER_COLOR))
+    if counts[None]:
+        rows.append(row(UNSET_LABEL, counts[None], GRAY))
+    return make_chart(key, title, rows)
+
+
+def work_schedule_chart():
+    return dictionary_chart('work_schedule', 'Иш тартиби бўйича статистика', WorkSchedule, 'work_schedule')
+
+
+def position_category_chart():
+    return dictionary_chart('position_category', 'Лавозим тоифаси бўйича статистика', PositionCategory, 'position_category')
+
+
+def employee_category_chart():
+    return dictionary_chart('employee_category', 'Ходимлар тоифаси бўйича статистика', EmployeeCategory, 'employee_category')
+
+
 def build_dashboard_charts(*, include_staff, today=None):
-    """Штат — фақат администратор/HR учун (худди штат API си каби). Ҳолат диаграммаси доим охирида (алоҳида катта карта)."""
+    """Штат — фақат администратор/HR учун (худди штат API си каби).
+
+    Тартиб саҳифадаги қаторларга мос: [штат], ёш, жинс — биринчи қатор; ҳолат ва иш тартиби — иккинчи (50% / 50%);
+    лавозим ва ходимлар тоифаси — учинчи (50% / 50%).
+    """
     today = today or timezone.localdate()
     charts = [staff_chart()] if include_staff else []
-    charts.extend([age_chart(today), gender_chart(), status_chart()])
+    charts.extend([
+        age_chart(today), gender_chart(),
+        status_chart(), work_schedule_chart(),
+        position_category_chart(), employee_category_chart(),
+    ])
     return charts

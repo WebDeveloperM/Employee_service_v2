@@ -104,7 +104,8 @@ class StaffChartTests(TestCase):
     def test_staff_chart_is_left_out_when_not_requested(self):
         keys = [chart['key'] for chart in build_dashboard_charts(include_staff=False, today=TODAY)]
 
-        self.assertEqual(keys, ['age', 'gender', 'status'])   # ҳолат диаграммаси доим охирида
+        # Тартиб саҳифа қаторларига мос: ёш, жинс | ҳолат, иш тартиби | лавозим тоифаси, ходимлар тоифаси.
+        self.assertEqual(keys, ['age', 'gender', 'status', 'work_schedule', 'position_category', 'employee_category'])
 
 
 class DashboardPageChartsTests(TestCase):
@@ -125,10 +126,16 @@ class DashboardPageChartsTests(TestCase):
 
         html = self.client_for(admin).get('/').content.decode()
 
-        self.assertEqual([chart['key'] for chart in self.embedded_charts(html)], ['staff', 'age', 'gender', 'status'])
-        for title in ('Штат бирлиги &amp; Бўш иш ўринлари', 'Ёш бўйича статистика', 'Эркаклар &amp; Аёллар', 'Тизимдаги ходимлар ҳолати'):
+        self.assertEqual(
+            [chart['key'] for chart in self.embedded_charts(html)],
+            ['staff', 'age', 'gender', 'status', 'work_schedule', 'position_category', 'employee_category'],
+        )
+        for title in (
+            'Штат бирлиги &amp; Бўш иш ўринлари', 'Ёш бўйича статистика', 'Эркаклар &amp; Аёллар', 'Тизимдаги ходимлар ҳолати',
+            'Иш тартиби бўйича статистика', 'Лавозим тоифаси бўйича статистика', 'Ходимлар тоифаси бўйича статистика',
+        ):
             self.assertIn(title, html)
-        self.assertEqual(html.count('data-chart="'), 4)
+        self.assertEqual(html.count('data-chart="'), 7)
 
     def test_hr_sees_the_staff_chart_too(self):
         hr = User.objects.create_user(username='charts_hr', password='secret123')
@@ -146,7 +153,10 @@ class DashboardPageChartsTests(TestCase):
         self.assertNotIn('data-chart="staff"', html)
         self.assertNotIn('Штат бирлиги &amp; Бўш иш ўринлари', html)
         self.assertIn('data-chart="age"', html)
-        self.assertEqual([chart['key'] for chart in self.embedded_charts(html)], ['age', 'gender', 'status'])
+        self.assertEqual(
+            [chart['key'] for chart in self.embedded_charts(html)],
+            ['age', 'gender', 'status', 'work_schedule', 'position_category', 'employee_category'],
+        )
         self.assertIn('data-chart="status"', html)    # ҳолат диаграммаси штат ҳуқуқисиз ҳам кўринади (фақат сонлар)
 
     def test_employee_list_page_has_no_charts(self):

@@ -129,3 +129,26 @@ class EmployeeExcelExportTests(TestCase):
         self.assertIn("icon.className = 'fas fa-spinner fa-spin text-emerald-600';", html)
         self.assertIn('button.disabled = true;', html)
         self.assertIn('writeEmployeesWorkbook(rows);', html)
+
+    def test_file_name_comes_from_the_selected_department_and_section(self):
+        html = self.html()
+        build = html[html.index('function exportFileName()'):html.index("return `${base || 'ходимлар'}.xlsx`;")]
+
+        self.assertIn('XLSX.writeFile(wb, exportFileName());', html)             # қўлда ёзилган «ходимлар.xlsx» қолмаган
+        self.assertNotIn("XLSX.writeFile(wb, 'ходимлар.xlsx')", html)
+        # Цех — filterDepartment дан (бўлим танланса — бўлимнинг ўз цехидан), бўлим — тўлиқ йўли билан.
+        self.assertIn("document.getElementById('filterDepartment').value", build)
+        self.assertIn("document.getElementById('filterSection').value", build)
+        self.assertIn('section.department?.id || section.department_id', build)
+        self.assertIn("section.path || section.name", build)
+        self.assertIn(".join(' - ')", build)
+        self.assertIn("return `${base || 'ходимлар'}.xlsx`;", html)              # танлов йўқ — олдинги умумий ном
+
+    def test_file_name_drops_characters_windows_does_not_allow_and_is_not_too_long(self):
+        html = self.html()
+        clean = html[html.index('function safeFileNamePart(text)'):html.index('function exportFileName()')]
+
+        self.assertIn(r'[\\/:*?"<>|\u0000-\u001f]', clean)                       # \ / : * ? " < > | ва бошқарув белгилари
+        self.assertIn(r"\.+|\.+$", clean)                                        # бошидаги/охиридаги нуқталар (Windows рухсат бермайди)
+        self.assertIn('const EXPORT_FILE_NAME_MAX_LENGTH = 120;', html)
+        self.assertIn('.slice(0, EXPORT_FILE_NAME_MAX_LENGTH)', html)
