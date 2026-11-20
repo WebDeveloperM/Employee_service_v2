@@ -1374,6 +1374,7 @@ class UserAccessListTemplateView(UserManagementAccessMixin, generics.GenericAPIV
                 'role': visible_role,
                 'profile_id': profile.id if profile else None,
                 'has_access': bool(profile),
+                'face_id_login_enabled': profile.face_id_login_enabled if profile else None,
                 'is_active': bool(profile.user.is_active) if profile else bool(employee.is_active),
             })
 

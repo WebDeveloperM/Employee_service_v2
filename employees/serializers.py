@@ -7,9 +7,10 @@ from django.contrib.auth.models import User
 from django.contrib.auth.hashers import make_password
 from django.core.files.base import ContentFile
 from rest_framework import serializers
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.validators import UniqueValidator
 
-from .models import Department, Employee, EmployeeCategory, PositionCategory, Section, StaffPosition, UserProfile, WorkSchedule, GRADE_RE, ROLE_CHOICES, ROLE_USER, WORK_STATUS_CHOICES
+from .models import Department, Employee, EmployeeCategory, PositionCategory, Section, StaffPosition, UserProfile, WorkSchedule, GRADE_RE, ROLE_ADMIN, ROLE_CHOICES, ROLE_USER, WORK_STATUS_CHOICES
 from .sections_tree import MAX_SECTION_DEPTH, SectionIndex
 from .staff import collect_staff_stats, is_no_staff_section_name, vacant_places
 
@@ -70,7 +71,18 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'password',
             'face_image_url',
             'has_face_image',
+            'face_id_login_enabled',
         ]
+
+    def validate_face_id_login_enabled(self, value):
+        # «Face ID орқали кириш»ни фақат администратор ўзгартиради: HR ёки ходимнинг ўзи (профил саҳифасидан) ўчира олмайди.
+        current = self.instance.face_id_login_enabled if self.instance is not None else True
+        if value != current:
+            request = self.context.get('request')
+            requester = getattr(getattr(request, 'user', None), 'profile', None)
+            if requester is None or requester.role != ROLE_ADMIN:
+                raise PermissionDenied('«Face ID орқали кириш»ни фақат администратор ўзгартира олади.')
+        return value
 
     def validate_username(self, value):
         if not value or not value.strip():
@@ -112,8 +124,10 @@ class UserProfileSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         role = attrs.get('role', getattr(self.instance, 'role', ROLE_USER))
         has_existing_face = bool(getattr(self.instance, 'avatar_image', None))
+        face_id_login_enabled = attrs.get('face_id_login_enabled', getattr(self.instance, 'face_id_login_enabled', True))
 
-        if role in {'admin', 'hr'} and not has_existing_face:
+        # Асосий тасвир Face ID учун керак: Face ID орқали кириш ўчирилган бўлса, тасвирсиз ҳам рол берилади.
+        if role in {'admin', 'hr'} and face_id_login_enabled and not has_existing_face:
             raise serializers.ValidationError({'role': 'Администратор ва HR менежер роллари учун ходим карточкасида асосий тасвирни юклаш керак.'})
 
         return attrs
@@ -154,7 +168,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             password=password or 'changeme123',
             is_active=user_data.get('is_active', True),
         )
-        return UserProfile.objects.create(user=user, role=role)
+        return UserProfile.objects.create(user=user, role=role, face_id_login_enabled=validated_data.get('face_id_login_enabled', True))
 
     def update(self, instance, validated_data):
         user_data = validated_data.pop('user', {})
@@ -192,6 +206,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
                 employee.save(update_fields=update_fields)
 
         instance.role = next_role
+        if 'face_id_login_enabled' in validated_data:
+            instance.face_id_login_enabled = validated_data['face_id_login_enabled']
         instance.save()
         return instance
 
@@ -447,7 +463,7 @@ class StaffPositionSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError('Цех ёки бўлимни танланг.')
 
         # Бир цех/бўлимда бир хил номли лавозимни яна қўшиш мумкин: такрор текширилмайди
-        # (бундай қаторлар учун банд жойларни тақсимлаш — staff.split_occupancy).
+        # (ходим ўзи қўшилган қаторга бириктирилади — Employee.staff_position; staff.distribute_unbound).
         return attrs
 
 

@@ -5,8 +5,8 @@ from .models import BnpzIdClient, Department, Employee, EmployeeCategory, Employ
 
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
-    list_display = ('id', 'user', 'role', 'has_face_image')
-    list_filter = ('role', 'user__employee__tabel_number')
+    list_display = ('id', 'user', 'role', 'face_id_login_enabled', 'has_face_image')
+    list_filter = ('role', 'face_id_login_enabled', 'user__employee__tabel_number')
     search_fields = (
         'user__username',
         'user__first_name',
@@ -17,7 +17,7 @@ class UserProfileAdmin(admin.ModelAdmin):
         'user__employee__tabel_number',
     )
     fieldsets = (
-        (None, {'fields': ('user', 'role')}),
+        (None, {'fields': ('user', 'role', 'face_id_login_enabled')}),
     )
 
     def has_face_image(self, obj):

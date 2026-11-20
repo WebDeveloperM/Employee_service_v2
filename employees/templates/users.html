@@ -311,8 +311,12 @@
         document.getElementById('passwordRequired').classList.remove('hidden');
         document.getElementById('passwordHint').classList.add('hidden');
         setFacePreview('', false);
+        editingFaceIdLoginEnabled = true;
         document.getElementById('userModal').classList.remove('hidden');
     }
+
+    // «Face ID орқали кириш» администратор «Фойдаланувчилар рухсатлари» саҳифасида бошқаради; бу ерда фақат тасвир текширувига таъсир қилади.
+    let editingFaceIdLoginEnabled = true;
 
     async function editUser(profileId) {
         try {
@@ -329,6 +333,7 @@
             document.getElementById('passwordRequired').classList.add('hidden');
             document.getElementById('passwordHint').classList.remove('hidden');
             setFacePreview(u.face_image_url, u.has_face_image);
+            editingFaceIdLoginEnabled = u.face_id_login_enabled !== false;
             document.getElementById('userModal').classList.remove('hidden');
             if (usersPageParams.get('edit')) {
                 usersPageParams.delete('edit');
@@ -380,7 +385,7 @@
             return;
         }
 
-        if ((role === 'admin' || role === 'hr') && !hasExistingFaceImage) {
+        if ((role === 'admin' || role === 'hr') && editingFaceIdLoginEnabled && !hasExistingFaceImage) {
             showToast('Администратор ва HR менежер роллари учун ходим карточкасида асосий тасвир бўлиши керак', 'error');
             return;
         }

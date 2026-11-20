@@ -40,6 +40,9 @@ class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile', verbose_name='Пользователь')
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default=ROLE_USER, verbose_name='Роль')
     face_image = models.ImageField(upload_to='user_face_images/', null=True, blank=True, verbose_name='Эталонное изображение лица')
+    # «Face ID орқали кириш»: администратор ва HR менежер логин/паролдан кейин юз орқали тасдиқланади.
+    # Администратор «Фойдаланувчилар рухсатлари» саҳифасида ходим учун ўчириши мумкин (фақат логин ва парол).
+    face_id_login_enabled = models.BooleanField(default=True, verbose_name='Вход с проверкой Face ID')
 
     class Meta:
         verbose_name = 'Профиль пользователя'
@@ -57,7 +60,7 @@ class UserProfile(models.Model):
 
     @property
     def requires_face_id_login(self):
-        return self.role in {ROLE_ADMIN, ROLE_HR}
+        return self.role in {ROLE_ADMIN, ROLE_HR} and self.face_id_login_enabled
 
 
 class Department(models.Model):
@@ -161,9 +164,9 @@ class StaffPosition(models.Model):
     section=NULL означает должность самого цеха; иначе должность отдела
     (department при этом всегда равен section.department).
 
-    Название в пределах цеха/отдела может повторяться. Сотрудник хранит только название должности, поэтому
-    одноимённые строки для него неразличимы: они делят общих сотрудников по порядку id (первая заполняется
-    первой), а остаток уходит на последнюю.
+    Название в пределах цеха/отдела может повторяться. Сотрудник, назначенный через страницу штата, привязан
+    к своей строке (Employee.staff_position) и остаётся в ней. Сотрудники без привязки (должность введена в
+    карточке или импортом) делят свободные места одноимённых строк по порядку id, остаток уходит на последнюю.
     """
 
     department = models.ForeignKey(Department, on_delete=models.CASCADE, related_name='staff_positions', verbose_name='Цех')
@@ -180,7 +183,7 @@ class StaffPosition(models.Model):
         verbose_name = 'Штатная должность'
         verbose_name_plural = 'Штатные должности'
         # Уникальности названия нет намеренно: в одном цехе/отделе можно завести должность с тем же
-        # названием ещё раз (занятые места делятся между такими строками — staff.split_occupancy).
+        # названием ещё раз (сотрудник привязан к своей строке — Employee.staff_position; см. staff.distribute_unbound).
 
     def __str__(self):
         unit = self.section if self.section_id else self.department
@@ -216,6 +219,13 @@ class Employee(models.Model):
     department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True, related_name='employees', verbose_name='Цех')
     section = models.ForeignKey(Section, on_delete=models.SET_NULL, null=True, blank=True, related_name='employees', verbose_name='Отдел')
     position = models.TextField(blank=True, default='', verbose_name='Должность')
+    # Какую именно штатную строку занимает сотрудник (ставится при назначении на странице «Штат бирлиги ва лавозим»).
+    # Нужна, когда в одном цехе/отделе несколько одноимённых должностей: по одному названию их не различить.
+    # Учитывается, только пока совпадают цех/отдел и название должности; иначе сотрудник считается по названию.
+    staff_position = models.ForeignKey(
+        StaffPosition, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='assigned_employees', verbose_name='Штатная должность',
+    )
     # PROTECT: тоифани ходим бириктирилган бўлса «жим» ўчириб бўлмайди. NULL — тоифа танланмаган (эски ходимлар).
     position_category = models.ForeignKey(
         PositionCategory, on_delete=models.PROTECT, null=True, blank=True,

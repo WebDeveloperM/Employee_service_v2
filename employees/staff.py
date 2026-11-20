@@ -1,7 +1,8 @@
 """Подсчёт штата и вакансий для страницы «Штат бирлиги ва лавозим».
 
-Ничего не пишет в базу и не меняет существующие таблицы: «занято» считается по
-совпадению Employee.position с названием штатной должности в том же цеху/отделе.
+«Занято» считается на лету по совпадению Employee.position с названием штатной должности в том же
+цеху/отделе; среди одноимённых должностей сотрудник учитывается в строке, к которой привязан
+(Employee.staff_position), а без привязки — по порядку строк (distribute_unbound).
 """
 import re
 from collections import defaultdict
@@ -66,7 +67,7 @@ def no_staff_section_ids(section_ids):
 class StaffStats:
     # (тип единицы, id единицы, нормализованная должность) -> сколько сотрудников с таким названием в единице
     occupied: dict = field(default_factory=lambda: defaultdict(int))
-    # id штатной должности -> сколько из этих сотрудников приходится именно на неё (см. split_occupancy)
+    # id штатной должности -> сколько из этих сотрудников приходится именно на неё (привязанные + доля остальных)
     by_position: dict = field(default_factory=dict)
     # (тип единицы, id единицы) -> {'staff': штат, 'vacant': вакансии} только по своим должностям
     own: dict = field(default_factory=lambda: defaultdict(lambda: {'staff': 0, 'vacant': 0}))
@@ -94,22 +95,35 @@ def place_capacity(staff_count):
     return int(to_decimal(staff_count).to_integral_value(rounding=ROUND_CEILING))
 
 
-def split_occupancy(staff_counts, total):
-    """Как делятся занятые места между одноимёнными должностями одной единицы.
+def distribute_unbound(staff_counts, bound_counts, unbound):
+    """Сколько непривязанных сотрудников достаётся каждой из одноимённых должностей одной единицы.
 
-    Сотрудники хранят только название должности, поэтому одноимённые строки («Слесарь» дважды в одном цехе)
-    для них неразличимы и работают как один общий пул. Чтобы один и тот же сотрудник не считался дважды,
-    места заполняются по порядку: первая должность занимается первой, остаток переходит ко второй и т. д.;
-    всё, что сверх штата, остаётся на последней. Для единственной должности это просто `total`.
+    Сотрудник, назначенный через страницу штата, привязан к своей строке (Employee.staff_position) и
+    в этом распределении не участвует. Остальные (должность введена в карточке или импортом) различаются
+    только по названию: они занимают свободные места строк по порядку id, всё сверх штата — на последней.
     """
     shares = []
-    remaining = total
-    for index, staff_count in enumerate(staff_counts):
+    remaining = unbound
+    for index, (staff_count, bound) in enumerate(zip(staff_counts, bound_counts)):
         is_last = index == len(staff_counts) - 1
-        taken = remaining if is_last else min(remaining, place_capacity(staff_count))
+        taken = remaining if is_last else min(remaining, max(place_capacity(staff_count) - bound, 0))
         shares.append(taken)
         remaining -= taken
     return shares
+
+
+def split_occupancy(staff_counts, total):
+    """Распределение `total` сотрудников без привязки между одноимёнными должностями (см. distribute_unbound)."""
+    return distribute_unbound(staff_counts, [0] * len(staff_counts), total)
+
+
+def is_bound_to(employee_staff_position_id, group_ids):
+    """Привязка учитывается, только если строка — одна из одноимённых должностей той же единицы.
+
+    Если сотруднику потом поменяли цех, отдел или название должности в карточке, старая привязка
+    просто перестаёт действовать, и сотрудник считается по названию, как раньше.
+    """
+    return employee_staff_position_id is not None and employee_staff_position_id in group_ids
 
 
 def plain_number(value):
@@ -129,29 +143,38 @@ def collect_staff_stats():
     if not positions:
         return stats
 
-    wanted_names = {normalize_position(position['name']) for position in positions}
-    employees = (
-        Employee.objects
-        .filter(is_deleted=False, is_active=True)
-        .exclude(position='')
-        .values_list('department_id', 'section_id', 'position')
-    )
-    for department_id, section_id, position in employees.iterator():
-        name = normalize_position(position)
-        if name in wanted_names:
-            unit_type, unit_id = position_unit(department_id, section_id)
-            stats.occupied[(unit_type, unit_id, name)] += 1
-
-    # Должности с одним названием в одной единице делят занятые места между собой (split_occupancy), порядок — по id.
+    # Одноимённые должности одной единицы — одна группа (порядок строк — по id).
     groups = defaultdict(list)
     for position in positions:
         unit = position_unit(position['department_id'], position['section_id'])
         groups[(*unit, normalize_position(position['name']))].append(position)
+    group_ids = {key: {row['id'] for row in rows} for key, rows in groups.items()}
+
+    bound = defaultdict(int)      # id строки -> привязанные к ней сотрудники
+    unbound = defaultdict(int)    # группа -> сотрудники без (действующей) привязки
+    employees = (
+        Employee.objects
+        .filter(is_deleted=False, is_active=True)
+        .exclude(position='')
+        .values_list('department_id', 'section_id', 'position', 'staff_position_id')
+    )
+    for department_id, section_id, position, staff_position_id in employees.iterator():
+        key = (*position_unit(department_id, section_id), normalize_position(position))
+        if key not in groups:
+            continue
+        stats.occupied[key] += 1
+        if is_bound_to(staff_position_id, group_ids[key]):
+            bound[staff_position_id] += 1
+        else:
+            unbound[key] += 1
 
     for key, rows in groups.items():
         unit = key[:2]
-        shares = split_occupancy([row['staff_count'] for row in rows], stats.occupied.get(key, 0))
-        for row, occupied in zip(rows, shares):
+        shares = distribute_unbound(
+            [row['staff_count'] for row in rows], [bound[row['id']] for row in rows], unbound[key],
+        )
+        for row, share in zip(rows, shares):
+            occupied = bound[row['id']] + share
             stats.by_position[row['id']] = occupied
             stats.own[unit]['staff'] += row['staff_count']
             stats.own[unit]['vacant'] += vacant_places(row['staff_count'], occupied)
@@ -188,8 +211,9 @@ def employees_with_position_name(position):
 def employees_of_position(position):
     """Сотрудники, занимающие именно эту штатную должность.
 
-    Если в единице есть одноимённые должности, пул сотрудников делится между ними так же, как «занято»
-    в collect_staff_stats (split_occupancy), поэтому число сотрудников в списке всегда совпадает с таблицей.
+    Если в единице есть одноимённые должности: привязанные к этой строке сотрудники + её доля
+    непривязанных (distribute_unbound) — так же, как «занято» в collect_staff_stats, поэтому число
+    сотрудников в списке всегда совпадает с таблицей.
     """
     employees = employees_with_position_name(position)
     wanted = normalize_position(position.name)
@@ -197,10 +221,15 @@ def employees_of_position(position):
     if len(group) < 2:
         return employees
 
-    shares = split_occupancy([item.staff_count for item in group], len(employees))
+    group_ids = {item.pk for item in group}
+    unbound = [employee for employee in employees if not is_bound_to(employee.staff_position_id, group_ids)]
+    bound_counts = [sum(1 for employee in employees if employee.staff_position_id == item.pk) for item in group]
+    shares = distribute_unbound([item.staff_count for item in group], bound_counts, len(unbound))
     index = next(i for i, item in enumerate(group) if item.pk == position.pk)
     start = sum(shares[:index])
-    return employees[start:start + shares[index]]
+    members = {employee.pk for employee in unbound[start:start + shares[index]]}
+    # Порядок как в общем списке (по фамилии): привязанные и доля непривязанных вперемешку.
+    return [employee for employee in employees if employee.staff_position_id == position.pk or employee.pk in members]
 
 
 def section_employees(section):
@@ -217,7 +246,8 @@ def assign_employee_to_section(employee, section):
     """Добавить сотрудника в отдел без штата: меняются только цех и отдел, название должности остаётся как было."""
     employee.department_id = section.department_id
     employee.section_id = section.pk
-    employee.save(update_fields=['department', 'section', 'updated_at'])
+    employee.staff_position = None   # в отделе без штата штатной строки нет
+    employee.save(update_fields=['department', 'section', 'staff_position', 'updated_at'])
 
 
 def remove_employee_from_section(employee):
@@ -229,18 +259,21 @@ def remove_employee_from_section(employee):
 def assign_employee_to_position(employee, position):
     """Назначить сотрудника на должность: цех, отдел и название должности берутся из штатной единицы.
 
-    Другие поля (в том числе «Дата изменения должности») не трогаем.
+    Сотрудник привязывается именно к этой строке (staff_position): среди одноимённых должностей
+    он остаётся там, куда его добавили. Другие поля (в том числе «Дата изменения должности») не трогаем.
     """
     employee.department_id = position.department_id
     employee.section_id = position.section_id
     employee.position = position.name
-    employee.save(update_fields=['department', 'section', 'position', 'updated_at'])
+    employee.staff_position = position
+    employee.save(update_fields=['department', 'section', 'position', 'staff_position', 'updated_at'])
 
 
 def remove_employee_from_position(employee):
-    """Снять сотрудника с должности: очищаем только название должности, цех и отдел остаются."""
+    """Снять сотрудника с должности: очищаем название должности и привязку, цех и отдел остаются."""
     employee.position = ''
-    employee.save(update_fields=['position', 'updated_at'])
+    employee.staff_position = None
+    employee.save(update_fields=['position', 'staff_position', 'updated_at'])
 
 
 def unit_position_options(position, stats):

@@ -17,9 +17,7 @@ from .staff import (
     build_staff_tree,
     collect_staff_stats,
     employees_of_position,
-    employees_with_position_name,
     is_no_staff_section_name,
-    normalize_position,
     remove_employee_from_position,
     remove_employee_from_section,
     section_employees,
@@ -265,8 +263,9 @@ class StaffPositionEmployeesTemplateView(APIView):
                 Employee.objects.select_related('department', 'section'),
                 pk=employee_id, is_deleted=False, is_active=True,
             )
-            # Бир хил номли лавозимлар битта умумий рўйхат: ходим уларнинг бирида бўлса, шу лавозимда ҳисобланади.
-            if any(item.pk == employee.pk for item in employees_with_position_name(position)):
+            # Ходим айнан шу қаторга бириктирилади. Бир хил номли бошқа қатордаги ходимни бу ерга қўшиш —
+            # уни шу қаторга кўчириш (иш ўрни шу қаторда бўлиши керак).
+            if any(item.pk == employee.pk for item in employees_of_position(position)):
                 raise ValidationError({'detail': 'Бу ходим аллақачон шу лавозимда.'})
             if len(employees_of_position(position)) >= position.staff_count:
                 raise ValidationError({'detail': 'Бу лавозимда бўш иш ўрни йўқ. Аввал штатлар сонини кўпайтиринг.'})
@@ -310,8 +309,8 @@ class StaffPositionEmployeeDetailTemplateView(APIView):
             employee = next((item for item in employees_of_position(source) if item.pk == employee_id), None)
             if employee is None:
                 raise NotFound('Ходим бу лавозимда топилмади.')
-            # Номи бир хил бўлган лавозимга ўтказиш ходимнинг маълумотини ўзгартирмайди: у аллақачон шу лавозимда.
-            if target.pk == source.pk or normalize_position(target.name) == normalize_position(source.name):
+            # Номи бир хил бўлган бошқа қаторга ҳам ўтказиш мумкин: ходим ўша қаторга бириктирилади.
+            if target.pk == source.pk:
                 raise ValidationError({'detail': 'Ходим аллақачон шу лавозимда.'})
             if len(employees_of_position(target)) >= target.staff_count:
                 raise ValidationError({'detail': 'Танланган лавозимда бўш иш ўрни йўқ. Аввал штатлар сонини кўпайтиринг.'})
@@ -408,7 +407,8 @@ class StaffEmployeeLookupTemplateView(APIView):
         position_id = str(request.query_params.get('position_id', '') or '').strip()
         if position_id.isdigit():
             position = get_object_or_404(StaffPosition.objects.select_related('department', 'section'), pk=int(position_id))
-            already_here = {employee.pk for employee in employees_with_position_name(position)}
+            # «Қўшилган» — фақат айнан шу қатордагилар: бир хил номли бошқа қатордаги ходимни бу ерга кўчириш мумкин.
+            already_here = {employee.pk for employee in employees_of_position(position)}
         section_id = str(request.query_params.get('section_id', '') or '').strip()
         if section_id.isdigit():
             # Штатсиз бўлим («Шогиртлар»): унда аллақачон бор ходимлар «Қўшилган» деб белгиланади.

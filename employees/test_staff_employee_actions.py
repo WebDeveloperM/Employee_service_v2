@@ -59,7 +59,8 @@ class StaffPositionEmployeeActionsTests(StaffTestCase):
         self.assertEqual(response.status_code, 200, response.content)
         employee.refresh_from_db()
         self.assertEqual(employee.position, 'Токарь')
-        self.assertEqual(self.changed_fields(before, self.snapshot(employee)), {'position', 'updated_at'})
+        self.assertEqual(employee.staff_position_id, tokar.pk)         # айнан танланган қаторга бириктирилди
+        self.assertEqual(self.changed_fields(before, self.snapshot(employee)), {'position', 'staff_position_id', 'updated_at'})
 
         body = response.json()
         self.assertEqual(body['data'], [])

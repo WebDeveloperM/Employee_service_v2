@@ -57,9 +57,10 @@ class StaffPositionEmployeesTests(StaffTestCase):
         self.assertEqual(employee.department_id, self.department.pk)
         self.assertIsNone(employee.section_id)
         self.assertEqual(employee.position, 'Слесарь')
+        self.assertEqual(employee.staff_position_id, position.pk)      # айнан шу штат қаторига бириктирилди
         after = Employee.objects.filter(pk=employee.pk).values().get()
         changed = {key for key in before if before[key] != after[key]}
-        self.assertEqual(changed, {'department_id', 'section_id', 'position', 'updated_at'})
+        self.assertEqual(changed, {'department_id', 'section_id', 'position', 'staff_position_id', 'updated_at'})
 
         body = response.json()
         self.assertEqual([item['id'] for item in body['data']], [employee.pk])

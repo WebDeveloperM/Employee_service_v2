@@ -894,7 +894,7 @@
         staffState.unitPositions = Array.isArray(response.unit_positions) ? response.unit_positions : [];
         staffState.employeeMembers = new Map(employees.map(function (employee) { return [employee.id, employee]; }));
 
-        setEmployeesHeading(meta.unit_name, meta.name);
+        setEmployeesHeading(meta.unit_name, positionLabel(meta));
         document.getElementById('employeesModalMeta').textContent =
             'Штат: ' + formatNumber(meta.staff_count) + ' · Банд: ' + formatNumber(meta.occupied) + ' · Бўш: ' + formatNumber(meta.vacant);
 
@@ -922,6 +922,25 @@
         }
 
         updateEmployeeAddNote();
+    }
+
+    function normalizePositionName(name) {
+        return String(name || '').split(/\s+/).filter(Boolean).join(' ').toLocaleLowerCase();
+    }
+
+    function hasSameNameSibling(position) {
+        const name = normalizePositionName(position.name);
+        return staffState.unitPositions.some(function (item) {
+            return item.id !== position.id && normalizePositionName(item.name) === name;
+        });
+    }
+
+    // Бир хил номли лавозимлар бўлса, қайси қатор экани жадвалдаги № билан кўрсатилади: «Электрмонтер (№ 4)».
+    function positionLabel(position) {
+        const index = staffState.unitPositions.findIndex(function (item) { return item.id === position.id; });
+        return index >= 0 && hasSameNameSibling(staffState.unitPositions[index])
+            ? position.name + ' (№ ' + (index + 1) + ')'
+            : position.name;
     }
 
     function hasNoVacancy() {
@@ -1038,10 +1057,11 @@
         if (!current) return;
 
         const select = document.getElementById('employeeEditPosition');
-        select.innerHTML = staffState.unitPositions.map(function (item) {
+        select.innerHTML = staffState.unitPositions.map(function (item, index) {
             const isCurrent = item.id === current.id;
             const full = !isCurrent && Number(item.vacant) <= 0;
-            const label = item.name + (isCurrent ? ' (ҳозирги)' : ' — бўш: ' + formatNumber(item.vacant));
+            // № — жадвалдаги тартиб рақами: бир хил номли қаторларни бир-биридан ажратиш учун.
+            const label = '№ ' + (index + 1) + '. ' + item.name + (isCurrent ? ' (ҳозирги)' : ' — бўш: ' + formatNumber(item.vacant));
             return '<option value="' + item.id + '"' + (isCurrent ? ' selected' : '') + (full ? ' disabled' : '') + '>' + esc(label) + '</option>';
         }).join('');
 
@@ -1126,7 +1146,7 @@
         // Назначение меняет цех/отдел/должность сотрудника — просим подтвердить перевод.
         if (employee.department || employee.section || employee.position) {
             const question = '«' + employee.full_name + '» ҳозир: ' + describeAssignment(employee) +
-                '. Уни «' + current.name + '» лавозимига ўтказасизми?';
+                '. Уни «' + positionLabel(current) + '» лавозимига ўтказасизми?';
             if (!confirmAction(question)) return;
         }
 
