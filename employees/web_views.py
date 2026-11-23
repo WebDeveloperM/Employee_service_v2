@@ -19,6 +19,15 @@ from .dashboard_stats import build_dashboard_charts
 from .models import Department, EMPLOYEE_STATUS_CHOICES, Employee, EmployeeCategory, PositionCategory, Section, ROLE_ADMIN, ROLE_CHOICES, ROLE_HR, UserProfile, WorkSchedule
 from .ordering import order_sections_by_code
 from .permissions import is_admin_or_hr
+from .security import (
+    PENDING_FACE_AUTH_ATTEMPTS,
+    PENDING_FACE_AUTH_STARTED_AT,
+    client_ip,
+    is_login_locked,
+    register_login_failure,
+    reset_login_failures,
+    start_pending_face_auth,
+)
 from .sections_tree import annotate_path_labels, order_depth_first
 
 
@@ -46,7 +55,10 @@ def get_safe_redirect_url(request, fallback_url):
 
 
 def clear_pending_face_auth(session):
-    for key in (PENDING_FACE_AUTH_USER_ID, PENDING_FACE_AUTH_BACKEND, PENDING_FACE_AUTH_NEXT, PENDING_BNPZID_REQUEST):
+    for key in (
+        PENDING_FACE_AUTH_USER_ID, PENDING_FACE_AUTH_BACKEND, PENDING_FACE_AUTH_NEXT, PENDING_BNPZID_REQUEST,
+        PENDING_FACE_AUTH_STARTED_AT, PENDING_FACE_AUTH_ATTEMPTS,
+    ):
         session.pop(key, None)
 
 
@@ -126,7 +138,12 @@ def resolve_bnpzid_client_access(user, bnpzid_request):
     }
 
 
-def start_bnpzid_authorization(request, *, user, profile, bnpzid_request):
+def start_bnpzid_authorization(request, *, user, profile, bnpzid_request, fresh_login=False):
+    """fresh_login=True — фойдаланувчи ҳозиргина пароль киритди (ҳали тизимга кирмаган).
+
+    Бу ҳолда профилда «Face ID орқали кириш» ёқилган бўлса (администратор, HR), bnpzID мижози Face ID
+    талаб қилмаса ҳам юз текширилади: акс ҳолда bnpzID ҳаволаси орқали Face ID четлаб ўтилар эди.
+    """
     try:
         access = resolve_bnpzid_client_access(user, bnpzid_request)
     except ValueError as exc:
@@ -137,7 +154,10 @@ def start_bnpzid_authorization(request, *, user, profile, bnpzid_request):
         clear_pending_face_auth(request.session)
         return None, access.get('error') or 'Сизга ушбу тизимга кириш рухсат этилмаган.'
 
-    if access.get('requires_face_id'):
+    requires_face_id = bool(access.get('requires_face_id')) or bool(
+        fresh_login and profile is not None and profile.requires_face_id_login
+    )
+    if requires_face_id:
         if profile is None or not profile.avatar_image:
             clear_pending_face_auth(request.session)
             return None, 'Ушбу фойдаланувчи учун Face ID созланмаган. Ходим карточкасида асосий тасвирни юкланг.'
@@ -150,6 +170,7 @@ def start_bnpzid_authorization(request, *, user, profile, bnpzid_request):
             'redirect_uri': bnpzid_request['redirect_uri'],
             'state': bnpzid_request.get('state', ''),
         }
+        start_pending_face_auth(request.session)
         request.session.modified = True
         return 'face_required', ''
 
@@ -226,17 +247,33 @@ class LoginPageView(View):
             clear_pending_face_auth(request.session)
             return self._render_login(request, error_message=bnpzid_error, username=username)
 
+        ip = client_ip(request)
+        if is_login_locked(username, ip):
+            # Пароль текширилмайди ҳам: бу вақтда тўғри пароль ҳам кирита олмайди, танлаб топиш маъносиз.
+            clear_pending_face_auth(request.session)
+            return self._render_login(
+                request,
+                error_message='Жуда кўп нотўғри уриниш. 15 дақиқадан сўнг қайта уриниб кўринг.',
+                username=username,
+                bnpzid_request=bnpzid_request,
+            )
+
         user = authenticate(request, username=username, password=password)
 
         if user is None:
+            register_login_failure(username, ip)
             clear_pending_face_auth(request.session)
             return self._render_login(request, error_message='Логин ёки парол нотўғри.', username=username, bnpzid_request=bnpzid_request)
+
+        reset_login_failures(username, ip)
 
         profile = getattr(user, 'profile', None)
         redirect_url = get_safe_redirect_url(request, settings.LOGIN_REDIRECT_URL)
 
         if bnpzid_request is not None:
-            redirect_target, error_message = start_bnpzid_authorization(request, user=user, profile=profile, bnpzid_request=bnpzid_request)
+            redirect_target, error_message = start_bnpzid_authorization(
+                request, user=user, profile=profile, bnpzid_request=bnpzid_request, fresh_login=True,
+            )
             if error_message:
                 return self._render_login(request, error_message=error_message, username=username, bnpzid_request=bnpzid_request)
             if redirect_target == 'face_required':
@@ -256,6 +293,7 @@ class LoginPageView(View):
             request.session[PENDING_FACE_AUTH_USER_ID] = user.id
             request.session[PENDING_FACE_AUTH_BACKEND] = getattr(user, 'backend', 'django.contrib.auth.backends.ModelBackend')
             request.session[PENDING_FACE_AUTH_NEXT] = redirect_url
+            start_pending_face_auth(request.session)
             request.session.modified = True
             return self._render_login(request, bnpzid_request=bnpzid_request)
 
@@ -272,6 +310,20 @@ class LogoutPageView(View):
     def get(self, request, *args, **kwargs):
         logout(request)
         return HttpResponseRedirect(settings.LOGOUT_REDIRECT_URL)
+
+
+def redirect_unless_admin_or_hr(request):
+    """Цех/бўлим, ходим қўшиш ва ўчириш саҳифалари — фақат администратор ва HR учун.
+
+    Олдин бу саҳифалар ҳар қандай кирган фойдаланувчига очилар эди (масалан, ўчириш саҳифаси
+    бошқа ходимнинг маълумотларини кўрсатарди).
+    """
+    if is_admin_or_hr(request.user):
+        return None
+    employee = getattr(request.user, 'employee', None)
+    if employee is not None and not employee.is_deleted:
+        return HttpResponseRedirect(f'/employees/{employee.slug}/')
+    return HttpResponseRedirect('/profile/edit/')
 
 
 def redirect_plain_user_to_own_card(request):
@@ -340,6 +392,9 @@ class DepartmentsWebView(AuthenticatedTemplateView):
     template_name = 'departments.html'
     
     def get(self, request, *args, **kwargs):
+        denied = redirect_unless_admin_or_hr(request)
+        if denied is not None:
+            return denied
         return render(request, self.template_name)
 
 
@@ -348,6 +403,9 @@ class SectionsWebView(AuthenticatedTemplateView):
     template_name = 'departments.html'
 
     def get(self, request, *args, **kwargs):
+        denied = redirect_unless_admin_or_hr(request)
+        if denied is not None:
+            return denied
         return render(request, self.template_name, {'page_mode': 'sections'})
 
 
@@ -364,6 +422,9 @@ class EmployeeCreateWebView(AuthenticatedTemplateView):
     template_name = 'employee_create.html'
 
     def get(self, request, *args, **kwargs):
+        denied = redirect_unless_admin_or_hr(request)
+        if denied is not None:
+            return denied
         return render(request, self.template_name, {
             'departments': Department.objects.order_by('sort_order', 'name'),
             'sections': get_section_choices(),
@@ -391,6 +452,8 @@ class EmployeeDetailWebView(AuthenticatedTemplateView):
             if user_employee is not None and not user_employee.is_deleted:
                 return HttpResponseRedirect(f'/employees/{user_employee.slug}/')
             return HttpResponseRedirect('/')
+        if not is_admin_or_hr(request.user) and (user_employee is None or user_employee.pk != employee.pk):
+            return redirect_unless_admin_or_hr(request)   # профили йўқ фойдаланувчи ҳам фақат ўз карточкасини кўради
 
         return render(request, self.template_name, {
             'employee': employee,
@@ -419,6 +482,9 @@ class EmployeeEditWebView(AuthenticatedTemplateView):
             if user_employee is not None and not user_employee.is_deleted:
                 return HttpResponseRedirect(f'/employees/{user_employee.slug}/')
             return HttpResponseRedirect('/')
+        denied = redirect_unless_admin_or_hr(request)
+        if denied is not None:
+            return denied
 
         return render(request, self.template_name, {
             'employee': employee,
@@ -437,6 +503,9 @@ class EmployeeDeleteWebView(AuthenticatedTemplateView):
     template_name = 'employee_delete.html'
 
     def get(self, request, slug, *args, **kwargs):
+        denied = redirect_unless_admin_or_hr(request)
+        if denied is not None:
+            return denied
         employee = get_object_or_404(get_employee_web_queryset(), slug=slug)
         return render(request, self.template_name, {
             'employee': employee,

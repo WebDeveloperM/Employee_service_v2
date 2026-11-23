@@ -108,6 +108,10 @@
 </div>
 
 <script>
+function escHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+}
+
 let currentPage = 1;
 let currentSearch = '';
 let currentDepartment = '';
@@ -139,8 +143,8 @@ async function loadDepartments() {
         departmentFilter.innerHTML = '<option value="">Барча цехлар</option>';
         
         departments.forEach(dept => {
-            departmentSelect.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
-            departmentFilter.innerHTML += `<option value="${dept.id}">${dept.name}</option>`;
+            departmentSelect.innerHTML += `<option value="${escHtml(dept.id)}">${escHtml(dept.name)}</option>`;
+            departmentFilter.innerHTML += `<option value="${escHtml(dept.id)}">${escHtml(dept.name)}</option>`;
         });
     } catch (error) {
         console.error('Цехларни юклашда хато:', error);
@@ -192,17 +196,17 @@ function renderSections(sections) {
         const row = document.createElement('tr');
         row.className = 'hover:bg-gray-50 fade-in';
         row.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${section.id}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${section.name}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${escHtml(section.id)}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${escHtml(section.name)}</td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                ${section.department ? section.department.name : '-'}
+                ${escHtml(section.department ? section.department.name : '-')}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <button onclick="editSection(${section.id})" 
+                <button onclick="editSection(${Number(section.id)})" 
                         class="text-blue-600 hover:text-blue-900 mr-3">
                     <i class="fas fa-edit"></i>
                 </button>
-                <button onclick="deleteSection(${section.id})" 
+                <button onclick="deleteSection(${Number(section.id)})" 
                         class="text-red-600 hover:text-red-900">
                     <i class="fas fa-trash"></i>
                 </button>

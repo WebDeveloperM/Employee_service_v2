@@ -1162,7 +1162,7 @@
         filterDepartment.innerHTML = '<option value="">Барча цехлар</option>';
 
         departmentsCache.forEach(department => {
-            filterDepartment.innerHTML += `<option value="${department.id}">${department.name}</option>`;
+            filterDepartment.innerHTML += `<option value="${escapeHtml(department.id)}">${escapeHtml(department.name)}</option>`;
         });
     }
 
@@ -1176,7 +1176,7 @@
             }
             return String(section.department?.id || section.department_id || '') === String(selectedDepartmentId);
         }).forEach(section => {
-            filterSection.innerHTML += `<option value="${section.id}">${section.path || section.name}</option>`;
+            filterSection.innerHTML += `<option value="${escapeHtml(section.id)}">${escapeHtml(section.path || section.name)}</option>`;
         });
     }
 
@@ -1304,8 +1304,10 @@
         tableBody.innerHTML = pageItems.map((employee, index) => {
             // Ходим номи: Фамилия, Исм, Отасининг исми (шу тартибда).
             const fullName = [employee.last_name, employee.first_name, employee.surname].filter(Boolean).join(' ').trim() || '—';
+            // Ном ва йўллар экранланади: ходим номи ёки лавозимидаги «<script>» каби матн HTML бўлиб ишламасин (XSS).
+            // Расм модали img нинг ўз src/alt идан олинади — onclick ичига матн қўйилмайди.
             const photo = employee.base_image_url || employee.base_image
-                ? `<img src="${employee.base_image_url || employee.base_image}" alt="${fullName}" class="h-20 w-16 shrink-0 rounded-md object-cover shadow-sm cursor-pointer" onclick="openImageModal('${employee.base_image_url || employee.base_image}', '${fullName.replace(/'/g, "\\'")}')">`
+                ? `<img src="${escapeHtml(employee.base_image_url || employee.base_image)}" alt="${escapeHtml(fullName)}" class="h-20 w-16 shrink-0 rounded-md object-cover shadow-sm cursor-pointer" onclick="openImageModal(this.src, this.alt)">`
                 : `<div class="flex h-20 w-16 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-400"><i class="fas fa-user text-xl"></i></div>`;
 
             let banners = '';
@@ -1338,16 +1340,16 @@
                 <td class="px-4 py-4">
                     <div class="flex items-center gap-4">
                         ${photo}
-                        <div class="font-semibold text-slate-900">${fullName}</div>
+                        <div class="font-semibold text-slate-900">${escapeHtml(fullName)}</div>
                     </div>
                 </td>
-                <td class="w-[240px] px-4 py-4 text-slate-700">${employee.section?.name || '—'}</td>
-                <td class="px-4 py-4 text-slate-700">${employee.position || '—'}</td>
+                <td class="w-[240px] px-4 py-4 text-slate-700">${escapeHtml(employee.section?.name || '—')}</td>
+                <td class="px-4 py-4 text-slate-700">${escapeHtml(employee.position || '—')}</td>
                 <td class="px-4 py-4">
                     <div class="flex items-center justify-center gap-2">
-                        <a class="${ACTION_BUTTON} border-[var(--primary)] text-[var(--primary)] hover:bg-[var(--primary-soft)]" href="/employees/${employee.slug}/" title="Кўриш"><i class="fas fa-eye"></i></a>
-                        <a class="${ACTION_BUTTON} border-[var(--primary)] text-[var(--primary)] hover:bg-[var(--primary-soft)]" href="/employees/${employee.slug}/edit/" title="Таҳрирлаш"><i class="fas fa-pen"></i></a>
-                        <a class="${ACTION_BUTTON} border-red-300 text-red-500 hover:bg-red-50" href="/employees/${employee.slug}/delete/" title="Ўчириш"><i class="fas fa-trash"></i></a>
+                        <a class="${ACTION_BUTTON} border-[var(--primary)] text-[var(--primary)] hover:bg-[var(--primary-soft)]" href="/employees/${encodeURIComponent(employee.slug)}/" title="Кўриш"><i class="fas fa-eye"></i></a>
+                        <a class="${ACTION_BUTTON} border-[var(--primary)] text-[var(--primary)] hover:bg-[var(--primary-soft)]" href="/employees/${encodeURIComponent(employee.slug)}/edit/" title="Таҳрирлаш"><i class="fas fa-pen"></i></a>
+                        <a class="${ACTION_BUTTON} border-red-300 text-red-500 hover:bg-red-50" href="/employees/${encodeURIComponent(employee.slug)}/delete/" title="Ўчириш"><i class="fas fa-trash"></i></a>
                     </div>
                 </td>
             </tr>

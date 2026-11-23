@@ -159,11 +159,21 @@ class FaceIdLoginPermissionTests(TestCase):
 
     def test_hr_can_still_save_other_fields_when_the_value_is_unchanged(self):
         # «Фойдаланувчилар» саҳифаси бу майдонни юбормайди; юборилса ҳам, ўзгармаган қиймат тўсилмайди.
-        response = api_as(self.hr).patch(users_url(self.target), {'first_name': 'Янги', 'face_id_login_enabled': 'true'}, format='multipart')
+        # Мақсад — оддий фойдаланувчи: бошқа HR ёки администратор ҳисобини HR умуман ўзгартира олмайди.
+        target = make_user('perm_plain_target', ROLE_USER)
+        response = api_as(self.hr).patch(users_url(target), {'first_name': 'Янги', 'face_id_login_enabled': 'true'}, format='multipart')
 
         self.assertEqual(response.status_code, 200, response.content)
-        self.target.refresh_from_db()
-        self.assertEqual(self.target.user.first_name, 'Янги')
+        target.refresh_from_db()
+        self.assertEqual(target.user.first_name, 'Янги')
+
+    def test_hr_cannot_change_another_hr_or_admin_account(self):
+        for target in (self.target, self.admin):
+            with self.subTest(role=target.role):
+                response = api_as(self.hr).patch(users_url(target), {'first_name': 'Бузилган'}, format='multipart')
+                self.assertEqual(response.status_code, 403, response.content)
+                target.refresh_from_db()
+                self.assertNotEqual(target.user.first_name, 'Бузилган')
 
     def test_the_photo_is_required_only_while_face_id_is_on(self):
         no_photo = make_user('perm_nophoto', ROLE_USER, with_photo=False)

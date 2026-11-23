@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 import json
+import sys
 from urllib.parse import urlparse
 from django.core.exceptions import ImproperlyConfigured
 
@@ -24,6 +25,21 @@ def load_dotenv(dotenv_path: Path) -> None:
 
 
 load_dotenv(BASE_DIR / '.env')
+
+
+def env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    return raw.strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def env_list(name: str, default: str = '') -> list:
+    return [item.strip() for item in os.environ.get(name, default).split(',') if item.strip()]
+
+
+# Placeholder-like values that must never be used once DEBUG is off (they are in the repo / docs).
+INSECURE_SECRET_MARKERS = ('your', 'change', 'dev-', 'insecure', 'example', 'secret-key')
 
 
 def resolve_db_host(raw_host: str) -> str:
@@ -58,9 +74,24 @@ PUBLIC_HOST = urlparse(PUBLIC_BASE_URL).hostname
 LEGACY_PUBLIC_HOSTS = ['192.168.101.6']
 INTERNAL_ALLOWED_HOSTS = ['host.docker.internal', 'employee-service', *LEGACY_PUBLIC_HOSTS]
 
-SECRET_KEY = os.environ.get('SECRET_KEY', 'employee-service-dev-secret-key')
-DEBUG = os.environ.get('EMPLOYEE_SERVICE_DEBUG', 'true').strip().lower() in {'1', 'true', 'yes', 'on'}
-ALLOWED_HOSTS = [host.strip() for host in os.environ.get('ALLOWED_HOSTS', '*').split(',') if host.strip()]
+# Secure by default: DEBUG is on only when the environment says so explicitly.
+DEBUG = env_bool('EMPLOYEE_SERVICE_DEBUG', False)
+
+
+def looks_insecure(value: str, min_length: int) -> bool:
+    lowered = (value or '').lower()
+    return len(value or '') < min_length or any(marker in lowered for marker in INSECURE_SECRET_MARKERS)
+
+
+SECRET_KEY = os.environ.get('SECRET_KEY', '').strip()
+if not DEBUG and looks_insecure(SECRET_KEY, 40):
+    # SECRET_KEY signs bnpzID codes and sessions: with the key from the repo anyone can forge a bnpzID login.
+    raise ImproperlyConfigured(
+        'SECRET_KEY is missing or is a placeholder. Generate one: '
+        'python -c "import secrets; print(secrets.token_urlsafe(64))" and put it into .env.'
+    )
+SECRET_KEY = SECRET_KEY or 'employee-service-dev-secret-key'
+ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', 'localhost,127.0.0.1')
 if PUBLIC_HOST and PUBLIC_HOST not in ALLOWED_HOSTS and '*' not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(PUBLIC_HOST)
 if '*' not in ALLOWED_HOSTS:
@@ -85,6 +116,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # Static files (admin) under gunicorn without DEBUG; added below only if whitenoise is installed.
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -94,6 +126,13 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+try:
+    import whitenoise  # noqa: F401
+except ImportError:   # old image without the new requirements: static files only under DEBUG, as before
+    pass
+else:
+    MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
 
 ROOT_URLCONF = 'config.urls'
 
@@ -138,7 +177,13 @@ DATABASES = {
     }
 }
 
-AUTH_PASSWORD_VALIDATORS = []
+# Applies to createsuperuser and the admin; the web forms use the same rules in Uzbek (serializers.password_problems).
+AUTH_PASSWORD_VALIDATORS = [
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', 'OPTIONS': {'min_length': 8}},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+]
 
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = os.environ.get('EMPLOYEE_SERVICE_TIME_ZONE', 'Asia/Tashkent')
@@ -153,6 +198,8 @@ STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+# Photos are Face ID references: served only to logged-in users (employees/media_views.py).
+MEDIA_REQUIRE_AUTH = env_bool('MEDIA_REQUIRE_AUTH', True)
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -210,6 +257,12 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'employees.permissions.ServiceApiAuthenticatedPermission',
     ),
+    # nginx appends the real client address to X-Forwarded-For: the throttles key on it, not on nginx's IP.
+    'NUM_PROXIES': int(os.environ.get('NUM_PROXIES', '1')),
+    'DEFAULT_THROTTLE_RATES': {
+        'face': os.environ.get('FACE_THROTTLE_RATE', '30/min'),      # Face ID / face detection (heavy CPU work)
+        'bnpzid': os.environ.get('BNPZID_THROTTLE_RATE', '60/min'),  # bnpzID code exchange
+    },
 }
 
 SPECTACULAR_SETTINGS = {
@@ -238,11 +291,13 @@ SPECTACULAR_SETTINGS = {
     ],
 }
 
-EMPLOYEE_SERVICE_API_KEYS = [
-    value.strip()
-    for value in os.environ.get('EMPLOYEE_SERVICE_API_KEYS', 'dev-employee-service-key').split(',')
-    if value.strip()
-]
+# The dev key is published in the repo and docs: it works only with DEBUG on.
+EMPLOYEE_SERVICE_API_KEYS = env_list('EMPLOYEE_SERVICE_API_KEYS', 'dev-employee-service-key' if DEBUG else '')
+if not DEBUG and any(looks_insecure(key, 32) for key in EMPLOYEE_SERVICE_API_KEYS):
+    raise ImproperlyConfigured(
+        'EMPLOYEE_SERVICE_API_KEYS contains a short or placeholder key. '
+        'Generate one: python -c "import secrets; print(secrets.token_urlsafe(48))"'
+    )
 
 PKI_DIR = BASE_DIR / 'pki'
 EMPLOYEE_CERT_VALIDITY_DAYS = int(os.environ.get('EMPLOYEE_CERT_VALIDITY_DAYS', '730'))
@@ -276,7 +331,13 @@ if _raw_bnpzid_clients:
     except json.JSONDecodeError as exc:
         raise ImproperlyConfigured('BNPZID_CLIENTS must be valid JSON object mapping client ids to config.') from exc
 else:
-    BNPZID_CLIENTS = _default_bnpzid_clients
+    # The default client secret is in the repo: without DEBUG only clients from BNPZID_CLIENTS
+    # or from the database (BnpzIdClient, admin panel) are accepted.
+    BNPZID_CLIENTS = _default_bnpzid_clients if DEBUG else {}
+if not DEBUG and isinstance(BNPZID_CLIENTS, dict):
+    for _client_id, _client in BNPZID_CLIENTS.items():
+        if looks_insecure(str((_client or {}).get('client_secret', '')), 32):
+            raise ImproperlyConfigured(f'BNPZID_CLIENTS[{_client_id!r}].client_secret is short or a placeholder.')
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
@@ -287,10 +348,66 @@ CORS_ALLOWED_ORIGINS = [
     f"http://{PUBLIC_HOST}:6060",
 ]
 
+CORS_ALLOWED_ORIGINS += env_list('CORS_EXTRA_ORIGINS')
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = DEBUG
+# Was "= DEBUG" (and DEBUG is on in production): any site could read the API with the user's cookies.
+CORS_ALLOW_ALL_ORIGINS = False
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# ---- Cookies and security headers ----
+# Secure cookies need HTTPS (nginx on :5000 serves HTTPS). Local HTTP development: SECURE_COOKIES=false.
+SECURE_COOKIES = env_bool('SECURE_COOKIES', not DEBUG)
+SESSION_COOKIE_SECURE = SECURE_COOKIES
+CSRF_COOKIE_SECURE = SECURE_COOKIES
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+# Cookies are per host, not per port: other apps on the same server (TB on :6060/:8050) receive them too.
+# A distinct name avoids clashing with their "sessionid" (changing it logs everyone out once).
+SESSION_COOKIE_NAME = os.environ.get('SESSION_COOKIE_NAME', 'sessionid')
+SESSION_COOKIE_AGE = int(os.environ.get('SESSION_COOKIE_AGE_SECONDS', str(12 * 60 * 60)))   # 12 hours instead of 2 weeks
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin'
+X_FRAME_OPTIONS = 'DENY'
+SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '0'))   # enable once the certificate is trusted
+SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+
+# ---- Cache: login/Face ID counters and API throttles (employees/security.py) ----
+# LocMem is per process: with several gunicorn workers set a shared cache (Redis/DatabaseCache).
+# Under "manage.py test" the cache is a no-op so that counters do not leak between tests
+# (the security tests switch a real cache on for themselves).
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.dummy.DummyCache' if sys.argv[1:2] == ['test']
+        else 'django.core.cache.backends.locmem.LocMemCache',
+    },
+}
+
+# ---- Login protection (employees/security.py) ----
+LOGIN_FAILURE_LIMIT = int(os.environ.get('LOGIN_FAILURE_LIMIT', '5'))          # per login + IP
+LOGIN_IP_FAILURE_LIMIT = int(os.environ.get('LOGIN_IP_FAILURE_LIMIT', '30'))   # per IP, any login
+LOGIN_LOCKOUT_SECONDS = int(os.environ.get('LOGIN_LOCKOUT_SECONDS', '900'))
+FACE_LOGIN_MAX_ATTEMPTS = int(os.environ.get('FACE_LOGIN_MAX_ATTEMPTS', '5'))
+FACE_LOGIN_PENDING_TTL_SECONDS = int(os.environ.get('FACE_LOGIN_PENDING_TTL_SECONDS', '300'))
+TRUST_X_REAL_IP = env_bool('TRUST_X_REAL_IP', True)   # nginx sets X-Real-IP; turn off if Django is exposed directly
+
+# ---- Logging: security events go to the container log (docker logs es_app) ----
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'plain': {'format': '%(asctime)s %(levelname)s %(name)s: %(message)s'},
+    },
+    'handlers': {
+        'console': {'class': 'logging.StreamHandler', 'formatter': 'plain'},
+    },
+    'loggers': {
+        'employees.security': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'django.security': {'handlers': ['console'], 'level': 'WARNING', 'propagate': False},
+        'django.request': {'handlers': ['console'], 'level': 'ERROR', 'propagate': False},
+    },
+}
 CSRF_TRUSTED_ORIGINS = [
     EMPLOYEE_SERVICE_PUBLIC_URL,
     'https://localhost:8010',

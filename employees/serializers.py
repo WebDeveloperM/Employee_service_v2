@@ -10,7 +10,8 @@ from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.validators import UniqueValidator
 
-from .models import Department, Employee, EmployeeCategory, PositionCategory, Section, StaffPosition, UserProfile, WorkSchedule, GRADE_RE, ROLE_ADMIN, ROLE_CHOICES, ROLE_USER, WORK_STATUS_CHOICES
+from .models import Department, Employee, EmployeeCategory, PositionCategory, Section, StaffPosition, UserProfile, WorkSchedule, GRADE_RE, ROLE_ADMIN, ROLE_CHOICES, ROLE_HR, ROLE_USER, WORK_STATUS_CHOICES
+from .permissions import is_admin
 from .sections_tree import MAX_SECTION_DEPTH, SectionIndex
 from .staff import collect_staff_stats, is_no_staff_section_name, vacant_places
 
@@ -18,6 +19,69 @@ from django.contrib.auth.models import User as AuthUser
 
 
 EMPLOYEE_DATE_INPUT_FORMATS = ['%d.%m.%Y', '%d/%m/%Y', '%Y-%m-%d']
+PASSWORD_MIN_LENGTH = 8
+PRIVILEGED_ROLES = {ROLE_ADMIN, ROLE_HR}
+
+
+def password_problems(password):
+    """Паролдаги камчиликлар (ўзбекча). Бўш рўйхат — парол етарли даражада мураккаб."""
+    from django.contrib.auth.password_validation import CommonPasswordValidator
+    from django.core.exceptions import ValidationError as DjangoValidationError
+
+    problems = []
+    if len(password) < PASSWORD_MIN_LENGTH:
+        problems.append(f'Парол камида {PASSWORD_MIN_LENGTH} та белгидан иборат бўлиши керак')
+    if not any(char.isdigit() for char in password):
+        problems.append('Парол камида битта рақамни ўз ичига олиши керак')
+    if not any(char.isalpha() for char in password):
+        problems.append('Парол камида битта ҳарфни ўз ичига олиши керак')
+    try:
+        CommonPasswordValidator().validate(password)
+    except DjangoValidationError:
+        problems.append('Бу парол жуда кенг тарқалган, бошқасини танланг')
+    return problems
+
+
+def login_problem(value):
+    """Логин фақат ҳарф, рақам ва @ . + - _ дан иборат бўлсин (Django фойдаланувчи номи қоидаси).
+
+    Олдин ихтиёрий белги мумкин эди: қўштирноқ ёки «<» бор логин саҳифада HTML/JS бўлиб ишлаши мумкин эди.
+    """
+    from django.contrib.auth.validators import UnicodeUsernameValidator
+    from django.core.exceptions import ValidationError as DjangoValidationError
+
+    try:
+        UnicodeUsernameValidator()(value)
+    except DjangoValidationError:
+        return 'Логин фақат ҳарф, рақам ва @ . + - _ белгиларидан иборат бўлиши керак (бўшлиқсиз).'
+    return ''
+
+
+def request_user(serializer):
+    request = serializer.context.get('request')
+    return getattr(request, 'user', None)
+
+
+def is_privileged_account(user):
+    """Администратор, HR ёки суперфойдаланувчи ҳисоби: уни фақат администратор бошқаради."""
+    if user is None:
+        return False
+    if user.is_superuser:
+        return True
+    profile = getattr(user, 'profile', None)
+    return profile is not None and profile.role in PRIVILEGED_ROLES
+
+
+def create_login_user(*, username, password, first_name='', last_name='', email='', is_active=True):
+    """Логин учун фойдаланувчи. Пароль берилмаса — киришга яроқсиз пароль (олдин «changeme123» эди:
+    барча шундай ҳисобларга бир хил маълум парол билан кириш мумкин эди). Паролни кейин администратор/HR беради."""
+    user = User(username=username, first_name=first_name, last_name=last_name, email=email, is_active=is_active)
+    if password:
+        user.set_password(password)
+    else:
+        user.set_unusable_password()
+    user.save()
+    return user
 EMPLOYEE_DATE_OUTPUT_FORMAT = '%d/%m/%Y'
 
 
@@ -87,6 +151,11 @@ class UserProfileSerializer(serializers.ModelSerializer):
     def validate_username(self, value):
         if not value or not value.strip():
             raise serializers.ValidationError("Логинни киритиш мажбурий")
+        current = self.instance.user.username if self.instance is not None else None
+        if value.strip() != current:
+            problem = login_problem(value.strip())
+            if problem:
+                raise serializers.ValidationError(problem)
         queryset = User.objects.filter(username=value.strip())
         if self.instance is not None:
             queryset = queryset.exclude(pk=self.instance.user_id)
@@ -97,16 +166,20 @@ class UserProfileSerializer(serializers.ModelSerializer):
     def validate_password(self, value):
         if not self.instance and (not value or not value.strip()):
             raise serializers.ValidationError("Янги фойдаланувчи учун парол мажбурий")
-        
-        if value and len(value) < 6:
-            raise serializers.ValidationError("Парол камида 6 та белгидан иборат бўлиши керак")
-        
-        if value and not any(c.isdigit() for c in value):
-            raise serializers.ValidationError("Парол камида битта рақамни ўз ичига олиши керак")
-        
-        if value and not any(c.isalpha() for c in value):
-            raise serializers.ValidationError("Парол камида битта ҳарфни ўз ичига олиши керак")
-        
+
+        if value:
+            problems = password_problems(value)
+            if problems:
+                raise serializers.ValidationError(problems)
+
+        return value
+
+    def validate_role(self, value):
+        # Ролни фақат администратор беради ва ўзгартиради: олдин оддий ходим ўз профилида ўзини
+        # «Администратор» қила олар эди, HR эса ўзини ёки бошқаларни администратор қилар эди.
+        current = self.instance.role if self.instance is not None else ROLE_USER
+        if value != current and not is_admin(request_user(self)):
+            raise PermissionDenied('Ролни фақат администратор ўзгартира олади.')
         return value
 
     def _validate_unique_profile_field(self, field_name, value):
@@ -122,6 +195,16 @@ class UserProfileSerializer(serializers.ModelSerializer):
         return normalized
 
     def validate(self, attrs):
+        requester = request_user(self)
+        if self.instance is not None and not is_admin(requester):
+            target = self.instance.user
+            is_self = requester is not None and target.pk == requester.pk
+            if is_privileged_account(target) and not is_self:
+                raise PermissionDenied('Администратор ва HR менежер ҳисобларини фақат администратор ўзгартира олади.')
+            user_data = attrs.get('user', {})
+            if is_self and 'is_active' in user_data and user_data['is_active'] != target.is_active:
+                raise PermissionDenied('Ўз ҳисобингизни ўчириб-ёқиш мумкин эмас.')
+
         role = attrs.get('role', getattr(self.instance, 'role', ROLE_USER))
         has_existing_face = bool(getattr(self.instance, 'avatar_image', None))
         face_id_login_enabled = attrs.get('face_id_login_enabled', getattr(self.instance, 'face_id_login_enabled', True))
@@ -160,12 +243,12 @@ class UserProfileSerializer(serializers.ModelSerializer):
         password = validated_data.pop('password', '')
         role = validated_data.get('role', ROLE_USER)
 
-        user = User.objects.create_user(
+        user = create_login_user(
             username=user_data.get('username', ''),
             first_name=user_data.get('first_name', ''),
             last_name=user_data.get('last_name', ''),
             email=user_data.get('email', ''),
-            password=password or 'changeme123',
+            password=password,
             is_active=user_data.get('is_active', True),
         )
         return UserProfile.objects.create(user=user, role=role, face_id_login_enabled=validated_data.get('face_id_login_enabled', True))
@@ -641,8 +724,32 @@ class EmployeeSerializer(serializers.ModelSerializer):
         if password or password_confirm:
             if password != password_confirm:
                 raise serializers.ValidationError({'password_confirm': 'Пароллар мос келмайди.'})
+            problems = password_problems(password.strip())
+            if problems:
+                raise serializers.ValidationError({'password': problems})
+
+        requester = request_user(self)
+        role = attrs.get('role')
+        if role is not None and role != ROLE_USER and not is_admin(requester):
+            # Ходим яратишда «Администратор»/«HR» ролини фақат администратор беради.
+            raise PermissionDenied('Ролни фақат администратор бера олади.')
+        linked_user = getattr(self.instance, 'user', None)
+        if linked_user is not None and is_privileged_account(linked_user) and not is_admin(requester):
+            changing = []
+            if password:
+                changing.append('password')
+            if 'login' in attrs and (attrs['login'] or '').strip() != (self.instance.login or ''):
+                changing.append('login')
+            if 'is_active' in attrs and attrs['is_active'] != self.instance.is_active:
+                changing.append('is_active')
+            if changing:
+                raise PermissionDenied('Администратор ёки HR менежер ходимининг логини, пароли ва ҳолатини фақат администратор ўзгартира олади.')
 
         login = attrs.get('login', '').strip()
+        if login and login != (getattr(self.instance, 'login', '') or ''):
+            problem = login_problem(login)
+            if problem:
+                raise serializers.ValidationError({'login': problem})
         if login:
             qs = Employee.objects.filter(login=login)
             if self.instance:
@@ -701,11 +808,11 @@ class EmployeeSerializer(serializers.ModelSerializer):
         login_value = validated_data.get('login', '').strip()
         role_value = validated_data.pop('role', ROLE_USER)
         if login_value:
-            auth_user = AuthUser.objects.create_user(
+            auth_user = create_login_user(
                 username=login_value,
                 first_name=validated_data.get('first_name', ''),
                 last_name=validated_data.get('last_name', ''),
-                password=password or 'changeme123',
+                password=password,
                 is_active=validated_data.get('is_active', True),
             )
             UserProfile.objects.create(user=auth_user, role=role_value)
@@ -742,11 +849,11 @@ class EmployeeSerializer(serializers.ModelSerializer):
             if instance.user_id:
                 role_value = instance.user.profile.role
 
-            linked_user = AuthUser.objects.create_user(
+            linked_user = create_login_user(
                 username=login_value,
                 first_name=validated_data.get('first_name', instance.first_name),
                 last_name=validated_data.get('last_name', instance.last_name),
-                password=password or 'changeme123',
+                password=password,
                 is_active=is_active,
             )
             UserProfile.objects.create(user=linked_user, role=role_value)

@@ -1,10 +1,13 @@
 from io import BytesIO
+import hashlib
+import hmac
 import json
 
 from PIL import Image
 from django.conf import settings
 from django.contrib.auth import login
 from django.core import signing
+from django.core.cache import cache
 from django.db import models
 from django.utils.http import url_has_allowed_host_and_scheme
 from drf_spectacular.utils import extend_schema, extend_schema_view
@@ -16,11 +19,28 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .authentication import ServiceApiKeyAuthentication
-from .permissions import ServiceApiAuthenticatedPermission
+from .permissions import (
+    AdminOrHrCanWrite,
+    AdminOrHrOrServiceKey,
+    IsAdminOrHrRole,
+    ServiceApiAuthenticatedPermission,
+    ServiceApiKeyReadOnlyPermission,
+    is_admin,
+    is_admin_or_hr,
+    is_service_api_request,
+)
 from .face import calculate_face_similarity, decode_image_to_pil, detect_face_boxes, estimate_head_pose_from_frames
 from .bnpzid import build_bnpzid_redirect, get_bnpzid_client_config, is_allowed_redirect_uri, read_bnpzid_code
 from .models import Department, Employee, EmployeeBaseImageChangeLog, Section, UserProfile, ROLE_ADMIN
 from .sections_tree import delete_section_or_400
+from .security import (
+    ScopedThrottleExceptServiceKey,
+    PENDING_FACE_AUTH_ATTEMPTS,
+    PENDING_FACE_AUTH_STARTED_AT,
+    pending_face_auth_problem,
+    register_face_attempt,
+    security_log,
+)
 from .serializers import DepartmentSerializer, EmployeeSerializer, EmployeeUpsertSerializer, SectionSerializer
 
 
@@ -28,6 +48,10 @@ PENDING_FACE_AUTH_USER_ID = 'pending_face_auth_user_id'
 PENDING_FACE_AUTH_BACKEND = 'pending_face_auth_backend'
 PENDING_FACE_AUTH_NEXT = 'pending_face_auth_next'
 PENDING_BNPZID_REQUEST = 'pending_bnpzid_request'
+PENDING_FACE_AUTH_KEYS = (
+    PENDING_FACE_AUTH_USER_ID, PENDING_FACE_AUTH_BACKEND, PENDING_FACE_AUTH_NEXT, PENDING_BNPZID_REQUEST,
+    PENDING_FACE_AUTH_STARTED_AT, PENDING_FACE_AUTH_ATTEMPTS,
+)
 
 
 class FaceCaptureRequestSerializer(serializers.Serializer):
@@ -294,25 +318,25 @@ def get_safe_login_redirect_url(request):
 class DepartmentListApiView(generics.ListCreateAPIView):
     queryset = Department.objects.all()
     serializer_class = DepartmentSerializer
-    permission_classes = [ServiceApiAuthenticatedPermission]
+    permission_classes = [ServiceApiAuthenticatedPermission, ServiceApiKeyReadOnlyPermission, AdminOrHrCanWrite]
 
 
 class DepartmentDetailApiView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Department.objects.all()
     serializer_class = DepartmentSerializer
-    permission_classes = [ServiceApiAuthenticatedPermission]
+    permission_classes = [ServiceApiAuthenticatedPermission, ServiceApiKeyReadOnlyPermission, AdminOrHrCanWrite]
 
 
 class SectionListApiView(generics.ListCreateAPIView):
     queryset = Section.objects.select_related('department').all()
     serializer_class = SectionSerializer
-    permission_classes = [ServiceApiAuthenticatedPermission]
+    permission_classes = [ServiceApiAuthenticatedPermission, ServiceApiKeyReadOnlyPermission, AdminOrHrCanWrite]
 
 
 class SectionDetailApiView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Section.objects.select_related('department').all()
     serializer_class = SectionSerializer
-    permission_classes = [ServiceApiAuthenticatedPermission]
+    permission_classes = [ServiceApiAuthenticatedPermission, ServiceApiKeyReadOnlyPermission, AdminOrHrCanWrite]
 
     def perform_destroy(self, instance):
         delete_section_or_400(instance)   # вложенные отделы -> 400 с пояснением, а не 500
@@ -320,11 +344,15 @@ class SectionDetailApiView(generics.RetrieveUpdateDestroyAPIView):
 
 class EmployeeListCreateApiView(generics.ListCreateAPIView):
     serializer_class = EmployeeSerializer
-    permission_classes = [ServiceApiAuthenticatedPermission]
+    permission_classes = [ServiceApiAuthenticatedPermission, ServiceApiKeyReadOnlyPermission, AdminOrHrCanWrite]
     pagination_class = EmployeeResultsSetPagination
 
     def get_queryset(self):
         queryset = Employee.objects.select_related('department', 'section', 'section__department', 'position_category', 'employee_category', 'work_schedule').filter(is_deleted=False)
+        if not is_service_api_request(self.request) and not is_admin_or_hr(self.request.user):
+            # Оддий ходим рўйхатда фақат ўзини кўради: бошқаларнинг телефони ва туғилган санаси — шахсий маълумот.
+            own = getattr(self.request.user, 'employee', None)
+            queryset = queryset.filter(pk=own.pk) if own is not None else queryset.none()
         source_system = self.request.query_params.get('source_system')
         tabel_number = self.request.query_params.get('tabel_number')
         external_id = self.request.query_params.get('external_id')
@@ -377,25 +405,27 @@ class EmployeeListCreateApiView(generics.ListCreateAPIView):
 class EmployeeDetailApiView(generics.RetrieveUpdateAPIView):
     queryset = Employee.objects.select_related('department', 'section', 'section__department', 'position_category', 'employee_category', 'work_schedule').all()
     serializer_class = EmployeeSerializer
-    permission_classes = [ServiceApiAuthenticatedPermission]
+    permission_classes = [ServiceApiAuthenticatedPermission, ServiceApiKeyReadOnlyPermission]
     lookup_field = 'slug'
 
     self_service_fields = {'special_clothing_size', 'clothe_size', 'shoe_size', 'jacket_size', 'tshirt_size', 'base_image'}
 
+    def is_plain_user(self):
+        # Профили йўқ фойдаланувчи ҳам (суперфойдаланувчидан ташқари) оддий ходим: олдин унга ҳамма нарса очиқ эди.
+        return not is_service_api_request(self.request) and not is_admin_or_hr(self.request.user)
+
     def get_object(self):
         employee = super().get_object()
-        profile = getattr(self.request.user, 'profile', None)
         user_employee = getattr(self.request.user, 'employee', None)
 
-        if profile is not None and profile.role == 'user':
+        if self.is_plain_user():
             if user_employee is None or user_employee.pk != employee.pk:
                 raise PermissionDenied('Сиз фақат ўз ходим карточкангизни кўра оласиз.')
 
         return employee
 
     def update(self, request, *args, **kwargs):
-        profile = getattr(request.user, 'profile', None)
-        if profile is not None and profile.role == 'user':
+        if self.is_plain_user():
             partial = kwargs.pop('partial', False)
             instance = self.get_object()
             payload = request.data.copy()
@@ -418,15 +448,12 @@ class EmployeeBaseImageUpdateApiView(APIView):
 
     def get_object(self):
         employee = generics.get_object_or_404(self.queryset, slug=self.kwargs.get('slug'))
-        authenticator = getattr(self.request, 'successful_authenticator', None)
-        if isinstance(authenticator, ServiceApiKeyAuthentication):
+        if is_service_api_request(self.request) or is_admin_or_hr(self.request.user):
             return employee
 
-        profile = getattr(self.request.user, 'profile', None)
         user_employee = getattr(self.request.user, 'employee', None)
-        if profile is not None and profile.role == 'user':
-            if user_employee is None or user_employee.pk != employee.pk:
-                raise PermissionDenied('Сиз асосий тасвирни фақат ўз ходим карточкангизда ўзгартира оласиз.')
+        if user_employee is None or user_employee.pk != employee.pk:
+            raise PermissionDenied('Сиз асосий тасвирни фақат ўз ходим карточкангизда ўзгартира оласиз.')
 
         return employee
 
@@ -474,7 +501,7 @@ class EmployeeBaseImageUpdateApiView(APIView):
 
 class EmployeeBaseImageChangeLogListApiView(generics.ListAPIView):
     serializer_class = EmployeeBaseImageChangeLogEntrySerializer
-    permission_classes = [ServiceApiAuthenticatedPermission]
+    permission_classes = [ServiceApiAuthenticatedPermission, AdminOrHrOrServiceKey]
     pagination_class = EmployeeBaseImageChangeLogPagination
 
     def get_queryset(self):
@@ -552,9 +579,7 @@ class EmployeeBaseImageChangeLogDetailApiView(APIView):
             if actor_role != ROLE_ADMIN:
                 raise PermissionDenied('Асосий фото ўзгаришлар журнали ёзувларини фақат администратор ўчира олади.')
         else:
-            profile = getattr(request.user, 'profile', None)
-            is_admin = bool(getattr(request.user, 'is_superuser', False)) or bool(profile is not None and profile.role == ROLE_ADMIN)
-            if not is_admin:
+            if not is_admin(request.user):
                 raise PermissionDenied('Асосий фото ўзгаришлар журнали ёзувларини фақат администратор ўчира олади.')
 
         entry = generics.get_object_or_404(EmployeeBaseImageChangeLog.objects.all(), pk=pk)
@@ -587,7 +612,8 @@ class EmployeeReadOnlyDetailApiView(EmployeeDetailApiView):
 
 
 class EmployeeUpsertApiView(APIView):
-    permission_classes = [ServiceApiAuthenticatedPermission]
+    # API_INTEGRATION.md: сервис калити билан синхронлаш ёпиқ; веб орқали — фақат администратор ва HR.
+    permission_classes = [ServiceApiAuthenticatedPermission, ServiceApiKeyReadOnlyPermission, IsAdminOrHrRole]
 
     @extend_schema(
         request=EmployeeUpsertSerializer,
@@ -612,6 +638,8 @@ class EmployeeUpsertApiView(APIView):
 
 
 class ProfileFaceVerifyApiView(APIView):
+    throttle_classes = [ScopedThrottleExceptServiceKey]
+    throttle_scope = 'face'
     permission_classes = [ServiceApiAuthenticatedPermission]
 
     @extend_schema(
@@ -647,7 +675,10 @@ class ProfileFaceVerifyApiView(APIView):
 
 
 class EmployeeFaceVerifyApiView(APIView):
-    permission_classes = [ServiceApiAuthenticatedPermission]
+    throttle_classes = [ScopedThrottleExceptServiceKey]
+    throttle_scope = 'face'
+    # Бошқа ходимнинг юзини текшириш оддий ходимга ёпиқ: бировнинг эталон тасвирига мос юзни танлаб кўриб бўлмасин.
+    permission_classes = [ServiceApiAuthenticatedPermission, AdminOrHrOrServiceKey]
 
     @extend_schema(
         request=FaceCaptureRequestSerializer,
@@ -679,6 +710,8 @@ class EmployeeFaceVerifyApiView(APIView):
 
 
 class FaceDetectBoxesApiView(APIView):
+    throttle_classes = [ScopedThrottleExceptServiceKey]
+    throttle_scope = 'face'
     permission_classes = [ServiceApiAuthenticatedPermission]
 
     @extend_schema(
@@ -699,6 +732,8 @@ class FaceDetectBoxesApiView(APIView):
 
 
 class LivenessHeadPoseApiView(APIView):
+    throttle_classes = [ScopedThrottleExceptServiceKey]
+    throttle_scope = 'face'
     permission_classes = [ServiceApiAuthenticatedPermission]
 
     HEAD_POSE_YAW_THRESHOLD = 15.0
@@ -768,7 +803,7 @@ class LivenessHeadPoseApiView(APIView):
     ),
 )
 class EmployeeFaceIdExemptionApiView(APIView):
-    permission_classes = [ServiceApiAuthenticatedPermission]
+    permission_classes = [ServiceApiAuthenticatedPermission, AdminOrHrOrServiceKey]
     pagination_class = EmployeeResultsSetPagination
 
     @staticmethod
@@ -852,6 +887,8 @@ class EmployeeFaceIdExemptionApiView(APIView):
 
 
 class UserLoginFaceVerifyApiView(APIView):
+    throttle_classes = [ScopedThrottleExceptServiceKey]
+    throttle_scope = 'face'
     authentication_classes = []
     permission_classes = []
 
@@ -873,6 +910,15 @@ class UserLoginFaceVerifyApiView(APIView):
         reference_file = profile.avatar_image
         if not reference_file:
             return Response({'error': 'Фойдаланувчи учун ходимнинг асосий тасвири созланмаган.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Face ID босқичи чекланган: 5 дақиқа ва 5 уриниш, кейин логин/парол қайтадан (юзни танлаб кўриш ёпилади).
+        problem = pending_face_auth_problem(request.session)
+        if problem:
+            for key in PENDING_FACE_AUTH_KEYS:
+                request.session.pop(key, None)
+            security_log.warning('face login stopped for user_id=%s: %s', pending_user_id, problem)
+            return Response({'error': problem}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        register_face_attempt(request.session)
 
         payloads = _collect_face_payloads(request)
         reference_image, error_response = _load_reference_image(reference_file, 'Ходимнинг асосий тасвирини ўқиб бўлмади')
@@ -902,14 +948,18 @@ class UserLoginFaceVerifyApiView(APIView):
                 redirect_url = request.session.get(PENDING_FACE_AUTH_NEXT) or '/'
             backend = request.session.get('pending_face_auth_backend') or 'django.contrib.auth.backends.ModelBackend'
             login(request, profile.user, backend=backend)
-            for key in (PENDING_FACE_AUTH_USER_ID, PENDING_FACE_AUTH_BACKEND, PENDING_FACE_AUTH_NEXT, PENDING_BNPZID_REQUEST):
+            for key in PENDING_FACE_AUTH_KEYS:
                 request.session.pop(key, None)
             response_data['redirect_url'] = redirect_url
+        else:
+            security_log.warning('face login not verified for user_id=%s', pending_user_id)
 
         return Response(response_data)
 
 
 class BnpzIdExchangeApiView(APIView):
+    throttle_classes = [ScopedThrottleExceptServiceKey]
+    throttle_scope = 'bnpzid'
     authentication_classes = []
     permission_classes = []
 
@@ -933,7 +983,9 @@ class BnpzIdExchangeApiView(APIView):
         if client_config is None:
             return Response({'error': 'Неизвестный клиент bnpzID.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if client_secret != str(client_config.get('client_secret', '')).strip():
+        expected_secret = str(client_config.get('client_secret', '')).strip()
+        # compare_digest: сравнение за постоянное время — по времени ответа секрет не подобрать.
+        if not expected_secret or not hmac.compare_digest(client_secret.encode(), expected_secret.encode()):
             return Response({'error': 'Некорректный client secret bnpzID.'}, status=status.HTTP_403_FORBIDDEN)
 
         if redirect_uri and not is_allowed_redirect_uri(client_config, redirect_uri):
@@ -957,6 +1009,12 @@ class BnpzIdExchangeApiView(APIView):
         profile = UserProfile.objects.select_related('user').filter(user__username=username).first()
         if profile is not None and not profile.user.is_active:
             return Response({'error': 'Пользователь деактивирован.'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Код одноразовый: перехваченный код (журнал прокси, история браузера) нельзя обменять повторно.
+        code_ttl = int(getattr(settings, 'BNPZID_CODE_TTL_SECONDS', 120))
+        if not cache.add('bnpzid-code-used:' + hashlib.sha256(code.encode()).hexdigest(), 1, timeout=code_ttl + 5):
+            security_log.warning('bnpzID code replay for client_id=%s username=%r', client_id, username)
+            return Response({'error': 'Код bnpzID уже использован.'}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response({
             'username': username,

@@ -17,4 +17,5 @@ COPY . .
 
 EXPOSE 5000
 
-CMD ["python", "manage.py", "runserver", "0.0.0.0:5000"]
+# docker-compose.yml overrides this with migrate + collectstatic + gunicorn.
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "8", "--timeout", "120"]

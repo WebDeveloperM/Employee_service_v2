@@ -34,6 +34,7 @@ from .template_views import (
 )
 from .staff_views import (
     StaffEmployeeLookupTemplateView,
+    StaffExportTemplateView,
     StaffPositionDetailTemplateView,
     StaffPositionEmployeeDetailTemplateView,
     StaffPositionEmployeesTemplateView,
@@ -99,6 +100,7 @@ urlpatterns = [
     path('api/template/sections/', SectionListCreateTemplateView.as_view()),
     path('api/template/sections/<int:pk>/', SectionDetailTemplateView.as_view()),
     path('api/template/staff/tree/', StaffTreeTemplateView.as_view()),
+    path('api/template/staff/export/', StaffExportTemplateView.as_view()),
     path('api/template/staff/positions/', StaffPositionListCreateTemplateView.as_view()),
     path('api/template/staff/positions/<int:pk>/', StaffPositionDetailTemplateView.as_view()),
     path('api/template/staff/positions/<int:pk>/employees/', StaffPositionEmployeesTemplateView.as_view()),

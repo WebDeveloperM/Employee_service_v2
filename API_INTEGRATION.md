@@ -24,16 +24,20 @@ All reusable API endpoints require authentication unless explicitly stated other
 Supported formats:
 
 ```http
-X-Employee-Service-Key: dev-employee-service-key
+X-Employee-Service-Key: <EMPLOYEE_SERVICE_API_KEY>
 ```
 
 or:
 
 ```http
-Authorization: Bearer dev-employee-service-key
+Authorization: Bearer <EMPLOYEE_SERVICE_API_KEY>
 ```
 
 Configured keys are read from `EMPLOYEE_SERVICE_API_KEYS`.
+
+- Production keys must be long random values (>= 32 characters); the service refuses to start with a placeholder key when `EMPLOYEE_SERVICE_DEBUG=false`.
+- Employee photos (`base_image_url`, `/media/...`) require authentication: send the same service key header when downloading them server-side. A browser `<img>` pointing at `/media/` works only for users logged in to employee_service (or set `MEDIA_REQUIRE_AUTH=false`).
+- Write access with the service key is limited to the integration endpoints that need it: `PATCH /employees/{slug}/base-image/`, `PATCH /employees/{slug}/face-id-exemption/`, `DELETE /employees/base-image-change-logs/{id}/` and the face verification `POST`s. Department, section and employee create/update/delete and `upsert` are refused (403).
 
 ## Request Formats
 
@@ -166,19 +170,19 @@ List employees:
 
 ```bash
 curl -X GET "https://192.168.101.6:8010/api/v1/employees/?source_system=tb-project&no_pagination=true" \
-  -H "X-Employee-Service-Key: dev-employee-service-key"
+  -H "X-Employee-Service-Key: <EMPLOYEE_SERVICE_API_KEY>"
 ```
 
 Get employee details:
 
 ```bash
 curl -X GET "https://192.168.101.6:8010/api/v1/employees/tb-project-tb-1001-ali-valiyev/" \
-  -H "X-Employee-Service-Key: dev-employee-service-key"
+  -H "X-Employee-Service-Key: <EMPLOYEE_SERVICE_API_KEY>"
 ```
 
 List departments:
 
 ```bash
 curl -X GET "https://192.168.101.6:8010/api/v1/departments/" \
-  -H "X-Employee-Service-Key: dev-employee-service-key"
+  -H "X-Employee-Service-Key: <EMPLOYEE_SERVICE_API_KEY>"
 ```

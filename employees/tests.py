@@ -90,8 +90,10 @@ class BnpzIdTests(TestCase):
 
     @patch('employees.web_views.resolve_bnpzid_client_access', return_value={'allowed': True, 'requires_face_id': False, 'error': ''})
     def test_bnpzid_authorize_redirects_back_without_face_id_when_not_required(self, _access_mock):
+        # Оддий фойдаланувчи: на мижоз, на профил Face ID талаб қилмайди.
+        # (Администратор учун Face ID профилда ёқилган — у ҳолат алоҳида тестда.)
         user = User.objects.create_user(username='provider_admin', password='secret123')
-        UserProfile.objects.create(user=user, role=ROLE_ADMIN)
+        UserProfile.objects.create(user=user, role=ROLE_USER)
 
         response = self.client.post('/bnpzid/authorize/', {
             'username': 'provider_admin',

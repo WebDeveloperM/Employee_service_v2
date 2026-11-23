@@ -227,7 +227,7 @@
         departmentsCache.forEach((department) => {
             const option = document.createElement('option');
             option.value = String(department.id);
-            option.textContent = `${department.sort_order || department.id}. ${department.name}`;
+            option.textContent = department.name;
             select.appendChild(option);
         });
 
@@ -318,18 +318,18 @@
             const row = document.createElement('tr');
             row.className = 'fade-in border-t border-slate-100 text-sm hover:bg-slate-50/80';
             row.innerHTML = `
-                <td class="px-5 py-4 font-bold text-slate-900">${department.sort_order || '-'}</td>
+                <td class="px-5 py-4 font-bold text-slate-900">${esc(department.sort_order || '-')}</td>
                 <td class="px-5 py-4">
-                    <div class="font-semibold text-slate-900">${department.name}</div>
-                    <div class="text-xs text-slate-400">ID: ${department.id}</div>
+                    <div class="font-semibold text-slate-900">${esc(department.name)}</div>
+                    <div class="text-xs text-slate-400">ID: ${Number(department.id)}</div>
                 </td>
-                <td class="px-5 py-4 text-slate-600">${department.boss_full_name || '-'}</td>
+                <td class="px-5 py-4 text-slate-600">${esc(department.boss_full_name || '-')}</td>
                 <td class="px-5 py-4 text-right">
                     <div class="inline-flex items-center gap-2">
-                        <button type="button" onclick="editDepartment(${department.id})" class="icon-action" title="Цехни таҳрирлаш">
+                        <button type="button" onclick="editDepartment(${Number(department.id)})" class="icon-action" title="Цехни таҳрирлаш">
                             <i class="fas fa-pen-to-square"></i>
                         </button>
-                        <button type="button" onclick="deleteDepartment(${department.id})" class="icon-action danger" title="Цехни ўчириш">
+                        <button type="button" onclick="deleteDepartment(${Number(department.id)})" class="icon-action danger" title="Цехни ўчириш">
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
@@ -416,7 +416,7 @@
             const row = document.createElement('tr');
             const depth = Number(section.depth || 0);
             // Ички бўлим номи олдидан унинг ID си «1.Юридик бўлим» кўринишида чиқади (стрелка ўрнига); ID си бўлмаса, жойлашувни
-            // кўрсатиш учун стрелка қолади. Асосий бўлимларда ID алоҳида «ID» устунида.
+            // кўрсатиш учун стрелка қолади. «ID» устунида фақат асосий бўлимнинг ID си; ички бўлимда бу катак бўш.
             const innerCode = String(section.code ?? '').trim();
             const innerMarker = depth > 0
                 ? (innerCode
@@ -431,7 +431,7 @@
             row.dataset.depth = depth;
             row.innerHTML = `
                 <td class="px-5 py-4 text-slate-500">${pageOffset + index + 1}</td>
-                <td class="px-5 py-4 text-slate-600">${esc(section.code) || '—'}</td>
+                <td class="px-5 py-4 text-slate-600">${depth > 0 ? '' : (esc(section.code) || '—')}</td>
                 <td class="px-5 py-4 font-semibold text-slate-900">
                     <div class="flex items-center gap-1.5" style="padding-left:${depth * 1.75}rem" title="${esc(section.path || section.name)}">
                         ${innerMarker}

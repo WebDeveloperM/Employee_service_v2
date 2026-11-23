@@ -20,7 +20,7 @@ from rest_framework.pagination import PageNumberPagination
 
 from .models import Department, Employee, EmployeeCategory, EmployeeCertificate, PositionCategory, Section, UserProfile, WorkSchedule, ROLE_ADMIN, ROLE_HR, ROLE_USER
 from .ordering import order_sections_by_code
-from .permissions import is_admin_or_hr
+from .permissions import AdminOrHrCanWrite, IsAdminOrHrRole, is_admin, is_admin_or_hr
 from .pki import generate_employee_pfx
 from .sections_tree import SectionIndex, delete_section_or_400, order_depth_first
 from .serializers import (
@@ -51,7 +51,7 @@ class UserManagementAccessMixin:
 class DepartmentListCreateTemplateView(generics.ListCreateAPIView):
     queryset = Department.objects.all().order_by('sort_order', 'name')
     serializer_class = DepartmentSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, AdminOrHrCanWrite]   # ўқиш — ҳамма, ўзгартириш — админ/HR
     pagination_class = StandardResultsSetPagination
 
     def list(self, request, *args, **kwargs):
@@ -143,7 +143,7 @@ class WorkScheduleListCreateTemplateView(CategoryListCreateTemplateView):
 class DepartmentDetailTemplateView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Department.objects.all()
     serializer_class = DepartmentSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, AdminOrHrCanWrite]   # ўқиш — ҳамма, ўзгартириш — админ/HR
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -182,7 +182,7 @@ class DepartmentDetailTemplateView(generics.RetrieveUpdateDestroyAPIView):
 class SectionListCreateTemplateView(generics.ListCreateAPIView):
     queryset = Section.objects.select_related('department').all().order_by('department__sort_order', 'department__name', 'name')
     serializer_class = SectionSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, AdminOrHrCanWrite]   # ўқиш — ҳамма, ўзгартириш — админ/HR
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
@@ -250,7 +250,7 @@ class SectionListCreateTemplateView(generics.ListCreateAPIView):
 class SectionDetailTemplateView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Section.objects.select_related('department').all()
     serializer_class = SectionSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, AdminOrHrCanWrite]   # ўқиш — ҳамма, ўзгартириш — админ/HR
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -291,7 +291,7 @@ class SectionDetailTemplateView(generics.RetrieveUpdateDestroyAPIView):
 
 class EmployeeListCreateTemplateView(generics.ListCreateAPIView):
     serializer_class = EmployeeSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrHrRole]
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
@@ -422,7 +422,7 @@ class EmployeeDetailTemplateView(generics.RetrieveUpdateDestroyAPIView):
         'department', 'section', 'section__department', 'position_category', 'employee_category', 'work_schedule'
     ).filter(is_deleted=False)
     serializer_class = EmployeeSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrHrRole]
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -453,6 +453,11 @@ class EmployeeDetailTemplateView(generics.RetrieveUpdateDestroyAPIView):
         instance = self.get_object()
         linked_user = instance.user
         linked_profile = getattr(linked_user, 'profile', None) if linked_user is not None else None
+        # Ходим ўчирилганда унинг фойдаланувчиси ҳам ўчади: HR бу йўл билан администратор ёки бошқа HR ни ўчира олмасин.
+        if linked_user is not None and not is_admin(request.user) and (
+            linked_user.is_superuser or (linked_profile is not None and linked_profile.role in {ROLE_ADMIN, ROLE_HR})
+        ):
+            raise PermissionDenied('Администратор ёки HR менежер ходимини фақат администратор ўчира олади.')
 
         with transaction.atomic():
             if instance.base_image:
@@ -543,7 +548,7 @@ class EmployeeCertificateIssueTemplateView(APIView):
 
 
 class EmployeeImportExcelTemplateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrHrRole]
     max_import_rows = 1000
     supported_image_extensions = {'.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'}
     header_aliases = {
@@ -1095,7 +1100,7 @@ class EmployeeImportExcelTemplateView(APIView):
 
 
 class EmployeePhoneImportExcelTemplateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrHrRole]
     max_import_rows = 5000
 
     TABEL_KEYWORDS = ['табел', 'tabel']
@@ -1439,6 +1444,10 @@ class UserDetailTemplateView(UserManagementAccessMixin, generics.RetrieveUpdateD
         self.ensure_user_management_access()
         instance = self.get_object()
         user = instance.user
+        if (user.is_superuser or instance.role in {ROLE_ADMIN, ROLE_HR}) and not is_admin(request.user):
+            raise PermissionDenied('Администратор ва HR менежер ҳисобларини фақат администратор ўчира олади.')
+        if user.pk == request.user.pk:
+            raise PermissionDenied('Ўз ҳисобингизни ўчириб бўлмайди.')
         employee = getattr(user, 'employee', None)
         if employee is not None:
             employee.user = None

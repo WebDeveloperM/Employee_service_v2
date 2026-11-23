@@ -3,7 +3,7 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from .models import Department, Section
+from .models import Department, ROLE_HR, Section, UserProfile
 
 
 SECTIONS_URL = '/api/template/sections/'
@@ -12,7 +12,9 @@ SECTIONS_URL = '/api/template/sections/'
 class SectionCodePerDepartmentTests(TestCase):
     def setUp(self):
         self.client = APIClient()
-        self.client.force_authenticate(user=User.objects.create_user(username='code_user', password='secret123'))
+        user = User.objects.create_user(username='code_user', password='secret123')
+        UserProfile.objects.create(user=user, role=ROLE_HR)   # бўлимни фақат администратор ёки HR ўзгартиради
+        self.client.force_authenticate(user=user)
         self.first = Department.objects.create(name='1-Цех')
         self.second = Department.objects.create(name='Раҳбарият')
 

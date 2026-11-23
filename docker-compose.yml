@@ -6,10 +6,17 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:5000"
+    # gunicorn instead of "manage.py runserver": the development server is not meant for production.
+    # 1 worker x 8 threads: login and Face ID attempt counters live in the in-process cache
+    # (employees/security.py); for more workers configure a shared cache (Redis) first.
+    command: >-
+      sh -c "python manage.py migrate --noinput
+      && python manage.py collectstatic --noinput
+      && gunicorn config.wsgi:application --bind 0.0.0.0:5000 --workers 1 --threads 8
+      --timeout 120 --access-logfile - --error-logfile -"
     environment:
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,employee-service}
-      EMPLOYEE_SERVICE_API_KEYS: "dev-employee-service-key"
+      # EMPLOYEE_SERVICE_API_KEYS comes from .env (the old hard-coded "dev-employee-service-key" was public).
       FACE_SIMILARITY_THRESHOLD: "72.0"
     volumes:
       - .:/app

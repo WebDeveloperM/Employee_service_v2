@@ -4,3 +4,19 @@
 # Root CA + employee client-certificate private keys (employees/pki.py).
 # Never commit these - anyone with ca.key can mint a valid login cert.
 pki/
+
+# Secrets: never commit. Already-committed copies must also be removed from the index
+# (git rm --cached .env certs/employee.key) and the secrets rotated - see SECURITY_AUDIT.md.
+.env
+.env.*
+!.env.example
+certs/*.key
+
+# Generated / runtime data
+__pycache__/
+*.pyc
+media/
+staticfiles/
+
+# Audit report with vulnerability details: keep it out of the (shared) repository.
+SECURITY_AUDIT.md

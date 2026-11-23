@@ -1,5 +1,7 @@
 from django.db import models, transaction
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils.http import content_disposition_header
 from rest_framework import generics, status
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.permissions import IsAuthenticated
@@ -26,6 +28,7 @@ from .staff import (
     vacant_places,
 )
 from .sections_tree import SectionIndex
+from .staff_export import build_staff_workbook, staff_export_file_name, staff_export_groups
 from .template_views import StandardResultsSetPagination
 
 
@@ -120,6 +123,20 @@ class StaffTreeTemplateView(APIView):
             'message': 'Дарахт муваффақиятли олинди',
             'data': build_staff_tree(),
         })
+
+
+class StaffExportTemplateView(APIView):
+    """Excel-файл «Штат бирлиги ва лавозим»: строка цеха/отдела, под ней его сотрудники (staff_export)."""
+
+    permission_classes = STAFF_PERMISSIONS
+
+    def get(self, request, *args, **kwargs):
+        response = HttpResponse(
+            build_staff_workbook(staff_export_groups()),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = content_disposition_header(True, staff_export_file_name())
+        return response
 
 
 class StaffPositionListCreateTemplateView(generics.ListCreateAPIView):

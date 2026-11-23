@@ -716,21 +716,26 @@
         return fnLatin || lnLatin || 'user';
     }
 
+    // Бошланғич парол: 12 белги, криптографик тасодифий (Math.random олдиндан айтиб бериладиган бўлиши мумкин).
+    // Ўхшаш белгилар (I, l, O, 0, 1) йўқ: паролни ходимга оғзаки ёки қоғозда бериш осон.
+    function _randomIndex(max) {
+        const limit = Math.floor(0x100000000 / max) * max;   // модул силжишисиз
+        const buffer = new Uint32Array(1);
+        do { crypto.getRandomValues(buffer); } while (buffer[0] >= limit);
+        return buffer[0] % max;
+    }
+
     function _generatePassword() {
-        const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-        const lower = 'abcdefghijklmnopqrstuvwxyz';
-        const digits = '0123456789';
+        const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+        const lower = 'abcdefghijkmnopqrstuvwxyz';
+        const digits = '23456789';
         const all = upper + lower + digits;
-        let pwd = [
-            upper[Math.floor(Math.random() * upper.length)],
-            lower[Math.floor(Math.random() * lower.length)],
-            digits[Math.floor(Math.random() * digits.length)],
-        ];
-        for (let i = pwd.length; i < 7; i++) {
-            pwd.push(all[Math.floor(Math.random() * all.length)]);
+        const pwd = [upper[_randomIndex(upper.length)], lower[_randomIndex(lower.length)], digits[_randomIndex(digits.length)]];
+        while (pwd.length < 12) {
+            pwd.push(all[_randomIndex(all.length)]);
         }
         for (let i = pwd.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
+            const j = _randomIndex(i + 1);
             [pwd[i], pwd[j]] = [pwd[j], pwd[i]];
         }
         return pwd.join('');

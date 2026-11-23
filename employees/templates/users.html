@@ -227,7 +227,7 @@
             user: 'bg-gray-100 text-gray-800',
         };
         const cls = colors[role] || colors.user;
-        return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${cls}">${roleDisplay}</span>`;
+        return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${cls}">${escapeHtml(roleDisplay)}</span>`;
     }
 
     function getStatusBadge(isActive) {
@@ -257,10 +257,10 @@
                 <td class="px-6 py-4 whitespace-nowrap text-sm">${getFaceIdBadge(u.has_face_image)}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm">${getStatusBadge(u.is_active)}</td>
                 <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button onclick="editUser(${u.id})" class="text-blue-600 hover:text-blue-900 mr-3" title="Таҳрирлаш">
+                    <button onclick="editUser(${Number(u.id)})" class="text-blue-600 hover:text-blue-900 mr-3" title="Таҳрирлаш">
                         <i class="fas fa-edit"></i>
                     </button>
-                    <button onclick="showDeleteModal(${u.id}, '${escapeHtml(u.username)}')" class="text-red-600 hover:text-red-900" title="Ўчириш">
+                    <button onclick="showDeleteModal(${Number(u.id)}, this.dataset.username)" data-username="${escapeHtml(u.username)}" class="text-red-600 hover:text-red-900" title="Ўчириш">
                         <i class="fas fa-trash"></i>
                     </button>
                 </td>
@@ -270,9 +270,8 @@
     }
 
     function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        // Атрибут ичида ҳам хавфсиз: қўштирноқ ва апостроф ҳам экранланади.
+        return String(text ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
     }
 
     function renderPagination(response) {

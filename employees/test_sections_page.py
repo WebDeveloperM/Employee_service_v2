@@ -55,6 +55,19 @@ class SectionsPageTests(TestCase):
         self.assertIn('<i class="fas fa-turn-up rotate-90 text-xs text-slate-300"></i>', html)   # ID сиз ички бўлим учун
         self.assertIn('${innerMarker}\n                        <span>${esc(section.name)}</span>${childrenBadge}', html.replace('\r\n', '\n'))
 
+    def test_id_column_is_empty_for_inner_sections(self):
+        html = self.client.get('/sections/').content.decode()
+
+        # Ички бўлим ID си номдан олдин чиқади, «ID» устунида такрорланмайди.
+        self.assertIn("${depth > 0 ? '' : (esc(section.code) || '—')}</td>", html)
+        self.assertNotIn("${esc(section.code) || '—'}</td>", html)
+
+    def test_department_dropdown_shows_names_without_order_number(self):
+        html = self.client.get('/sections/').content.decode()
+
+        self.assertIn('option.textContent = department.name;', html)
+        self.assertNotIn('${department.sort_order || department.id}. ${department.name}', html)
+
     def test_departments_page_keeps_its_departments_table(self):
         html = self.client.get('/departments/').content.decode()
 
