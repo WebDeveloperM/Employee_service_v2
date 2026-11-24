@@ -198,8 +198,10 @@ STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
-# Photos are Face ID references: served only to logged-in users (employees/media_views.py).
-MEDIA_REQUIRE_AUTH = env_bool('MEDIA_REQUIRE_AUTH', True)
+# Default: open, as before. The TB project (ppe_product) shows employee photos straight from
+# https://<host>:5000/media/... in its pages (<img>) and its media proxy fetches them without the API key,
+# so a login check here breaks its photos. Turn on (true) only after TB sends X-Employee-Service-Key.
+MEDIA_REQUIRE_AUTH = env_bool('MEDIA_REQUIRE_AUTH', False)
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

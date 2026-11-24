@@ -243,32 +243,71 @@ class PasswordPolicyTests(SecurityTestCase):
 
 
 @override_settings(EMPLOYEE_SERVICE_API_KEYS=[SERVICE_KEY])
-class ServiceKeyIsReadOnlyTests(SecurityTestCase):
-    """API_INTEGRATION.md: сервис калити фақат ўқийди. Кодда эса калит билан ҳамма нарсани ёзиш мумкин эди."""
+class ServiceKeyKeepsTbIntegrationWorkingTests(SecurityTestCase):
+    """TB (ppe_product) сервис калити билан /api/v1/ да ўқийди ҳам, ёзади ҳам (base/employee_service_client.py).
+    Аудитда калит «фақат ўқиш» қилинган эди — TB да синхронлаш ва ходим фотолари тўхтаб қолди."""
 
     def test_reads_work(self):
         api = service_client()
-        self.assertEqual(api.get('/api/v1/employees/').status_code, 200)
+        self.assertEqual(api.get('/api/v1/employees/', {'source_system': 'tb-project', 'no_pagination': 'true'}).status_code, 200)
         self.assertEqual(api.get(f'/api/v1/employees/{self.other_employee.slug}/').status_code, 200)
         self.assertEqual(api.get('/api/v1/departments/').status_code, 200)
+        self.assertEqual(api.get('/api/v1/sections/').status_code, 200)
 
-    def test_generic_writes_are_blocked(self):
+    def test_upsert_with_a_photo_like_tb_sync(self):
         api = service_client()
-        attempts = [
-            api.post('/api/v1/departments/', {'name': 'X'}, format='json'),
-            api.delete(f'/api/v1/departments/{self.department.pk}/'),
-            api.post('/api/v1/employees/', {'first_name': 'A', 'last_name': 'B', 'tabel_number': 'S-1', 'login': 'svc_admin', 'role': ROLE_ADMIN}, format='json'),
-            api.patch(f'/api/v1/employees/{self.admin_employee.slug}/', {'first_name': 'X'}, format='json'),
-            api.post('/api/v1/employees/upsert/', {'tabel_number': 'S-2', 'first_name': 'A', 'last_name': 'B'}, format='json'),
-        ]
-        self.assertEqual([response.status_code for response in attempts], [403] * len(attempts))
-        self.assertFalse(User.objects.filter(username='svc_admin').exists())
+        payload = {
+            'source_system': 'tb-project', 'external_id': '501', 'first_name': 'Али', 'last_name': 'Валиев',
+            'tabel_number': 'TB-501', 'is_active': 'true', 'is_deleted': 'false', 'department_name': 'TB цехи',
+            'metadata': '{"origin": "tb-project"}', 'base_image': photo('tb501.jpg'),
+        }
+        created = api.post('/api/v1/employees/upsert/', payload, format='multipart')
+        self.assertEqual(created.status_code, 201, created.content)
+        employee = Employee.objects.get(source_system='tb-project', external_id='501')
+        self.assertTrue(employee.base_image)
+        self.assertTrue(created.json()['base_image_url'])
 
-    def test_integration_endpoints_coded_for_the_key_keep_working(self):
+        updated = api.post('/api/v1/employees/upsert/', {'source_system': 'tb-project', 'external_id': '501', 'tabel_number': 'TB-501', 'first_name': 'Алишер'}, format='multipart')
+        self.assertEqual(updated.status_code, 200, updated.content)
+        employee.refresh_from_db()
+        self.assertEqual(employee.first_name, 'Алишер')
+
+    def test_department_and_section_crud_like_tb(self):
+        api = service_client()
+        department = api.post('/api/v1/departments/', {'name': 'TB янги цех'}, format='json')
+        self.assertEqual(department.status_code, 201, department.content)
+        department_id = department.json()['id']
+        self.assertEqual(api.put(f'/api/v1/departments/{department_id}/', {'name': 'TB цех (ўзгарди)'}, format='json').status_code, 200)
+        section = api.post('/api/v1/sections/', {'name': 'TB бўлими', 'department_id': department_id}, format='json')
+        self.assertEqual(section.status_code, 201, section.content)
+        section_id = section.json()['id']
+        self.assertEqual(api.put(f'/api/v1/sections/{section_id}/', {'name': 'TB бўлими 2', 'department_id': department_id}, format='json').status_code, 200)
+        self.assertEqual(api.delete(f'/api/v1/sections/{section_id}/').status_code, 204)
+        self.assertEqual(api.delete(f'/api/v1/departments/{department_id}/').status_code, 204)
+
+    def test_employee_patch_and_soft_delete_like_tb(self):
+        api = service_client()
+        response = api.patch(f'/api/v1/employees/{self.other_employee.slug}/', {'position': 'Слесарь', 'clothe_size': '52'}, format='multipart')
+        self.assertEqual(response.status_code, 200, response.content)
+        # TB ходимнинг ҳолатини ўзи синхронлайди — администраторга боғланган карточкада ҳам.
+        deactivated = api.patch(f'/api/v1/employees/{self.admin_employee.slug}/', {'is_active': 'false'}, format='multipart')
+        self.assertEqual(deactivated.status_code, 200, deactivated.content)
+        self.assertEqual(api.patch(f'/api/v1/employees/{self.other_employee.slug}/', {'is_deleted': 'true'}, format='multipart').status_code, 200)
+
+    def test_integration_endpoints_keep_working(self):
         api = service_client()
         response = api.patch(f'/api/v1/employees/{self.other_employee.slug}/face-id-exemption/', {'requires_face_id_checkout': False}, format='json')
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(api.get('/api/v1/employees/base-image-change-logs/').status_code, 200)
+        changed = api.patch(f'/api/v1/employees/{self.other_employee.slug}/base-image/', {'base_image': photo('new.jpg')}, format='multipart',
+                            HTTP_X_ACTOR_USERNAME='tb_admin', HTTP_X_ACTOR_ROLE='admin')
+        self.assertEqual(changed.status_code, 200, changed.content)
+
+    def test_wrong_key_is_still_refused(self):
+        api = APIClient()
+        api.credentials(HTTP_X_EMPLOYEE_SERVICE_KEY='wrong-key-0123456789abcdefghijklmnop')
+        self.assertIn(api.post('/api/v1/employees/upsert/', {'tabel_number': 'X-1', 'first_name': 'A', 'last_name': 'B'}).status_code, (401, 403))
+        self.assertFalse(Employee.objects.filter(tabel_number='X-1').exists())
 
 
 class BnpzIdFaceIdBypassTests(TestCase):
@@ -398,8 +437,33 @@ class FaceThrottleTests(SecurityTestCase):
 
 
 @override_settings(EMPLOYEE_SERVICE_API_KEYS=[SERVICE_KEY])
+class MediaIsOpenByDefaultForTbTests(SecurityTestCase):
+    """TB фотони <img> да тўғридан-тўғри https://<host>:5000/media/... дан, media-proxy эса калитсиз олади."""
+
+    def url(self, employee):
+        return '/' + employee.base_image.url.lstrip('/')
+
+    def test_default_setting_is_open(self):
+        from config import settings as project_settings
+        self.assertFalse(project_settings.MEDIA_REQUIRE_AUTH)
+
+    @override_settings(MEDIA_REQUIRE_AUTH=False)
+    def test_tb_media_proxy_without_headers_gets_the_photo(self):
+        response = Client().get(self.url(self.other_employee))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'image/jpeg')
+        self.assertTrue(b''.join(response.streaming_content))
+
+    @override_settings(MEDIA_REQUIRE_AUTH=False)
+    def test_open_media_still_refuses_path_traversal(self):
+        for path in ('/media/../config/settings.py', '/media/%2e%2e/config/settings.py', '/media//etc/passwd'):
+            with self.subTest(path=path):
+                self.assertEqual(Client().get(path).status_code, 404)
+
+
+@override_settings(EMPLOYEE_SERVICE_API_KEYS=[SERVICE_KEY], MEDIA_REQUIRE_AUTH=True)
 class ProtectedMediaTests(SecurityTestCase):
-    """Олдин /media/ даги эталон фотолар (Face ID) ҳеч қандай текширувсиз очиқ эди."""
+    """MEDIA_REQUIRE_AUTH=true (TB калит юборишга ўтгандан кейин): эталон фотолар фақат ваколатлиларга."""
 
     def url(self, employee):
         return '/' + employee.base_image.url.lstrip('/')
@@ -429,9 +493,6 @@ class ProtectedMediaTests(SecurityTestCase):
             with self.subTest(path=path):
                 self.assertEqual(client.get(path).status_code, 404)
 
-    def test_switch_back_to_public_media_if_an_integration_needs_it(self):
-        with override_settings(MEDIA_REQUIRE_AUTH=False):
-            self.assertEqual(Client().get(self.url(self.other_employee)).status_code, 200)
 
 
 class AdminLoginGoesThroughTheMainLoginTests(TestCase):

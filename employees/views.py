@@ -22,9 +22,7 @@ from .authentication import ServiceApiKeyAuthentication
 from .permissions import (
     AdminOrHrCanWrite,
     AdminOrHrOrServiceKey,
-    IsAdminOrHrRole,
     ServiceApiAuthenticatedPermission,
-    ServiceApiKeyReadOnlyPermission,
     is_admin,
     is_admin_or_hr,
     is_service_api_request,
@@ -315,28 +313,30 @@ def get_safe_login_redirect_url(request):
     return settings.LOGIN_REDIRECT_URL
 
 
+# /api/v1/: сервис калити (TB / ppe_product) цех, бўлим ва ходимларни ўқийди ҳам, ёзади ҳам — TB шу орқали
+# синхронлайди. Веб орқали кирган фойдаланувчиларда ёзиш фақат администратор ва HR га (AdminOrHrCanWrite).
 class DepartmentListApiView(generics.ListCreateAPIView):
     queryset = Department.objects.all()
     serializer_class = DepartmentSerializer
-    permission_classes = [ServiceApiAuthenticatedPermission, ServiceApiKeyReadOnlyPermission, AdminOrHrCanWrite]
+    permission_classes = [ServiceApiAuthenticatedPermission, AdminOrHrCanWrite]
 
 
 class DepartmentDetailApiView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Department.objects.all()
     serializer_class = DepartmentSerializer
-    permission_classes = [ServiceApiAuthenticatedPermission, ServiceApiKeyReadOnlyPermission, AdminOrHrCanWrite]
+    permission_classes = [ServiceApiAuthenticatedPermission, AdminOrHrCanWrite]
 
 
 class SectionListApiView(generics.ListCreateAPIView):
     queryset = Section.objects.select_related('department').all()
     serializer_class = SectionSerializer
-    permission_classes = [ServiceApiAuthenticatedPermission, ServiceApiKeyReadOnlyPermission, AdminOrHrCanWrite]
+    permission_classes = [ServiceApiAuthenticatedPermission, AdminOrHrCanWrite]
 
 
 class SectionDetailApiView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Section.objects.select_related('department').all()
     serializer_class = SectionSerializer
-    permission_classes = [ServiceApiAuthenticatedPermission, ServiceApiKeyReadOnlyPermission, AdminOrHrCanWrite]
+    permission_classes = [ServiceApiAuthenticatedPermission, AdminOrHrCanWrite]
 
     def perform_destroy(self, instance):
         delete_section_or_400(instance)   # вложенные отделы -> 400 с пояснением, а не 500
@@ -344,7 +344,7 @@ class SectionDetailApiView(generics.RetrieveUpdateDestroyAPIView):
 
 class EmployeeListCreateApiView(generics.ListCreateAPIView):
     serializer_class = EmployeeSerializer
-    permission_classes = [ServiceApiAuthenticatedPermission, ServiceApiKeyReadOnlyPermission, AdminOrHrCanWrite]
+    permission_classes = [ServiceApiAuthenticatedPermission, AdminOrHrCanWrite]
     pagination_class = EmployeeResultsSetPagination
 
     def get_queryset(self):
@@ -405,7 +405,7 @@ class EmployeeListCreateApiView(generics.ListCreateAPIView):
 class EmployeeDetailApiView(generics.RetrieveUpdateAPIView):
     queryset = Employee.objects.select_related('department', 'section', 'section__department', 'position_category', 'employee_category', 'work_schedule').all()
     serializer_class = EmployeeSerializer
-    permission_classes = [ServiceApiAuthenticatedPermission, ServiceApiKeyReadOnlyPermission]
+    permission_classes = [ServiceApiAuthenticatedPermission]
     lookup_field = 'slug'
 
     self_service_fields = {'special_clothing_size', 'clothe_size', 'shoe_size', 'jacket_size', 'tshirt_size', 'base_image'}
@@ -612,8 +612,9 @@ class EmployeeReadOnlyDetailApiView(EmployeeDetailApiView):
 
 
 class EmployeeUpsertApiView(APIView):
-    # API_INTEGRATION.md: сервис калити билан синхронлаш ёпиқ; веб орқали — фақат администратор ва HR.
-    permission_classes = [ServiceApiAuthenticatedPermission, ServiceApiKeyReadOnlyPermission, IsAdminOrHrRole]
+    # TB (ppe_product) ходимларни шу ерга сервис калити билан синхронлайди (асосий тасвир ҳам шу сўровда келади).
+    # Веб орқали — фақат администратор ва HR.
+    permission_classes = [ServiceApiAuthenticatedPermission, AdminOrHrOrServiceKey]
 
     @extend_schema(
         request=EmployeeUpsertSerializer,

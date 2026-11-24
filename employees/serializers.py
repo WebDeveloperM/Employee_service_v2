@@ -11,7 +11,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.validators import UniqueValidator
 
 from .models import Department, Employee, EmployeeCategory, PositionCategory, Section, StaffPosition, UserProfile, WorkSchedule, GRADE_RE, ROLE_ADMIN, ROLE_CHOICES, ROLE_HR, ROLE_USER, WORK_STATUS_CHOICES
-from .permissions import is_admin
+from .permissions import is_admin, is_service_api_request
 from .sections_tree import MAX_SECTION_DEPTH, SectionIndex
 from .staff import collect_staff_stats, is_no_staff_section_name, vacant_places
 
@@ -60,6 +60,12 @@ def login_problem(value):
 def request_user(serializer):
     request = serializer.context.get('request')
     return getattr(request, 'user', None)
+
+
+def is_trusted_writer(serializer):
+    """Администратор ёки бошқа тизим сервис калити билан (TB / ppe_product ходимнинг ҳолатини ўзи синхронлайди)."""
+    request = serializer.context.get('request')
+    return is_admin(getattr(request, 'user', None)) or (request is not None and is_service_api_request(request))
 
 
 def is_privileged_account(user):
@@ -728,13 +734,13 @@ class EmployeeSerializer(serializers.ModelSerializer):
             if problems:
                 raise serializers.ValidationError({'password': problems})
 
-        requester = request_user(self)
+        trusted = is_trusted_writer(self)
         role = attrs.get('role')
-        if role is not None and role != ROLE_USER and not is_admin(requester):
+        if role is not None and role != ROLE_USER and not trusted:
             # Ходим яратишда «Администратор»/«HR» ролини фақат администратор беради.
             raise PermissionDenied('Ролни фақат администратор бера олади.')
         linked_user = getattr(self.instance, 'user', None)
-        if linked_user is not None and is_privileged_account(linked_user) and not is_admin(requester):
+        if linked_user is not None and is_privileged_account(linked_user) and not trusted:
             changing = []
             if password:
                 changing.append('password')

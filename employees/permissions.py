@@ -60,7 +60,7 @@ class IsAdminOrHrRole(BasePermission):
 class AdminOrHrCanWrite(BasePermission):
     """Читать может любой вошедший, менять (POST/PUT/PATCH/DELETE) — только администратор или HR.
 
-    Сервисный ключ сюда не попадает: для него запись режет ServiceApiKeyReadOnlyPermission.
+    Сервисный ключ (TB / ppe_product) тоже пишет: через него TB синхронизирует цеха, отделы и сотрудников.
     """
 
     message = 'Ўзгартириш фақат администратор ёки HR менежерга рухсат этилган.'

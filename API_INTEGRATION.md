@@ -36,12 +36,12 @@ Authorization: Bearer <EMPLOYEE_SERVICE_API_KEY>
 Configured keys are read from `EMPLOYEE_SERVICE_API_KEYS`.
 
 - Production keys must be long random values (>= 32 characters); the service refuses to start with a placeholder key when `EMPLOYEE_SERVICE_DEBUG=false`.
-- Employee photos (`base_image_url`, `/media/...`) require authentication: send the same service key header when downloading them server-side. A browser `<img>` pointing at `/media/` works only for users logged in to employee_service (or set `MEDIA_REQUIRE_AUTH=false`).
-- Write access with the service key is limited to the integration endpoints that need it: `PATCH /employees/{slug}/base-image/`, `PATCH /employees/{slug}/face-id-exemption/`, `DELETE /employees/base-image-change-logs/{id}/` and the face verification `POST`s. Department, section and employee create/update/delete and `upsert` are refused (403).
+- Employee photos (`base_image_url`, `/media/...`) are public by default (`MEDIA_REQUIRE_AUTH=false`): the TB project (ppe_product) shows them in the browser by direct URL and its media proxy downloads them without the key. With `MEDIA_REQUIRE_AUTH=true` only logged-in admin/HR users, the photo's owner and requests with the service key header get them.
+- The service key can also write on `/api/v1/`: TB uses it for `POST /employees/upsert/` (with `base_image`), `PATCH /employees/{slug}/`, department/section create/update/delete, `PATCH /employees/{slug}/base-image/`, `PATCH /employees/{slug}/face-id-exemption/`, `DELETE /employees/base-image-change-logs/{id}/` and the face verification `POST`s. Treat the key like a password: whoever has it can change employee data.
 
 ## Request Formats
 
-- This external contract is read-only and returns employee, department, and section data.
+- The read endpoints below return employee, department, and section data. TB also writes through `/api/v1/` with the service key (see Authentication).
 - Write operations are intentionally blocked for service API keys.
 
 ## Pagination and Filters
