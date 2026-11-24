@@ -87,25 +87,31 @@ class FractionalStaffCountTests(StaffTestCase):
 
         self.assertEqual((item['staff_count'], item['occupied'], item['vacant']), (1.5, 1, 0.5))
 
-    def test_half_rate_position_takes_exactly_one_person(self):
+    # Ходимнинг штат улуши киритилгандан бери (test_staff_rate.py) қўшишда «банд + улуш ≤ штат» текширилади:
+    # олдин ҳар бир ходим 1 деб саналгани учун 0,5 штатга битта тўлиқ ходим, 1,5 га эса иккита сиғарди.
+
+    def test_half_rate_position_takes_exactly_one_half_rate_person(self):
         position = self.make_position('Токарь', staff_count=Decimal('0.5'))
         first = self.make_employee('', department=self.other_department)
         second = self.make_employee('', department=self.other_department)
 
-        accepted = self.assign(position, first)
-        refused = self.assign(position, second)
+        accepted = self.client.post(self.employees_url(position), {'employee_id': first.pk, 'staff_rate': '0,5'}, format='json')
+        refused = self.client.post(self.employees_url(position), {'employee_id': second.pk, 'staff_rate': '0,5'}, format='json')
 
         self.assertEqual(accepted.status_code, 201, accepted.content)
         self.assertEqual(accepted.json()['position']['vacant'], 0)
         self.assertEqual(refused.status_code, 400, refused.content)
 
-    def test_one_and_a_half_positions_take_two_people_but_not_three(self):
+    def test_one_and_a_half_positions_take_one_full_and_one_half_rate_person(self):
         position = self.make_position('Токарь', staff_count=Decimal('1.5'))
         people = [self.make_employee('', department=self.other_department) for _ in range(3)]
 
-        statuses = [self.assign(position, person).status_code for person in people]
+        statuses = [
+            self.client.post(self.employees_url(position), {'employee_id': person.pk, 'staff_rate': rate}, format='json').status_code
+            for person, rate in zip(people, (1, 1, 0.5))
+        ]
 
-        self.assertEqual(statuses, [201, 201, 400])
+        self.assertEqual(statuses, [201, 400, 201])   # иккинчи тўлиқ ставка сиғмайди, ярим ставка сиғади
 
     # --- йиғиндилар ---
 

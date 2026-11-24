@@ -248,6 +248,7 @@
                         <th class="px-4 py-4 text-left">№</th>
                         <th class="px-4 py-4 text-left">Ф.И.Ш</th>
                         <th class="px-4 py-4 text-left whitespace-nowrap">Табель рақами</th>
+                        <th class="px-4 py-4 text-left whitespace-nowrap" title="Ходим неча штатда ишлайди: 1 — тўлиқ, 0,5 — ярим">Штат улуши</th>
                         <th class="px-4 py-4 text-left">Фойдаланувчи номи (логин)</th>
                         <th class="px-4 py-4 text-right">Амаллар</th>
                     </tr>
@@ -354,6 +355,7 @@
         document.getElementById('positionsTableBody').addEventListener('click', onPositionActionClick);
         document.getElementById('positionMenu').addEventListener('click', onPositionMenuClick);
         document.getElementById('employeeSearchResults').addEventListener('click', onEmployeeResultClick);
+        document.getElementById('employeeSearchResults').addEventListener('keydown', onEmployeeRateKeydown);
         document.getElementById('employeesTableBody').addEventListener('click', onEmployeeRowClick);
         document.getElementById('unitEmployeeSearchResults').addEventListener('click', onUnitEmployeeResultClick);
         document.getElementById('unitEmployeesTableBody').addEventListener('click', onUnitEmployeeRowClick);
@@ -959,6 +961,7 @@
                 '<td class="px-4 py-3"><div class="flex items-center gap-3">' + employeeAvatarHtml(employee) +
                 '<span class="font-semibold text-slate-900">' + esc(employee.full_name) + '</span></div></td>' +
                 '<td class="px-4 py-3 whitespace-nowrap text-slate-700">' + esc(employee.tabel_number) + '</td>' +
+                '<td class="px-4 py-3 whitespace-nowrap font-semibold text-slate-700">' + formatNumber(employee.staff_rate ?? 1) + '</td>' +
                 '<td class="px-4 py-3 text-slate-500">' + esc(employee.login || '—') + '</td>' +
                 '<td class="px-4 py-3 text-right"><div class="inline-flex items-center gap-2">' +
                 '<a href="/employees/' + encodeURIComponent(employee.slug) + '/" target="_blank" rel="noopener" ' +
@@ -1011,8 +1014,8 @@
             note.classList.add('hidden');
         }
         // Результаты поиска, показанные до обновления, пересчитываем под новое число вакансий.
-        document.querySelectorAll('#employeeSearchResults [data-add]').forEach(function (button) {
-            button.disabled = hasNoVacancy();
+        document.querySelectorAll('#employeeSearchResults [data-add], #employeeSearchResults [data-rate-for]').forEach(function (control) {
+            control.disabled = hasNoVacancy();
         });
     }
 
@@ -1075,13 +1078,22 @@
         }
 
         results.innerHTML = employees.map(function (employee) {
+            const disabled = hasNoVacancy() ? ' disabled' : '';
+            // «Штат»: ходим неча штатда ишлайди — 1 (тўлиқ) ёки 0,5 (ярим) ва ҳ.к.; «Банд» шу улушлар йиғиндиси.
+            const rateInput = '<label class="flex shrink-0 items-center gap-2 text-xs font-bold text-slate-500" title="Ходим неча штатда ишлайди: 1 — тўлиқ ставка, 0,5 — ярим ставка">' +
+                'Штат' +
+                '<input type="number" data-rate-for="' + employee.id + '" value="1" min="0.25" max="2" step="0.25" inputmode="decimal"' + disabled +
+                ' aria-label="Штат улуши: ' + esc(employee.full_name) + '"' +
+                ' class="w-20 rounded-xl border border-slate-200 bg-white px-2 py-2 text-center text-sm font-bold text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:opacity-40">' +
+                '</label>';
             const action = employee.in_position
-                ? '<span class="shrink-0 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-500">Қўшилган</span>'
-                : '<button type="button" data-add="' + employee.id + '"' + (hasNoVacancy() ? ' disabled' : '') +
-                  ' class="shrink-0 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40">Қўшиш</button>';
-            return '<div class="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2">' +
+                ? '<span class="ml-auto shrink-0 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-500">Қўшилган</span>'
+                : '<div class="ml-auto flex shrink-0 items-center gap-2">' + rateInput + '<button type="button" data-add="' + employee.id + '"' + disabled +
+                  ' class="shrink-0 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40">Қўшиш</button></div>';
+            // Тор экранда «Штат» ва «Қўшиш» ходим маълумоти остидаги қаторга тушади (flex-wrap; маълумот камида 10rem).
+            return '<div class="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2">' +
                 employeeAvatarHtml(employee) +
-                '<div class="min-w-0 flex-1">' +
+                '<div class="min-w-0" style="flex: 1 1 10rem">' +
                 '<div class="truncate text-sm font-semibold text-slate-900">' + esc(employee.full_name) +
                 '<span class="ml-2 text-xs font-bold text-slate-500">№ ' + esc(employee.tabel_number) + '</span></div>' +
                 '<div class="truncate text-xs text-slate-500" title="' + esc(describeAssignment(employee)) + '">' + esc(describeAssignment(employee)) + '</div>' +
@@ -1193,10 +1205,44 @@
         if (button && !button.disabled) addEmployeeToPosition(Number(button.dataset.add), button);
     }
 
+    // «Штат» майдонида Enter — ёнидаги «Қўшиш» тугмасини босиш билан бир хил.
+    function onEmployeeRateKeydown(event) {
+        const input = event.target.closest('[data-rate-for]');
+        if (!input || event.key !== 'Enter') return;
+        event.preventDefault();
+        const button = document.querySelector('#employeeSearchResults [data-add="' + input.dataset.rateFor + '"]');
+        if (button && !button.disabled) addEmployeeToPosition(Number(input.dataset.rateFor), button);
+    }
+
+    // «1», «0.5», «0,5» -> сон; нотўғри қиймат -> null. Сервер ҳам шу қоидани текширади (0 < улуш ≤ 2, 2 хона).
+    function readStaffRate(input) {
+        if (!input) return 1;
+        if (input.validity && input.validity.badInput) return null;   // браузер сон деб танимаган матн
+        const text = String(input.value || '').trim().replace(',', '.');
+        if (!text) return 1;
+        if (!/^\d+(\.\d{1,2})?$/.test(text)) return null;
+        const value = Number(text);
+        return value > 0 && value <= 2 ? value : null;
+    }
+
     async function addEmployeeToPosition(employeeId, button) {
         const current = staffState.employeesPosition;
         const employee = staffState.employeeResults.get(employeeId);
         if (!current || !employee) return;
+
+        const rateInput = document.querySelector('#employeeSearchResults [data-rate-for="' + employeeId + '"]');
+        const rate = readStaffRate(rateInput);
+        if (rate === null) {
+            showToast('Штат улушини тўғри киритинг: 0 дан катта ва 2 дан ошмаган сон (масалан, 1 ёки 0,5).', 'error');
+            if (rateInput) rateInput.focus();
+            return;
+        }
+        const vacant = Number(staffState.employeesMeta && staffState.employeesMeta.vacant);
+        if (Number.isFinite(vacant) && vacant > 0 && rate > vacant) {
+            showToast('Бу лавозимда бўш штат: ' + formatNumber(vacant) + '. Улушни ' + formatNumber(vacant) + ' ёки ундан кам қилинг ёки аввал штатлар сонини кўпайтиринг.', 'error');
+            if (rateInput) rateInput.focus();
+            return;
+        }
 
         // Назначение меняет цех/отдел/должность сотрудника — просим подтвердить перевод.
         if (employee.department || employee.section || employee.position) {
@@ -1209,7 +1255,7 @@
         try {
             const response = await apiRequest('/template/staff/positions/' + current.id + '/employees/', {
                 method: 'POST',
-                body: JSON.stringify({ employee_id: employeeId }),
+                body: JSON.stringify({ employee_id: employeeId, staff_rate: rate }),
             });
             showToast('Ходим лавозимга қўшилди');
             if (staffState.employeesPosition && staffState.employeesPosition.id === current.id) {

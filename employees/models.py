@@ -1,4 +1,5 @@
 import re
+from decimal import Decimal
 
 from django.db import models
 from django.contrib.auth.models import User, Group
@@ -226,6 +227,9 @@ class Employee(models.Model):
         StaffPosition, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='assigned_employees', verbose_name='Штатная должность',
     )
+    # Сколько штатных единиц занимает сотрудник (1 — полная ставка, 0,5 — половина). Вводится при назначении
+    # на странице штата; «Банд» должности — сумма этих долей (staff.collect_staff_stats), а не число людей.
+    staff_rate = models.DecimalField(max_digits=4, decimal_places=2, default=Decimal('1'), verbose_name='Доля ставки')
     # PROTECT: тоифани ходим бириктирилган бўлса «жим» ўчириб бўлмайди. NULL — тоифа танланмаган (эски ходимлар).
     position_category = models.ForeignKey(
         PositionCategory, on_delete=models.PROTECT, null=True, blank=True,

@@ -13,7 +13,7 @@ from rest_framework.validators import UniqueValidator
 from .models import Department, Employee, EmployeeCategory, PositionCategory, Section, StaffPosition, UserProfile, WorkSchedule, GRADE_RE, ROLE_ADMIN, ROLE_CHOICES, ROLE_HR, ROLE_USER, WORK_STATUS_CHOICES
 from .permissions import is_admin, is_service_api_request
 from .sections_tree import MAX_SECTION_DEPTH, SectionIndex
-from .staff import collect_staff_stats, is_no_staff_section_name, vacant_places
+from .staff import collect_staff_stats, is_no_staff_section_name, plain_number, vacant_places
 
 from django.contrib.auth.models import User as AuthUser
 
@@ -521,7 +521,8 @@ class StaffPositionSerializer(serializers.ModelSerializer):
         return stats.occupied_for(obj)
 
     def get_occupied(self, obj):
-        return self._occupied_for(obj)
+        # Сумма долей ставки (1 + 0,5): числом, 3 а не 3.0.
+        return plain_number(self._occupied_for(obj))
 
     def get_vacant(self, obj):
         return vacant_places(obj.staff_count, self._occupied_for(obj))

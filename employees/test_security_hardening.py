@@ -294,6 +294,30 @@ class ServiceKeyKeepsTbIntegrationWorkingTests(SecurityTestCase):
         self.assertEqual(deactivated.status_code, 200, deactivated.content)
         self.assertEqual(api.patch(f'/api/v1/employees/{self.other_employee.slug}/', {'is_deleted': 'true'}, format='multipart').status_code, 200)
 
+    def test_tb_employee_info_form_changes_sizes(self):
+        # TB «Данные сотрудника» (EditEmployeeInfo.tsx) -> TB backend -> PATCH /api/v1/employees/{slug}/ (сервис калити).
+        api = service_client()
+        sizes = {'special_clothing_size': '52-54/182-188', 'shoe_size': '43', 'jacket_size': '56', 'tshirt_size': 'XL'}
+        form = {'department_id': self.department.pk, 'section_id': self.section.pk, 'position': 'Слесарь',
+                'phone_number_1': '+998901234567', **sizes}
+        for employee in (self.other_employee, self.admin_employee, self.hr_employee):
+            with self.subTest(employee=employee.login):
+                response = api.patch(f'/api/v1/employees/{employee.slug}/', form, format='multipart')
+                self.assertEqual(response.status_code, 200, response.content)
+                employee.refresh_from_db()
+                self.assertEqual({key: getattr(employee, key) for key in sizes}, sizes)
+                self.assertEqual(employee.section_id, self.section.pk)
+
+    def test_tb_excel_import_changes_sizes_through_upsert(self):
+        api = service_client()
+        response = api.post('/api/v1/employees/upsert/', {
+            'source_system': 'tb-project', 'tabel_number': self.other_employee.tabel_number, 'first_name': 'Ism', 'last_name': 'sec_other',
+            'clothe_size': '50', 'shoe_size': '42', 'department_name': '1-Цех', 'section_name': 'Бўлим', 'is_active': 'true', 'is_deleted': 'false',
+        }, format='multipart')
+        self.assertEqual(response.status_code, 200, response.content)
+        self.other_employee.refresh_from_db()
+        self.assertEqual((self.other_employee.clothe_size, self.other_employee.shoe_size), ('50', '42'))
+
     def test_integration_endpoints_keep_working(self):
         api = service_client()
         response = api.patch(f'/api/v1/employees/{self.other_employee.slug}/face-id-exemption/', {'requires_face_id_checkout': False}, format='json')

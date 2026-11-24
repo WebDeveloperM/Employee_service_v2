@@ -3,11 +3,12 @@
 «Занято» считается на лету по совпадению Employee.position с названием штатной должности в том же
 цеху/отделе; среди одноимённых должностей сотрудник учитывается в строке, к которой привязан
 (Employee.staff_position), а без привязки — по порядку строк (distribute_unbound).
+Каждый сотрудник занимает свою долю ставки (Employee.staff_rate: 1, 0,5 …): «занято» — сумма долей.
 """
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
-from decimal import ROUND_CEILING, Decimal
+from decimal import ROUND_CEILING, Decimal, InvalidOperation
 
 from django.db.models import Prefetch
 
@@ -65,9 +66,9 @@ def no_staff_section_ids(section_ids):
 
 @dataclass
 class StaffStats:
-    # (тип единицы, id единицы, нормализованная должность) -> сколько сотрудников с таким названием в единице
+    # (тип единицы, id единицы, нормализованная должность) -> сумма долей ставки сотрудников с таким названием
     occupied: dict = field(default_factory=lambda: defaultdict(int))
-    # id штатной должности -> сколько из этих сотрудников приходится именно на неё (привязанные + доля остальных)
+    # id штатной должности -> сколько ставок из них приходится именно на неё (привязанные + доля остальных)
     by_position: dict = field(default_factory=dict)
     # (тип единицы, id единицы) -> {'staff': штат, 'vacant': вакансии} только по своим должностям
     own: dict = field(default_factory=lambda: defaultdict(lambda: {'staff': 0, 'vacant': 0}))
@@ -87,6 +88,45 @@ def vacant_places(staff_count, occupied):
     return max(to_decimal(staff_count) - to_decimal(occupied), Decimal(0))
 
 
+DEFAULT_STAFF_RATE = Decimal('1')
+MAX_STAFF_RATE = Decimal('2')
+# Порядок сотрудников в единице: по нему одноимённые должности делят непривязанных (и в подсчёте, и в списке).
+EMPLOYEE_ORDER = ('last_name', 'first_name', 'surname', 'tabel_number')
+
+
+def employee_rate(employee):
+    """Доля ставки сотрудника (Employee или само значение); пусто — полная ставка."""
+    value = getattr(employee, 'staff_rate', employee)
+    return DEFAULT_STAFF_RATE if value in (None, '') else to_decimal(value)
+
+
+def occupied_rate(employees):
+    """Сколько ставок занимают сотрудники: сумма их долей (1 + 0,5 = 1,5)."""
+    return sum((employee_rate(employee) for employee in employees), Decimal(0))
+
+
+def format_rate(value):
+    """0.5 -> «0,5», 1.00 -> «1»: для сообщений (на странице числа тоже с запятой)."""
+    return str(plain_number(value)).replace('.', ',')
+
+
+def parse_staff_rate(value):
+    """Доля ставки из формы: «1», «0.5», «0,5», 0.5; пусто — 1. Ошибка — ValueError с текстом для пользователя."""
+    if value is None or str(value).strip() == '':
+        return DEFAULT_STAFF_RATE
+    try:
+        rate = Decimal(str(value).strip().replace(',', '.'))
+    except InvalidOperation:
+        raise ValueError('Штат улушини сон билан киритинг (масалан, 1 ёки 0,5).') from None
+    if not rate.is_finite() or rate <= 0:
+        raise ValueError('Штат улуши 0 дан катта бўлиши керак (масалан, 1 ёки 0,5).')
+    if rate > MAX_STAFF_RATE:
+        raise ValueError(f'Штат улуши {format_rate(MAX_STAFF_RATE)} дан ошмаслиги керак.')
+    if rate != rate.quantize(Decimal('0.01')):
+        raise ValueError('Штат улушида вергулдан кейин энг кўпи билан 2 та рақам бўлиши мумкин (масалан, 0,25).')
+    return rate.quantize(Decimal('0.01'))
+
+
 def place_capacity(staff_count):
     """Сколько сотрудников вмещает должность: штат округляется вверх (0,5 → 1; 1,5 → 2).
 
@@ -101,14 +141,25 @@ def distribute_unbound(staff_counts, bound_counts, unbound):
     Сотрудник, назначенный через страницу штата, привязан к своей строке (Employee.staff_position) и
     в этом распределении не участвует. Остальные (должность введена в карточке или импортом) различаются
     только по названию: они занимают свободные места строк по порядку id, всё сверх штата — на последней.
+
+    bound_counts — сколько ставок уже занято привязанными в каждой строке; unbound — доли ставки
+    непривязанных по порядку (EMPLOYEE_ORDER) или просто их число (каждый — полная ставка).
+    Строка берёт очередного сотрудника, пока в ней есть свободное место (как и раньше: 0,5 штата — один
+    человек с полной ставкой, 1,5 — двое), поэтому при долях 1 результат прежний.
     """
+    rates = [DEFAULT_STAFF_RATE] * unbound if isinstance(unbound, int) else [to_decimal(rate) for rate in unbound]
     shares = []
-    remaining = unbound
+    start = 0
     for index, (staff_count, bound) in enumerate(zip(staff_counts, bound_counts)):
-        is_last = index == len(staff_counts) - 1
-        taken = remaining if is_last else min(remaining, max(place_capacity(staff_count) - bound, 0))
+        if index == len(staff_counts) - 1:
+            taken = len(rates) - start
+        else:
+            used, limit, taken = to_decimal(bound), to_decimal(staff_count), 0
+            while start + taken < len(rates) and used < limit:
+                used += rates[start + taken]
+                taken += 1
         shares.append(taken)
-        remaining -= taken
+        start += taken
     return shares
 
 
@@ -150,31 +201,36 @@ def collect_staff_stats():
         groups[(*unit, normalize_position(position['name']))].append(position)
     group_ids = {key: {row['id'] for row in rows} for key, rows in groups.items()}
 
-    bound = defaultdict(int)      # id строки -> привязанные к ней сотрудники
-    unbound = defaultdict(int)    # группа -> сотрудники без (действующей) привязки
+    bound = defaultdict(Decimal)   # id строки -> ставки привязанных к ней сотрудников
+    unbound = defaultdict(list)    # группа -> доли ставки сотрудников без (действующей) привязки, по EMPLOYEE_ORDER
     employees = (
         Employee.objects
         .filter(is_deleted=False, is_active=True)
         .exclude(position='')
-        .values_list('department_id', 'section_id', 'position', 'staff_position_id')
+        .order_by(*EMPLOYEE_ORDER)   # тот же порядок, что в employees_of_position: доли делятся одинаково
+        .values_list('department_id', 'section_id', 'position', 'staff_position_id', 'staff_rate')
     )
-    for department_id, section_id, position, staff_position_id in employees.iterator():
+    for department_id, section_id, position, staff_position_id, staff_rate in employees.iterator():
         key = (*position_unit(department_id, section_id), normalize_position(position))
         if key not in groups:
             continue
-        stats.occupied[key] += 1
+        rate = employee_rate(staff_rate)
+        stats.occupied[key] += rate
         if is_bound_to(staff_position_id, group_ids[key]):
-            bound[staff_position_id] += 1
+            bound[staff_position_id] += rate
         else:
-            unbound[key] += 1
+            unbound[key].append(rate)
 
     for key, rows in groups.items():
         unit = key[:2]
+        rates = unbound[key]
         shares = distribute_unbound(
-            [row['staff_count'] for row in rows], [bound[row['id']] for row in rows], unbound[key],
+            [row['staff_count'] for row in rows], [bound[row['id']] for row in rows], rates,
         )
+        start = 0
         for row, share in zip(rows, shares):
-            occupied = bound[row['id']] + share
+            occupied = bound[row['id']] + sum(rates[start:start + share], Decimal(0))
+            start += share
             stats.by_position[row['id']] = occupied
             stats.own[unit]['staff'] += row['staff_count']
             stats.own[unit]['vacant'] += vacant_places(row['staff_count'], occupied)
@@ -204,7 +260,7 @@ def employees_with_position_name(position):
         queryset = queryset.filter(department_id=position.department_id, section__isnull=True)
 
     wanted = normalize_position(position.name)
-    queryset = queryset.select_related('department', 'section').order_by('last_name', 'first_name', 'surname', 'tabel_number')
+    queryset = queryset.select_related('department', 'section').order_by(*EMPLOYEE_ORDER)
     return [employee for employee in queryset if normalize_position(employee.position) == wanted]
 
 
@@ -223,8 +279,10 @@ def employees_of_position(position):
 
     group_ids = {item.pk for item in group}
     unbound = [employee for employee in employees if not is_bound_to(employee.staff_position_id, group_ids)]
-    bound_counts = [sum(1 for employee in employees if employee.staff_position_id == item.pk) for item in group]
-    shares = distribute_unbound([item.staff_count for item in group], bound_counts, len(unbound))
+    bound_rates = [occupied_rate(employee for employee in employees if employee.staff_position_id == item.pk) for item in group]
+    shares = distribute_unbound(
+        [item.staff_count for item in group], bound_rates, [employee_rate(employee) for employee in unbound],
+    )
     index = next(i for i, item in enumerate(group) if item.pk == position.pk)
     start = sum(shares[:index])
     members = {employee.pk for employee in unbound[start:start + shares[index]]}
@@ -256,24 +314,31 @@ def remove_employee_from_section(employee):
     employee.save(update_fields=['section', 'updated_at'])
 
 
-def assign_employee_to_position(employee, position):
+def assign_employee_to_position(employee, position, rate=None):
     """Назначить сотрудника на должность: цех, отдел и название должности берутся из штатной единицы.
 
     Сотрудник привязывается именно к этой строке (staff_position): среди одноимённых должностей
-    он остаётся там, куда его добавили. Другие поля (в том числе «Дата изменения должности») не трогаем.
+    он остаётся там, куда его добавили. rate — доля ставки (None — оставить прежнюю, например при переводе).
+    Другие поля (в том числе «Дата изменения должности») не трогаем.
     """
     employee.department_id = position.department_id
     employee.section_id = position.section_id
     employee.position = position.name
     employee.staff_position = position
-    employee.save(update_fields=['department', 'section', 'position', 'staff_position', 'updated_at'])
+    if rate is not None:
+        employee.staff_rate = rate
+    employee.save(update_fields=['department', 'section', 'position', 'staff_position', 'staff_rate', 'updated_at'])
 
 
 def remove_employee_from_position(employee):
-    """Снять сотрудника с должности: очищаем название должности и привязку, цех и отдел остаются."""
+    """Снять сотрудника с должности: очищаем название должности и привязку, цех и отдел остаются.
+
+    Доля ставки возвращается к полной: она относилась к этой должности.
+    """
     employee.position = ''
     employee.staff_position = None
-    employee.save(update_fields=['position', 'staff_position', 'updated_at'])
+    employee.staff_rate = DEFAULT_STAFF_RATE
+    employee.save(update_fields=['position', 'staff_position', 'staff_rate', 'updated_at'])
 
 
 def unit_position_options(position, stats):

@@ -18,8 +18,13 @@ from .staff import (
     assign_employee_to_section,
     build_staff_tree,
     collect_staff_stats,
+    employee_rate,
     employees_of_position,
+    format_rate,
     is_no_staff_section_name,
+    occupied_rate,
+    parse_staff_rate,
+    plain_number,
     remove_employee_from_position,
     remove_employee_from_section,
     section_employees,
@@ -48,7 +53,21 @@ def serialize_staff_employee(employee, request):
         'department': employee.department.name if employee.department_id else '',
         'section': employee.section.name if employee.section_id else '',
         'position': ' '.join((employee.position or '').split()),
+        'staff_rate': plain_number(employee_rate(employee)),   # неча штатда ишлайди: 1, 0.5 …
     }
+
+
+def ensure_rate_fits(position, members, rate, *, target=False):
+    """Новая доля ставки помещается в свободные ставки должности, иначе — понятная ошибка (400)."""
+    vacant = vacant_places(position.staff_count, occupied_rate(members))
+    where = 'Танланган лавозимда' if target else 'Бу лавозимда'
+    if vacant <= 0:
+        raise ValidationError({'detail': f'{where} бўш иш ўрни йўқ. Аввал штатлар сонини кўпайтиринг.'})
+    if rate > vacant:
+        raise ValidationError({'detail': (
+            f'{where} бўш штат: {format_rate(vacant)}, ходимнинг улуши эса {format_rate(rate)}. '
+            f'Улушни {format_rate(vacant)} ёки ундан кам қилинг ёки аввал штатлар сонини кўпайтиринг.'
+        )})
 
 
 def get_position(pk, *, for_update=False):
@@ -95,6 +114,7 @@ def section_employees_payload(section, employees, request, message):
 
 def position_employees_payload(position, employees, request, message):
     unit_name = position.section.name if position.section_id else position.department.name
+    occupied = occupied_rate(employees)   # «Банд» — сумма долей ставки (0,5 + 1 = 1,5), а не число людей
     return {
         'success': True,
         'message': message,
@@ -103,8 +123,8 @@ def position_employees_payload(position, employees, request, message):
             'name': position.name,
             'unit_name': unit_name,
             'staff_count': position.staff_count,
-            'occupied': len(employees),
-            'vacant': vacant_places(position.staff_count, len(employees)),
+            'occupied': plain_number(occupied),
+            'vacant': vacant_places(position.staff_count, occupied),
         },
         # Должности этой же единицы — для выбора при переводе сотрудника (кнопка «Таҳрирлаш»).
         'unit_positions': unit_position_options(position, collect_staff_stats()),
@@ -272,6 +292,11 @@ class StaffPositionEmployeesTemplateView(APIView):
             employee_id = int(request.data.get('employee_id'))
         except (TypeError, ValueError):
             raise ValidationError({'detail': 'Ходимни танланг.'})
+        # Неча штатда ишлайди: кўрсатилмаса 1 (тўлиқ ставка), 0,5 — ярим ставка.
+        try:
+            rate = parse_staff_rate(request.data.get('staff_rate'))
+        except ValueError as error:
+            raise ValidationError({'staff_rate': str(error)})
 
         with transaction.atomic():
             # Блокировка должности: два одновременных назначения не должны превысить штат.
@@ -282,12 +307,12 @@ class StaffPositionEmployeesTemplateView(APIView):
             )
             # Ходим айнан шу қаторга бириктирилади. Бир хил номли бошқа қатордаги ходимни бу ерга қўшиш —
             # уни шу қаторга кўчириш (иш ўрни шу қаторда бўлиши керак).
-            if any(item.pk == employee.pk for item in employees_of_position(position)):
+            members = employees_of_position(position)
+            if any(item.pk == employee.pk for item in members):
                 raise ValidationError({'detail': 'Бу ходим аллақачон шу лавозимда.'})
-            if len(employees_of_position(position)) >= position.staff_count:
-                raise ValidationError({'detail': 'Бу лавозимда бўш иш ўрни йўқ. Аввал штатлар сонини кўпайтиринг.'})
+            ensure_rate_fits(position, members, rate)
 
-            assign_employee_to_position(employee, position)
+            assign_employee_to_position(employee, position, rate)
             employees = employees_of_position(position)
 
         return Response(
@@ -329,8 +354,8 @@ class StaffPositionEmployeeDetailTemplateView(APIView):
             # Номи бир хил бўлган бошқа қаторга ҳам ўтказиш мумкин: ходим ўша қаторга бириктирилади.
             if target.pk == source.pk:
                 raise ValidationError({'detail': 'Ходим аллақачон шу лавозимда.'})
-            if len(employees_of_position(target)) >= target.staff_count:
-                raise ValidationError({'detail': 'Танланган лавозимда бўш иш ўрни йўқ. Аввал штатлар сонини кўпайтиринг.'})
+            # Ходим ўз улуши билан ўтади (0,5 штатлик ходимга 0,5 бўш штат етарли).
+            ensure_rate_fits(target, employees_of_position(target), employee_rate(employee), target=True)
 
             assign_employee_to_position(employee, target)
             employees = employees_of_position(source)
