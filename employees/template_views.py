@@ -18,14 +18,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.pagination import PageNumberPagination
 
-from .models import Department, Employee, EmployeeCategory, EmployeeCertificate, PositionCategory, Section, UserProfile, WorkSchedule, ROLE_ADMIN, ROLE_HR, ROLE_USER
+from .models import Department, Employee, EmployeeCategory, EmployeeCertificate, PositionCategory, Section, Timekeeper, UserProfile, WorkSchedule, ROLE_ADMIN, ROLE_HR, ROLE_TIMEKEEPER, ROLE_USER
 from .ordering import order_sections_by_code
-from .permissions import AdminOrHrCanWrite, IsAdminOrHrRole, is_admin, is_admin_or_hr
+from .permissions import AdminOrHrCanWrite, AdminOrHrOrTimekeeperRead, IsAdminOrHrRole, is_admin, is_admin_or_hr, timekeeper_department
 from .pki import generate_employee_pfx
 from .sections_tree import SectionIndex, delete_section_or_400, order_depth_first
 from .serializers import (
     DepartmentSerializer, EmployeeCategorySerializer, EmployeeSerializer, PositionCategorySerializer,
-    SectionSerializer, UserProfileSerializer, WorkScheduleSerializer,
+    SectionSerializer, TimekeeperEmployeeSerializer, UserProfileSerializer, WorkScheduleSerializer,
 )
 from .staff import StaffTreeOrder
 
@@ -291,8 +291,14 @@ class SectionDetailTemplateView(generics.RetrieveUpdateDestroyAPIView):
 
 class EmployeeListCreateTemplateView(generics.ListCreateAPIView):
     serializer_class = EmployeeSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrHrRole]
+    # Администратор и HR — тўлиқ; табелчи — фақат ўқиш ва фақат ўз цехи (get_queryset), ёнида қисқа маълумот билан.
+    permission_classes = [IsAuthenticated, AdminOrHrOrTimekeeperRead]
     pagination_class = StandardResultsSetPagination
+
+    def get_serializer_class(self):
+        if not is_admin_or_hr(self.request.user):
+            return TimekeeperEmployeeSerializer
+        return super().get_serializer_class()
 
     def get_queryset(self):
         # Порядок цех → отдел → должность задаёт StaffTreeOrder в list(); здесь — порядок внутри одного места.
@@ -304,6 +310,10 @@ class EmployeeListCreateTemplateView(generics.ListCreateAPIView):
             'surname',
             'tabel_number',
         )
+        if not is_admin_or_hr(self.request.user):
+            # Табелчи фақат ўз цехи ходимларини кўради (қидирув ва филтрлар шу доирада ишлайди).
+            department = timekeeper_department(self.request.user)
+            queryset = queryset.filter(department=department) if department is not None else queryset.none()
 
         # Қидирув сўзларга бўлинади: ҳар бир сўз исм, фамилия, отасининг исми, табель ёки лавозимдан биронтасида
         # учраши керак. Шунинг учун «Фазилов Акбар» ҳам, «Акбар Фазилов Алишерович» ҳам ходимни топади.
@@ -1362,7 +1372,7 @@ class UserAccessListTemplateView(UserManagementAccessMixin, generics.GenericAPIV
         for employee in employees:
             profile = profile_map.get(employee.user_id)
             profile_role = getattr(profile, 'role', '') or ''
-            visible_role = profile_role if profile_role in {ROLE_ADMIN, ROLE_HR} else None
+            visible_role = profile_role if profile_role in {ROLE_ADMIN, ROLE_HR, ROLE_TIMEKEEPER} else None
             payload.append({
                 'id': employee.id,
                 'slug': employee.slug,
@@ -1450,6 +1460,7 @@ class UserDetailTemplateView(UserManagementAccessMixin, generics.RetrieveUpdateD
             raise PermissionDenied('Ўз ҳисобингизни ўчириб бўлмайди.')
         employee = getattr(user, 'employee', None)
         if employee is not None:
+            Timekeeper.objects.filter(employee=employee).delete()   # ҳисоб ўчса, цех табелчиси ҳам олиб ташланади
             employee.user = None
             employee.login = ''
             employee.password_hash = ''

@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from .models import (
     Employee, EmployeeCategory, PositionCategory, WorkSchedule,
-    WORK_STATUS_BUSINESS_TRIP, WORK_STATUS_CHILDCARE_LEAVE, WORK_STATUS_SICK_LEAVE, WORK_STATUS_VACATION,
+    WORK_STATUS_BUSINESS_TRIP, WORK_STATUS_CHILDCARE_LEAVE, WORK_STATUS_OVER_STAFF, WORK_STATUS_SICK_LEAVE, WORK_STATUS_VACATION,
 )
 from .staff import collect_staff_stats, plain_number
 
@@ -104,7 +104,7 @@ def gender_chart():
 
 
 def status_chart():
-    """Тизимдаги ходимлар ҳолати: фаол ходимлар иш ҳолати бўйича (ишда, таътил, хизмат сафари, касаллик, бола парвариши).
+    """Тизимдаги ходимлар ҳолати: фаол ходимлар иш ҳолати бўйича (ишда, таътил, хизмат сафари, касаллик, бола парвариши, св.шт.).
 
     Ходим формасидаги «Ҳолати» дан олинади: work_status бўш (NULL) бўлса — «ишда». «Фаол эмас» ходимлар диаграммага
     кирмайди, лекин жами тушунарли бўлиши учун изоҳда санаб қўйилади.
@@ -117,6 +117,7 @@ def status_chart():
         row('Хизмат сафаридаги ходимлар', counts[WORK_STATUS_BUSINESS_TRIP], LIGHT_BLUE),
         row('Касаллик таътилида', counts[WORK_STATUS_SICK_LEAVE], DARK_BLUE),
         row('Бола парваришлаш таътилида', counts[WORK_STATUS_CHILDCARE_LEAVE], GRAY),
+        row('св.шт.', counts[WORK_STATUS_OVER_STAFF], CATEGORY_COLORS[2]),
     ]
     inactive = Employee.objects.filter(is_deleted=False, is_active=False).count()
     note = f'Фаол эмас ходимлар (диаграммага кирмайди): {inactive}' if inactive else ''

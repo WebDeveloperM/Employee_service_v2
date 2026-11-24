@@ -76,8 +76,9 @@
                 </label>
                 <select id="accessRole" onchange="syncAccessFaceIdField()"
                     class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500">
+                    {# «Табелчи» бу ерда танланмайди (цехга боғланади): у «Табелчилар» саҳифасидан тайинланади, лекин мавжуд табелчининг роли кўринади. #}
                     {% for value, label in role_choices %}
-                    <option value="{{ value }}">{{ label }}</option>
+                    <option value="{{ value }}"{% if value == 'timekeeper' %} disabled{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -127,11 +128,13 @@
     const roleLabels = {
         'admin': 'Администратор',
         'hr': 'HR менежер',
+        'timekeeper': 'Табелчи',
     };
 
     const roleBadgeClasses = {
         'admin': 'bg-red-100 text-red-800',
         'hr': 'bg-blue-100 text-blue-800',
+        'timekeeper': 'bg-amber-100 text-amber-800',
     };
 
     function escapeHtml(text) {
@@ -202,7 +205,7 @@
 
         tbody.innerHTML = employees.map((emp, idx) => {
             const role = emp.role || '';
-            const hasDisplayRole = role === 'admin' || role === 'hr';
+            const hasDisplayRole = role === 'admin' || role === 'hr' || role === 'timekeeper';
             const hasAccess = Boolean(emp.has_access && emp.profile_id);
             const isSelf = emp.login === currentUsername;
             const badgeClass = roleBadgeClasses[role] || 'bg-gray-100 text-gray-800';

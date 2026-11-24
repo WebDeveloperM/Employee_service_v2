@@ -247,29 +247,38 @@
 
             <div class="mb-6 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sidebar-muted)]">Меню</div>
             <nav class="space-y-2 text-sm font-semibold">
+                {# Табелчи менюда фақат «Ходимлар рўйхати»ни кўради: бош саҳифа ва «Созламалар» унга йўқ. #}
+                {% if request.user.profile.role != 'timekeeper' %}
                 <a href="/" class="sidebar-link {% if request.path == '/' %}active{% endif %}">
                     <i class="fas fa-house w-4"></i>
                     <span>Бош саҳифа</span>
                 </a>
+                {% endif %}
 
                 {% if request.user.profile.role != 'user' %}
                 <a href="/employees/" class="sidebar-link {% if '/employees/' in request.path %}active{% endif %}">
                     <i class="fas fa-users w-4"></i>
                     <span>Ходимлар рўйхати</span>
                 </a>
+                {% endif %}
 
+                {% if request.user.profile.role != 'user' and request.user.profile.role != 'timekeeper' %}
                 <div>
-                    <button onclick="toggleSettingsMenu()" class="sidebar-link w-full justify-between {% if '/staff/' in request.path or '/departments/' in request.path or '/sections/' in request.path or '/settings/access/' in request.path %}group-active{% endif %}">
+                    <button onclick="toggleSettingsMenu()" class="sidebar-link w-full justify-between {% if '/staff/' in request.path or '/timekeepers/' in request.path or '/departments/' in request.path or '/sections/' in request.path or '/settings/access/' in request.path %}group-active{% endif %}">
                         <span class="flex items-center gap-[0.85rem]">
                             <i class="fas fa-sliders w-4"></i>
                             <span>Созламалар</span>
                         </span>
-                        <i id="settingsChevron" class="fas fa-chevron-down text-xs transition-transform duration-200 {% if '/staff/' in request.path or '/departments/' in request.path or '/sections/' in request.path or '/settings/access/' in request.path %}rotate-180{% endif %}"></i>
+                        <i id="settingsChevron" class="fas fa-chevron-down text-xs transition-transform duration-200 {% if '/staff/' in request.path or '/timekeepers/' in request.path or '/departments/' in request.path or '/sections/' in request.path or '/settings/access/' in request.path %}rotate-180{% endif %}"></i>
                     </button>
-                    <div id="settingsSubmenu" class="mt-1 ml-5 space-y-1 overflow-hidden transition-all duration-200 {% if '/staff/' in request.path or '/departments/' in request.path or '/sections/' in request.path or '/settings/access/' in request.path %}max-h-56{% else %}max-h-0{% endif %}">
+                    <div id="settingsSubmenu" class="mt-1 ml-5 space-y-1 overflow-hidden transition-all duration-200 {% if '/staff/' in request.path or '/timekeepers/' in request.path or '/departments/' in request.path or '/sections/' in request.path or '/settings/access/' in request.path %}max-h-72{% else %}max-h-0{% endif %}">
                         <a href="/staff/" class="sidebar-link text-xs py-2 {% if '/staff/' in request.path %}active{% endif %}">
                             <i class="fas fa-sitemap w-4"></i>
                             <span>Штат бирлиги ва лавозим</span>
+                        </a>
+                        <a href="/timekeepers/" class="sidebar-link text-xs py-2 {% if '/timekeepers/' in request.path %}active{% endif %}">
+                            <i class="fas fa-clipboard-user w-4"></i>
+                            <span>Табелчилар</span>
                         </a>
                         <a href="/departments/" class="sidebar-link text-xs py-2 {% if '/departments/' in request.path %}active{% endif %}">
                             <i class="fas fa-industry w-4"></i>
@@ -373,10 +382,10 @@
             const chevron = document.getElementById('settingsChevron');
             if (submenu.classList.contains('max-h-0')) {
                 submenu.classList.remove('max-h-0');
-                submenu.classList.add('max-h-56');
+                submenu.classList.add('max-h-72');
                 chevron.classList.add('rotate-180');
             } else {
-                submenu.classList.remove('max-h-56');
+                submenu.classList.remove('max-h-72');
                 submenu.classList.add('max-h-0');
                 chevron.classList.remove('rotate-180');
             }

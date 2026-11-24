@@ -10,7 +10,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.validators import UniqueValidator
 
-from .models import Department, Employee, EmployeeCategory, PositionCategory, Section, StaffPosition, UserProfile, WorkSchedule, GRADE_RE, ROLE_ADMIN, ROLE_CHOICES, ROLE_HR, ROLE_USER, WORK_STATUS_CHOICES
+from .models import Department, Employee, EmployeeCategory, PositionCategory, Section, StaffPosition, UserProfile, WorkSchedule, GRADE_RE, ROLE_ADMIN, ROLE_CHOICES, ROLE_HR, ROLE_TIMEKEEPER, ROLE_USER, WORK_STATUS_CHOICES, Timekeeper
 from .permissions import is_admin, is_service_api_request
 from .sections_tree import MAX_SECTION_DEPTH, SectionIndex
 from .staff import collect_staff_stats, is_no_staff_section_name, plain_number, vacant_places
@@ -186,6 +186,9 @@ class UserProfileSerializer(serializers.ModelSerializer):
         current = self.instance.role if self.instance is not None else ROLE_USER
         if value != current and not is_admin(request_user(self)):
             raise PermissionDenied('Ролни фақат администратор ўзгартира олади.')
+        if value == ROLE_TIMEKEEPER and value != current:
+            # Табелчи цехга боғланади: рол фақат «Табелчилар» саҳифасидан (цех танлаб) берилади.
+            raise serializers.ValidationError('«Табелчи» ролини «Табелчилар» саҳифасидан тайинланг.')
         return value
 
     def _validate_unique_profile_field(self, field_name, value):
@@ -294,6 +297,9 @@ class UserProfileSerializer(serializers.ModelSerializer):
             if update_fields:
                 employee.save(update_fields=update_fields)
 
+        if instance.role == ROLE_TIMEKEEPER and next_role != ROLE_TIMEKEEPER:
+            # Рол олинса, цехнинг табелчи ёзуви ҳам ўчади: «Табелчилар» саҳифасида ролсиз табелчи қолмайди.
+            Timekeeper.objects.filter(employee__user_id=instance.user_id).delete()
         instance.role = next_role
         if 'face_id_login_enabled' in validated_data:
             instance.face_id_login_enabled = validated_data['face_id_login_enabled']
@@ -633,7 +639,8 @@ class EmployeeSerializer(serializers.ModelSerializer):
     base_image = SanitizedImageField(required=False, allow_null=True)
     password = serializers.CharField(write_only=True, required=False, allow_blank=True)
     password_confirm = serializers.CharField(write_only=True, required=False, allow_blank=True)
-    role = serializers.ChoiceField(choices=ROLE_CHOICES, default=ROLE_USER, write_only=True, required=False)
+    # «Табелчи» бу ерда йўқ: у цехга боғланади ва «Табелчилар» саҳифасидан тайинланади.
+    role = serializers.ChoiceField(choices=[choice for choice in ROLE_CHOICES if choice[0] != ROLE_TIMEKEEPER], default=ROLE_USER, write_only=True, required=False)
     # Иш ҳолати: бўш/null — оддий «Фаол» (ишда); қолганлари — таътил, хизмат сафари, касаллик, бола парвариши.
     work_status = serializers.ChoiceField(
         choices=WORK_STATUS_CHOICES, required=False, allow_null=True, allow_blank=True,
@@ -919,3 +926,16 @@ class EmployeeSerializer(serializers.ModelSerializer):
 class EmployeeUpsertSerializer(EmployeeSerializer):
     class Meta(EmployeeSerializer.Meta):
         read_only_fields = ['slug', 'created_at', 'updated_at']
+
+
+class TimekeeperEmployeeSerializer(EmployeeSerializer):
+    """Табелчи кўрадиган ходим: фақат рўйхат учун керакли майдонлар (телефон, туғилган сана, ўлчамлар, логин ва бошқалар йўқ)."""
+
+    VISIBLE_FIELDS = (
+        'id', 'slug', 'first_name', 'last_name', 'surname', 'full_name', 'tabel_number', 'base_image_url',
+        'department', 'section', 'position', 'is_active', 'work_status',
+    )
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        return {key: data[key] for key in self.VISIBLE_FIELDS if key in data}

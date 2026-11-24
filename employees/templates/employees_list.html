@@ -5,7 +5,12 @@
 {% block content %}
 <section class="space-y-4">
     <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <h2 class="font-display text-2xl font-bold text-slate-900">Ходимлар рўйхати</h2>
+        <div>
+            <h2 class="font-display text-2xl font-bold text-slate-900">Ходимлар рўйхати</h2>
+            {# Табелчи: фақат ўз цехи ходимларини кўради, ўзгартира олмайди (импорт, экспорт, қўшиш, таҳрирлаш ва ўчириш йўқ). #}
+            {% if is_timekeeper %}<p class="mt-1 text-sm font-semibold text-slate-500">Цех: {{ timekeeper_department.name }}</p>{% endif %}
+        </div>
+        {% if not is_timekeeper %}
         <div class="flex flex-wrap gap-2">
             <button id="openImportModalButton" onclick="openImportModal()"
                 class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
@@ -28,6 +33,7 @@
                 Янги ҳодим қўшиш
             </a>
         </div>
+        {% endif %}
     </div>
 
     <div id="treeFilterControl" class="relative">
@@ -149,7 +155,7 @@
                         <th class="min-w-[400px] border-b border-slate-200 px-4 py-4">Ходим</th>
                         <th class="w-[240px] border-b border-slate-200 px-4 py-4">Бўлим</th>
                         <th class="border-b border-slate-200 px-4 py-4">Лавозим</th>
-                        <th class="border-b border-slate-200 px-4 py-4 text-center">Амаллар</th>
+                        {% if not is_timekeeper %}<th class="border-b border-slate-200 px-4 py-4 text-center">Амаллар</th>{% endif %}
                     </tr>
                 </thead>
                 <tbody id="employeesTableBody"></tbody>
@@ -165,7 +171,7 @@
                     <i class="fas fa-users text-2xl"></i>
                 </div>
                 <p class="mt-4 text-sm font-semibold text-slate-700">Ходимлар топилмади</p>
-                <p class="mt-1 text-sm text-slate-500">Фильтрларни тозаланг ёки янги ходим қўшинг.</p>
+                <p class="mt-1 text-sm text-slate-500">{% if is_timekeeper %}Фильтрларни тозаланг.{% else %}Фильтрларни тозаланг ёки янги ходим қўшинг.{% endif %}</p>
             </div>
         </div>
 
@@ -344,6 +350,9 @@
 
 
 <script>
+    // Табелчи: ўз цехи ходимларини фақат кўради (сервер ҳам шундай чеклайди; бу ерда тугмалар ва цех рўйхати яширилади).
+    const IS_TIMEKEEPER = {{ is_timekeeper|yesno:"true,false" }};
+    const TIMEKEEPER_DEPARTMENT_ID = {{ timekeeper_department.id|default:"null" }};
     let employeesCache = [];
     let filteredEmployees = [];
     let departmentsCache = [];
@@ -1086,6 +1095,11 @@
     let employeesLoaded = false;
 
     async function loadStaffTotals() {
+        if (IS_TIMEKEEPER) {   // штат маълумоти табелчига берилмайди: фақат «Ходимлар» сони кўрсатилади
+            staffTree = null;
+            renderStatsLine();
+            return;
+        }
         try {
             // apiRequest хато бўлса огоҳлантириш чиқаради; бу ерда штат маълумоти шарт эмас, шунинг учун жимгина олинади.
             const response = await fetch(`${API_BASE}/template/staff/tree/`, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
@@ -1148,6 +1162,10 @@
 
         departmentsCache = Array.isArray(departments) ? departments : [];
         sectionsCache = Array.isArray(sections) ? sections : [];
+        if (IS_TIMEKEEPER) {   // дарахт ва филтрда фақат ўз цехи
+            departmentsCache = departmentsCache.filter(department => department.id === TIMEKEEPER_DEPARTMENT_ID);
+            sectionsCache = sectionsCache.filter(section => (section.department?.id ?? section.department_id) === TIMEKEEPER_DEPARTMENT_ID);
+        }
         expandedTreeNodeKeys = new Set();
 
         populateDepartmentOptions();
@@ -1275,7 +1293,7 @@
 
         // Сервер отдаёт сотрудников в порядке «Штат бирлиги ва лавозим»: цех → отделы (вложенные сразу после родителя).
         // Когда цех или отдел меняется, перед сотрудниками показываем полосу с его названием (как в HRM).
-        const COLUMN_COUNT = 5;   // №, Ходим, Бўлим, Лавозим, Амаллар (цех устуни йўқ: цех сарлавҳа полосасида кўрсатилади)
+        const COLUMN_COUNT = IS_TIMEKEEPER ? 4 : 5;   // №, Ходим, Бўлим, Лавозим, Амаллар (цех устуни йўқ: цех сарлавҳа полосасида кўрсатилади)
         const ACTION_BUTTON = 'inline-flex h-9 w-9 items-center justify-center rounded-md border bg-white transition';
         const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
         // «Раҳбарият» ва «20-Цех Завод бошқармаси» учун катта цех сарлавҳаси чиқарилмайди: уларнинг бўлимлари ўзлари сарлавҳа бўлиб туради.
@@ -1345,13 +1363,13 @@
                 </td>
                 <td class="w-[240px] px-4 py-4 text-slate-700">${escapeHtml(employee.section?.name || '—')}</td>
                 <td class="px-4 py-4 text-slate-700">${escapeHtml(employee.position || '—')}</td>
-                <td class="px-4 py-4">
+                ${IS_TIMEKEEPER ? '' : `<td class="px-4 py-4">
                     <div class="flex items-center justify-center gap-2">
                         <a class="${ACTION_BUTTON} border-[var(--primary)] text-[var(--primary)] hover:bg-[var(--primary-soft)]" href="/employees/${encodeURIComponent(employee.slug)}/" title="Кўриш"><i class="fas fa-eye"></i></a>
                         <a class="${ACTION_BUTTON} border-[var(--primary)] text-[var(--primary)] hover:bg-[var(--primary-soft)]" href="/employees/${encodeURIComponent(employee.slug)}/edit/" title="Таҳрирлаш"><i class="fas fa-pen"></i></a>
                         <a class="${ACTION_BUTTON} border-red-300 text-red-500 hover:bg-red-50" href="/employees/${encodeURIComponent(employee.slug)}/delete/" title="Ўчириш"><i class="fas fa-trash"></i></a>
                     </div>
-                </td>
+                </td>`}
             </tr>
         `;
         }).join('');
@@ -1459,6 +1477,7 @@
         business_trip: 'Хизмат сафарида',
         sick_leave: 'Касаллик таътилида',
         childcare_leave: 'Бола парваришлаш таътилида',
+        over_staff: 'св.шт.',
     };
     const EXPORT_GENDER_LABELS = { M: 'Эркак', F: 'Аёл' };
 

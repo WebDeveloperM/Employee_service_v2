@@ -48,6 +48,34 @@ def is_service_api_request(request):
     return isinstance(getattr(request, 'successful_authenticator', None), ServiceApiKeyAuthentication)
 
 
+def is_timekeeper(user):
+    """Роль «Табелчи» (суперпользователь ҳеч қачон табелчи ҳисобланмайди)."""
+    from .models import ROLE_TIMEKEEPER
+
+    if not user or not user.is_authenticated or user.is_superuser:
+        return False
+    profile = getattr(user, 'profile', None)
+    return profile is not None and profile.role == ROLE_TIMEKEEPER
+
+
+def timekeeper_department(user):
+    """Табелчининг цехи (Department) ёки None.
+
+    None — табелчи эмас ёки тайинлов ишламайди: ходим ўчирилган/фаол эмас, ёки ҳисоби ўчирилган. Шундай табелчи ҳеч нимани
+    кўрмайди (рол сақланиб қолган бўлса ҳам), яъни ходим ишдан чиққач кириш ўз-ўзидан тугайди.
+    """
+    if not is_timekeeper(user) or not user.is_active:
+        return None
+    from .models import Timekeeper
+
+    assignment = (
+        Timekeeper.objects.select_related('department', 'employee')
+        .filter(employee__user_id=user.pk, employee__is_deleted=False, employee__is_active=True)
+        .first()
+    )
+    return assignment.department if assignment is not None else None
+
+
 class IsAdminOrHrRole(BasePermission):
     """Доступ только для администраторов и HR (как и пункт меню «Настройка»)."""
 
@@ -55,6 +83,17 @@ class IsAdminOrHrRole(BasePermission):
 
     def has_permission(self, request, view):
         return is_admin_or_hr(request.user)
+
+
+class AdminOrHrOrTimekeeperRead(BasePermission):
+    """Ходимлар рўйхати: администратор ва HR — тўлиқ; табелчи — фақат ўқиш (GET), ўз цехи доирасида."""
+
+    message = 'Сизда ушбу бўлимга кириш ҳуқуқи йўқ.'
+
+    def has_permission(self, request, view):
+        if is_admin_or_hr(request.user):
+            return True
+        return request.method in SAFE_METHODS and timekeeper_department(request.user) is not None
 
 
 class AdminOrHrCanWrite(BasePermission):

@@ -20,7 +20,7 @@ def option_labels(html):
 
 
 class WorkStatusModelAndApiTests(TestCase):
-    """«Ҳолати»: Фаол · Меҳнат таътилида · Хизмат сафарида · Касаллик таътилида · Бола парваришлаш таътилида · Фаол эмас."""
+    """«Ҳолати»: Фаол · Меҳнат таътилида · Хизмат сафарида · Касаллик таътилида · Бола парваришлаш таътилида · св.шт. · Фаол эмас."""
 
     def setUp(self):
         self.admin = User.objects.create_user(username='work_status_admin', password='secret123')
@@ -42,15 +42,17 @@ class WorkStatusModelAndApiTests(TestCase):
         self.assertEqual(Employee(is_active=True, work_status='vacation').status_key, 'vacation')
         self.assertEqual(Employee(is_active=False, work_status=None).status_key, 'inactive')
         self.assertEqual(Employee(is_active=False, work_status='vacation').status_key, 'inactive')   # фаол эмас — устувор
+        self.assertEqual(Employee(is_active=True, work_status='over_staff').status_key, 'over_staff')
+        self.assertEqual(Employee(is_active=False, work_status='over_staff').status_key, 'inactive')
 
     def test_choices_match_the_requested_list_in_order(self):
         self.assertEqual([label for _, label in EMPLOYEE_STATUS_CHOICES], [
-            'Фаол', 'Меҳнат таътилида', 'Хизмат сафарида', 'Касаллик таътилида', 'Бола парваришлаш таътилида', 'Фаол эмас',
+            'Фаол', 'Меҳнат таътилида', 'Хизмат сафарида', 'Касаллик таътилида', 'Бола парваришлаш таътилида', 'св.шт.', 'Фаол эмас',
         ])
 
     def test_each_leave_status_can_be_saved_through_the_edit_form_request(self):
         # Ходим формаси (employee_detail.html) мультипарт PATCH юборади: is_active + work_status.
-        for status in ('vacation', 'business_trip', 'sick_leave', 'childcare_leave'):
+        for status in ('vacation', 'business_trip', 'sick_leave', 'childcare_leave', 'over_staff'):
             with self.subTest(status=status):
                 response = self.patch(is_active='true', work_status=status)
 
@@ -58,6 +60,22 @@ class WorkStatusModelAndApiTests(TestCase):
                 self.employee.refresh_from_db()
                 self.assertEqual((self.employee.is_active, self.employee.work_status), (True, status))
                 self.assertEqual(response.json()['work_status'], status)
+
+    def test_over_staff_is_saved_and_cleared_like_the_other_statuses(self):
+        saved = self.patch(is_active='true', work_status='over_staff')
+        self.assertEqual(saved.status_code, 200, saved.content)
+        self.employee.refresh_from_db()
+        self.assertEqual((self.employee.is_active, self.employee.work_status, self.employee.status_key), (True, 'over_staff', 'over_staff'))
+
+        cleared = self.patch(is_active='true', work_status='')
+        self.assertEqual(cleared.status_code, 200, cleared.content)
+        self.employee.refresh_from_db()
+        self.assertIsNone(self.employee.work_status)
+
+        self.patch(is_active='true', work_status='over_staff')
+        self.patch(is_active='false', work_status='over_staff')   # фаол эмас қилинса, ҳолат тозаланади
+        self.employee.refresh_from_db()
+        self.assertEqual((self.employee.is_active, self.employee.work_status), (False, None))
 
     def test_choosing_working_clears_the_leave_status(self):
         self.patch(is_active='true', work_status='sick_leave')
@@ -120,12 +138,13 @@ class WorkStatusFormTests(TestCase):
     def edit_page(self, employee):
         return self.web.get(f'/employees/{employee.slug}/edit/').content.decode()
 
-    def test_the_status_select_offers_all_six_options_in_order(self):
+    def test_the_status_select_offers_all_seven_options_in_order(self):
         options = option_labels(self.edit_page(make_employee('FORM-1')))
 
         self.assertEqual([(value, label) for value, _, label in options], [
             ('working', 'Фаол'), ('vacation', 'Меҳнат таътилида'), ('business_trip', 'Хизмат сафарида'),
-            ('sick_leave', 'Касаллик таътилида'), ('childcare_leave', 'Бола парваришлаш таътилида'), ('inactive', 'Фаол эмас'),
+            ('sick_leave', 'Касаллик таътилида'), ('childcare_leave', 'Бола парваришлаш таътилида'),
+            ('over_staff', 'св.шт.'), ('inactive', 'Фаол эмас'),
         ])
 
     def test_the_current_status_is_preselected(self):
@@ -133,6 +152,7 @@ class WorkStatusFormTests(TestCase):
             (dict(), 'working'),
             (dict(work_status='vacation'), 'vacation'),
             (dict(work_status='childcare_leave'), 'childcare_leave'),
+            (dict(work_status='over_staff'), 'over_staff'),
             (dict(is_active=False), 'inactive'),
         )
         for index, (fields, expected) in enumerate(cases):
@@ -188,6 +208,8 @@ class StatusChartTests(TestCase):
         make_employee('S-1', work_status='sick_leave')
         for index in range(2):
             make_employee(f'C-{index}', work_status='childcare_leave')
+        for index in range(3):
+            make_employee(f'O-{index}', work_status='over_staff')
         make_employee('OFF-1', is_active=False)                             # диаграммага кирмайди
         make_employee('DEL-1', work_status='vacation', is_deleted=True)     # ўчирилган — ҳисобга олинмайди
 
@@ -199,21 +221,22 @@ class StatusChartTests(TestCase):
             'Хизмат сафаридаги ходимлар': 1,
             'Касаллик таътилида': 1,
             'Бола парваришлаш таътилида': 2,
+            'св.шт.': 3,
         })
         self.assertEqual(chart['title'], 'Тизимдаги ходимлар ҳолати')
         self.assertEqual(chart['note'], 'Фаол эмас ходимлар (диаграммага кирмайди): 1')
         self.assertGreater(chart['hole'], 0)                                # «бублик» диаграмма
 
-    def test_all_five_rows_are_listed_even_when_zero_in_the_requested_order(self):
+    def test_all_six_rows_are_listed_even_when_zero_in_the_requested_order(self):
         make_employee('ONLY-1')
 
         chart = self.status_chart()
 
         self.assertEqual([row['label'] for row in chart['rows']], [
             'Ишдаги ходимлар', 'Меҳнат таътилидаги ходимлар', 'Хизмат сафаридаги ходимлар',
-            'Касаллик таътилида', 'Бола парваришлаш таътилида',
+            'Касаллик таътилида', 'Бола парваришлаш таътилида', 'св.шт.',
         ])
-        self.assertEqual([row['value'] for row in chart['rows']], [1, 0, 0, 0, 0])
+        self.assertEqual([row['value'] for row in chart['rows']], [1, 0, 0, 0, 0, 0])
         self.assertEqual(chart['note'], '')                                  # фаол эмас ходим йўқ — изоҳ йўқ
 
     def test_a_leave_status_does_not_remove_the_employee_from_the_other_charts(self):
@@ -243,4 +266,4 @@ class StatusChartTests(TestCase):
         raw = re.search(r'<script id="dashboardChartsData" type="application/json">(.*?)</script>', html, re.S).group(1)
         status = next(chart for chart in json.loads(raw) if chart['key'] == 'status')
         self.assertEqual(status['hole'], 0.52)                              # JS «бублик» чизиши учун
-        self.assertEqual([row['value'] for row in status['slices']], [1, 0, 1, 0, 0])
+        self.assertEqual([row['value'] for row in status['slices']], [1, 0, 1, 0, 0, 0])

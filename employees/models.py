@@ -12,10 +12,14 @@ GRADE_RE = re.compile(r'(\d{1,2})(\*?)')
 ROLE_ADMIN = 'admin'
 ROLE_HR = 'hr'
 ROLE_USER = 'user'
+# «Табелчи»: цехнинг битта ходими. Рол «Табелчилар» саҳифасидан тайинланади (Timekeeper) ва фақат шу цех ходимлари
+# рўйхатини (ўқиш учун) кўради. Бошқа саҳифалар ва маълумотлар унга очиқ эмас.
+ROLE_TIMEKEEPER = 'timekeeper'
 ROLE_CHOICES = [
     (ROLE_ADMIN, 'Администратор'),
     (ROLE_HR, 'HR менежер'),
     (ROLE_USER, 'Фойдаланувчи'),
+    (ROLE_TIMEKEEPER, 'Табелчи'),
 ]
 
 # Ходимнинг иш ҳолати (is_active=True бўлган ходим учун): иш жойида ёки вақтинча йўқ.
@@ -24,11 +28,13 @@ WORK_STATUS_VACATION = 'vacation'
 WORK_STATUS_BUSINESS_TRIP = 'business_trip'
 WORK_STATUS_SICK_LEAVE = 'sick_leave'
 WORK_STATUS_CHILDCARE_LEAVE = 'childcare_leave'
+WORK_STATUS_OVER_STAFF = 'over_staff'   # «св.шт.» — штатдан ташқари
 WORK_STATUS_CHOICES = [
     (WORK_STATUS_VACATION, 'Меҳнат таътилида'),
     (WORK_STATUS_BUSINESS_TRIP, 'Хизмат сафарида'),
     (WORK_STATUS_SICK_LEAVE, 'Касаллик таътилида'),
     (WORK_STATUS_CHILDCARE_LEAVE, 'Бола парваришлаш таътилида'),
+    (WORK_STATUS_OVER_STAFF, 'св.шт.'),
 ]
 
 # Ходим формасидаги «Ҳолати» танлови: Фаол + юқоридаги ҳолатлар + Фаол эмас.
@@ -368,3 +374,23 @@ class EmployeeBaseImageChangeLog(models.Model):
     def __str__(self):
         label = self.employee_full_name or str(self.employee)
         return f'{label} — {self.created_at:%Y-%m-%d %H:%M:%S}'
+
+
+class Timekeeper(models.Model):
+    """Цехнинг табелчиси: ҳар бир цех учун биттагина ходим, ходим эса фақат битта цехнинг табелчиси бўла олади.
+
+    Рол (UserProfile.role = «Табелчи») шу жадвалдаги ёзув билан бирга тайинланади ва олиб ташланади
+    (employees/timekeepers.py). Табелчи фақат ўз цехининг ходимлари рўйхатини кўради.
+    """
+
+    department = models.OneToOneField(Department, on_delete=models.CASCADE, related_name='timekeeper', verbose_name='Цех')
+    employee = models.OneToOneField(Employee, on_delete=models.CASCADE, related_name='timekeeper_assignment', verbose_name='Табелчи')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Тайинланган')
+
+    class Meta:
+        ordering = ['department__sort_order', 'department__name']
+        verbose_name = 'Табелчи'
+        verbose_name_plural = 'Табелчилар'
+
+    def __str__(self):
+        return f'{self.department} — {self.employee}'

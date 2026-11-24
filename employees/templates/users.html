@@ -104,8 +104,9 @@
                 </label>
                 <select id="role"
                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    {# «Табелчи» бу ерда танланмайди (цехга боғланади): у «Табелчилар» саҳифасидан тайинланади, лекин мавжуд табелчининг роли кўринади. #}
                     {% for value, label in role_choices %}
-                    <option value="{{ value }}">{{ label }}</option>
+                    <option value="{{ value }}"{% if value == 'timekeeper' %} disabled{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -224,6 +225,7 @@
         const colors = {
             admin: 'bg-red-100 text-red-800',
             hr: 'bg-blue-100 text-blue-800',
+            timekeeper: 'bg-amber-100 text-amber-800',
             user: 'bg-gray-100 text-gray-800',
         };
         const cls = colors[role] || colors.user;
