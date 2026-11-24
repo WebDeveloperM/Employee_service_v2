@@ -134,14 +134,15 @@
                 <label for="unitEmployeeTabelSearch" class="mb-2 block text-sm font-bold text-slate-700">Табель рақами бўйича қидириш</label>
                 <div class="flex items-center gap-3">
                     <div class="min-w-0 flex-1">
-                        <input type="text" id="unitEmployeeTabelSearch" class="table-filter" placeholder="Табель рақамини киритинг" autocomplete="off">
+                        <input type="text" id="unitEmployeeTabelSearch" class="table-filter" placeholder="Табель рақамини киритинг (бир нечта бўлса — бўшлиқ билан ажратинг)" autocomplete="off">
                     </div>
                     <button type="button" onclick="searchUnitEmployees()" class="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50">
                         <i class="fas fa-search"></i>
                         Қидириш
                     </button>
                 </div>
-                <div id="unitEmployeeSearchResults" class="mt-3 space-y-2"></div>
+                <p id="unitEmployeeSearchSummary" class="mt-3 hidden text-sm font-semibold text-slate-600"></p>
+                <div id="unitEmployeeSearchResults" class="mt-3 max-h-[28rem] space-y-2 overflow-y-auto pr-1"></div>
             </div>
 
             <div class="overflow-x-auto rounded-[24px] border border-slate-200 bg-white">
@@ -328,6 +329,7 @@
         unitEmployees: new Map(),   // id -> сотрудник отдела без штата («Шогиртлар»)
         unitEmployeesRequestId: 0,
         unitEmployeeResults: new Map(),
+        unitEmployeeSearch: { multiple: false, notFound: [] },   // нечта табель рақами қидирилгани ва топилмаганлари
         unitEmployeeSearchRequestId: 0,
         unitEmployeeSearchTimer: null,
     };
@@ -375,6 +377,15 @@
             event.preventDefault();
             window.clearTimeout(staffState.unitEmployeeSearchTimer);
             searchUnitEmployees();
+        });
+        // Excel устунидан нусха олинган рақамлар (янги қатор/Tab билан) бир қаторга, бўшлиқ билан келтирилади.
+        unitEmployeeSearch.addEventListener('paste', function (event) {
+            const text = (event.clipboardData || window.clipboardData).getData('text');
+            if (!/[\r\n\t]/.test(text)) return;
+            event.preventDefault();
+            const joined = text.trim().split(/[\s,;]+/).join(' ');
+            unitEmployeeSearch.setRangeText(joined, unitEmployeeSearch.selectionStart, unitEmployeeSearch.selectionEnd, 'end');
+            unitEmployeeSearch.dispatchEvent(new Event('input'));
         });
 
         // Меню закрывается кликом мимо, прокруткой панели и изменением размера окна.
@@ -1368,10 +1379,16 @@
         } else {
             window.clearTimeout(staffState.unitEmployeeSearchTimer);
             input.value = '';
-            document.getElementById('unitEmployeeSearchResults').innerHTML = '';
-            staffState.unitEmployeeResults = new Map();
+            clearUnitEmployeeResults();
             staffState.unitEmployeeSearchRequestId += 1;
         }
+    }
+
+    function clearUnitEmployeeResults() {
+        document.getElementById('unitEmployeeSearchResults').innerHTML = '';
+        document.getElementById('unitEmployeeSearchSummary').classList.add('hidden');
+        staffState.unitEmployeeResults = new Map();
+        staffState.unitEmployeeSearch = { multiple: false, notFound: [] };
     }
 
     async function searchUnitEmployees() {
@@ -1382,8 +1399,7 @@
         if (!selected) return;
 
         if (!term) {
-            results.innerHTML = '';
-            staffState.unitEmployeeResults = new Map();
+            clearUnitEmployeeResults();
             return;
         }
 
@@ -1392,6 +1408,12 @@
             const params = new URLSearchParams({ tabel_number: term, section_id: String(selected.id) });
             const response = await apiRequest('/template/staff/employee-lookup/?' + params.toString());
             if (requestId !== staffState.unitEmployeeSearchRequestId) return;
+            staffState.unitEmployeeSearch = {
+                multiple: Boolean(response.multiple),
+                searched: Number(response.searched) || 0,
+                notFound: Array.isArray(response.not_found) ? response.not_found : [],
+                truncated: Boolean(response.truncated),
+            };
             renderUnitEmployeeResults(Array.isArray(response.data) ? response.data : []);
         } catch (error) {
             if (requestId !== staffState.unitEmployeeSearchRequestId) return;
@@ -1400,12 +1422,33 @@
         }
     }
 
+    // Бир нечта табель рақами киритилганда: «Топилди: 14 / 16» ва топилмаган рақамлар рўйхати.
+    function renderUnitEmployeeSummary(foundCount) {
+        const summary = document.getElementById('unitEmployeeSearchSummary');
+        const search = staffState.unitEmployeeSearch || {};
+        if (!search.multiple) {
+            summary.classList.add('hidden');
+            return;
+        }
+        let text = 'Топилди: ' + foundCount + ' / ' + search.searched;
+        if (search.notFound.length > 0) {
+            text += ' · Топилмади (' + search.notFound.length + '): ' + search.notFound.join(', ');
+        }
+        if (search.truncated) {
+            text += ' · Фақат дастлабки ' + search.searched + ' та рақам қидирилди.';
+        }
+        summary.textContent = text;
+        summary.classList.remove('hidden');
+    }
+
     function renderUnitEmployeeResults(employees) {
         const results = document.getElementById('unitEmployeeSearchResults');
         staffState.unitEmployeeResults = new Map(employees.map(function (employee) { return [employee.id, employee]; }));
+        renderUnitEmployeeSummary(employees.length);
 
         if (employees.length === 0) {
-            results.innerHTML = '<div class="px-2 py-3 text-sm font-semibold text-slate-500">Бундай табель рақамли ходим топилмади.</div>';
+            results.innerHTML = '<div class="px-2 py-3 text-sm font-semibold text-slate-500">' +
+                (staffState.unitEmployeeSearch && staffState.unitEmployeeSearch.multiple ? 'Киритилган табель рақамлари бўйича ходим топилмади.' : 'Бундай табель рақамли ходим топилмади.') + '</div>';
             return;
         }
 
@@ -1464,11 +1507,16 @@
             });
             showToast('Ходим бўлимга қўшилди');
             if (staffState.selected && staffState.selected.id === selected.id) {
-                const input = document.getElementById('unitEmployeeTabelSearch');
-                input.value = '';
-                document.getElementById('unitEmployeeSearchResults').innerHTML = '';
-                staffState.unitEmployeeResults = new Map();
-                input.focus();
+                if (staffState.unitEmployeeSearch && staffState.unitEmployeeSearch.multiple) {
+                    // Рўйхат сақланади: қўшилгани «Қўшилган» бўлиб қолади, қолганларини ҳам қўшиш мумкин.
+                    employee.in_position = true;
+                    renderUnitEmployeeResults(Array.from(staffState.unitEmployeeResults.values()));
+                } else {
+                    const input = document.getElementById('unitEmployeeTabelSearch');
+                    input.value = '';
+                    clearUnitEmployeeResults();
+                    input.focus();
+                }
             }
             await refreshAfterUnitEmployeeChange(selected, response);
         } catch (error) {

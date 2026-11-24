@@ -1,4 +1,7 @@
+import re
+
 from django.db import models, transaction
+from django.db.models.functions import Lower
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils.http import content_disposition_header
@@ -39,6 +42,7 @@ from .template_views import StandardResultsSetPagination
 
 STAFF_PERMISSIONS = [IsAuthenticated, IsAdminOrHrRole]
 EMPLOYEE_LOOKUP_LIMIT = 10
+MULTI_LOOKUP_LIMIT = 200   # бир сўровда бўшлиқ билан ажратилган табель рақамларининг кўпи билан шунча таси қидирилади
 
 
 def serialize_staff_employee(employee, request):
@@ -450,8 +454,22 @@ class StaffSectionEmployeeDetailTemplateView(APIView):
         return Response(section_employees_payload(section, section_employees(section), request, 'Ходим бўлимдан чиқарилди'))
 
 
+def split_tabel_numbers(term):
+    """Табель рақамлари: бўшлиқ, вергул, нуқта-вергул ёки янги қатор билан ажратилган; такрорлари олиб ташланади (тартиб сақланади)."""
+    seen, tokens = set(), []
+    for token in re.split(r'[\s,;]+', term):
+        if token and token.lower() not in seen:
+            seen.add(token.lower())
+            tokens.append(token)
+    return tokens
+
+
 class StaffEmployeeLookupTemplateView(APIView):
-    """Поиск сотрудника по табельному номеру для добавления на должность."""
+    """Поиск сотрудника по табельному номеру для добавления на должность.
+
+    Один номер — поиск по вхождению (как раньше, до 10 результатов). Несколько номеров через пробел
+    («6380 6263 6024») — точное совпадение каждого: найденные идут в порядке ввода, ненайденные — в not_found.
+    """
 
     permission_classes = STAFF_PERMISSIONS
 
@@ -460,17 +478,34 @@ class StaffEmployeeLookupTemplateView(APIView):
         if not term:
             return Response({'success': True, 'message': 'Табель рақамини киритинг', 'data': []})
 
-        employees = (
-            Employee.objects
-            .filter(is_deleted=False, is_active=True, tabel_number__icontains=term)
-            .select_related('department', 'section')
-            .annotate(match_rank=models.Case(
-                models.When(tabel_number__iexact=term, then=models.Value(0)),
-                default=models.Value(1),
-                output_field=models.IntegerField(),
-            ))
-            .order_by('match_rank', 'tabel_number')[:EMPLOYEE_LOOKUP_LIMIT]
-        )
+        tokens = split_tabel_numbers(term)
+        multiple = len(tokens) > 1
+        truncated = len(tokens) > MULTI_LOOKUP_LIMIT
+        not_found = []
+        if multiple:
+            tokens = tokens[:MULTI_LOOKUP_LIMIT]
+            found = {
+                employee.tabel_number.lower(): employee
+                for employee in Employee.objects
+                .filter(is_deleted=False, is_active=True)
+                .annotate(tabel_lower=Lower('tabel_number'))
+                .filter(tabel_lower__in=[token.lower() for token in tokens])
+                .select_related('department', 'section')
+            }
+            employees = [found[token.lower()] for token in tokens if token.lower() in found]
+            not_found = [token for token in tokens if token.lower() not in found]
+        else:
+            employees = (
+                Employee.objects
+                .filter(is_deleted=False, is_active=True, tabel_number__icontains=term)
+                .select_related('department', 'section')
+                .annotate(match_rank=models.Case(
+                    models.When(tabel_number__iexact=term, then=models.Value(0)),
+                    default=models.Value(1),
+                    output_field=models.IntegerField(),
+                ))
+                .order_by('match_rank', 'tabel_number')[:EMPLOYEE_LOOKUP_LIMIT]
+            )
 
         already_here = set()
         position_id = str(request.query_params.get('position_id', '') or '').strip()
@@ -491,4 +526,12 @@ class StaffEmployeeLookupTemplateView(APIView):
             item['in_position'] = employee.pk in already_here
             data.append(item)
 
-        return Response({'success': True, 'message': 'Ходимлар муваффақиятли олинди', 'data': data})
+        return Response({
+            'success': True,
+            'message': 'Ходимлар муваффақиятли олинди',
+            'data': data,
+            'multiple': multiple,        # бир нечта табель рақами киритилган
+            'searched': len(tokens),     # нечта рақам қидирилди (multiple бўлганда)
+            'not_found': not_found,      # топилмаган рақамлар (multiple бўлганда)
+            'truncated': truncated,      # рақамлар MULTI_LOOKUP_LIMIT дан кўп эди — дастлабкилари қидирилди
+        })
