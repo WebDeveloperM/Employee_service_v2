@@ -12,7 +12,7 @@
             </h2>
             <p class="mt-1 max-w-3xl text-sm text-slate-500">
                 Ҳар бир цех учун битта ходимни табелчи қилиб тайинланг. Табелчи ўз ҳисобига кирганда менюда фақат
-                «Ходимлар рўйхати»ни, у ҳам фақат ўз цехи ходимлари билан (ўзгартириш ҳуқуқисиз) кўради.
+                «Ходимлар рўйхати»ни, у ҳам фақат тайинланган цех ходимлари билан (ўзгартириш ҳуқуқисиз) кўради.
             </p>
         </div>
         <p id="timekeepersSummary" class="text-sm font-semibold text-slate-600"></p>
@@ -56,7 +56,7 @@
 
         <input type="text" id="candidateSearchInput" placeholder="Табель рақами, исм ёки лавозим бўйича қидириш..." autocomplete="off" inputmode="search" class="table-filter">
         <div class="mt-2 flex items-center justify-between gap-3 text-xs text-slate-500">
-            <span>Шу цехнинг барча фаол ходимлари. Табель рақамини ёзиб тез топинг, Enter — биринчисини танлайди.</span>
+            <span>Барча цехларнинг ходимлари (20-Цех биринчи, «Раҳбарият» кўрсатилмайди). Табель рақамини ёзиб тез топинг, Enter — биринчисини танлайди.</span>
             <span id="candidatesCount" class="shrink-0 font-semibold text-slate-600"></span>
         </div>
 
@@ -104,7 +104,7 @@
 
     function avatarHtml(person, size = 'h-10 w-10') {
         if (person?.base_image_url) {
-            return `<img src="${escapeHtml(person.base_image_url)}" alt="" class="${size} shrink-0 rounded-full object-cover">`;
+            return `<img src="${escapeHtml(person.base_image_url)}" alt="" loading="lazy" decoding="async" class="${size} shrink-0 rounded-full object-cover">`;
         }
         return `<div class="flex ${size} shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400"><i class="fas fa-user text-sm"></i></div>`;
     }
@@ -196,7 +196,7 @@
         document.getElementById('accountFields').classList.add('hidden');
     }
 
-    // Цехнинг барча ходимлари бир марта юкланади, қидирув эса шу ерда (браузерда) дарҳол ишлайди.
+    // Барча цехларнинг ходимлари бир марта юкланади (штат дарахти тартибида), қидирув эса шу ерда (браузерда) дарҳол ишлайди.
     async function loadCandidates() {
         if (!modalDepartment || candidatesLoading) {
             return;
@@ -205,8 +205,7 @@
         const departmentId = modalDepartment.id;
         document.getElementById('candidatesList').innerHTML = '<p class="px-4 py-6 text-center text-sm text-slate-500"><span class="loading"></span><span class="ml-2">Ходимлар юкланмоқда...</span></p>';
         try {
-            const params = new URLSearchParams({ department_id: departmentId });
-            const payload = await apiRequest(`/template/timekeepers/candidates/?${params.toString()}`);
+            const payload = await apiRequest('/template/timekeepers/candidates/');
             if (modalDepartment && modalDepartment.id === departmentId) {
                 modalCandidates = Array.isArray(payload?.data) ? payload.data : [];
                 renderCandidates();
@@ -218,7 +217,7 @@
         }
     }
 
-    // Қидирув: ҳар бир сўз табель, исм ёки лавозимда учраши керак. Табели сўзга тўлиқ ёки бошидан мос келганлар тепада.
+    // Қидирув: ҳар бир сўз табель, исм, лавозим ёки цех номида учраши керак. Табели сўзга тўлиқ ёки бошидан мос келганлар тепада.
     function filteredCandidates() {
         const words = document.getElementById('candidateSearchInput').value.toLowerCase().split(/\s+/).filter(Boolean);
         if (!words.length) {
@@ -230,7 +229,7 @@
         };
         return modalCandidates
             .filter((candidate) => {
-                const text = [candidate.full_name, candidate.tabel_number, candidate.position, candidate.section_name].join(' ').toLowerCase();
+                const text = [candidate.full_name, candidate.tabel_number, candidate.position, candidate.department_name, candidate.section_name].join(' ').toLowerCase();
                 return words.every((word) => text.includes(word));
             })
             .map((candidate, index) => ({ candidate, index, rank: rank(candidate) }))
@@ -263,15 +262,25 @@
             list.innerHTML = '<p class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm font-semibold text-slate-500">Ходим топилмади.</p>';
             return;
         }
+        // Қидирувсиз рўйхат цехлар бўйича гуруҳланади (20-Цех биринчи); қидирувда — битта рўйхат, цех номи қаторда.
+        const searching = document.getElementById('candidateSearchInput').value.trim() !== '';
+        const departmentTotals = {};
+        visible.forEach((candidate) => { departmentTotals[candidate.department_name] = (departmentTotals[candidate.department_name] || 0) + 1; });
+        let previousDepartment = null;
         list.innerHTML = visible.map((candidate) => {
             const reason = candidateBlockReason(candidate);
+            let header = '';
+            if (!searching && candidate.department_name !== previousDepartment) {
+                previousDepartment = candidate.department_name;
+                header = `<div class="sticky top-0 z-10 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">${escapeHtml(candidate.department_name || 'Цех кўрсатилмаган')} <span class="font-semibold text-slate-400">· ${departmentTotals[candidate.department_name]}</span></div>`;
+            }
             const badge = reason
                 ? `<span class="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">${escapeHtml(reason)}</span>`
                 : candidate.has_account
                     ? '<span class="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Ҳисоби бор</span>'
                     : '<span class="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Ҳисоби йўқ</span>';
-            const details = [candidate.position, candidate.section_name].filter(Boolean).map((part) => ` · ${part}`).join('');
-            return `
+            const details = [searching ? candidate.department_name : '', candidate.position, candidate.section_name].filter(Boolean).map((part) => ` · ${part}`).join('');
+            return `${header}
             <button type="button" data-candidate-id="${candidate.id}" ${reason ? 'disabled' : ''} onclick="selectCandidate(${candidate.id})"
                 class="${candidateButtonClasses(candidate, reason)}">
                 ${avatarHtml(candidate)}
@@ -369,10 +378,16 @@
     document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('timekeeperSearchInput').addEventListener('input', renderTimekeepers);
         const searchInput = document.getElementById('candidateSearchInput');
-        searchInput.addEventListener('input', renderCandidates);
+        let renderTimer = null;
+        searchInput.addEventListener('input', () => {   // узун рўйхатни ҳар ҳарфда қайта чизмаслик учун қисқа кечикиш
+            window.clearTimeout(renderTimer);
+            renderTimer = window.setTimeout(renderCandidates, 120);
+        });
         searchInput.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') {
                 event.preventDefault();
+                window.clearTimeout(renderTimer);
+                renderCandidates();
                 selectFirstCandidate();
             }
         });

@@ -1,6 +1,8 @@
 """«Табелчилар»: ҳар бир цех учун битта ходим ва унинг «Табелчи» роли.
 
 Тайинлаш ва олиб ташлаш фақат шу ерда: Timekeeper ёзуви ва ходимнинг роли (UserProfile.role) ҳар доим бирга ўзгаради.
+Табелчи қайси цехнинг ходими эканидан қатъи назар (масалан, 20-Цех Завод бошқармаси) тайинланган цехнинг ходимларини кўради:
+цех Timekeeper.department дан олинади. «Раҳбарият» цехи ходимлари табелчи бўла олмайди.
 Ходимда ҳисоб (логин) бўлмаса, тайинлашда логин ва парол сўралади ва ҳисоб ходим формасидаги каби яратилади.
 Администратор, HR ва суперфойдаланувчи табелчи бўла олмайди: тайинлаш уларнинг ролини пасайтириб қўймаслиги керак.
 """
@@ -9,9 +11,7 @@ from django.db import models, transaction
 
 from .models import Department, Employee, ROLE_TIMEKEEPER, ROLE_USER, Timekeeper, UserProfile
 from .serializers import create_login_user, is_privileged_account, login_problem, password_problems
-
-# Цехнинг барча ходимлари бир марта юкланади (қидирув саҳифада). Бу чегара фақат ғайриоддий катта цехдан сақлайди.
-CANDIDATES_LIMIT = 2000
+from .staff import StaffTreeOrder, is_leadership_department, staff_tree_order
 
 
 class TimekeeperError(Exception):
@@ -32,6 +32,7 @@ def employee_brief(employee):
         'full_name': str(employee),
         'tabel_number': employee.tabel_number,
         'position': employee.position,
+        'department_name': employee.department.name if employee.department else '',
         'section_name': employee.section.name if employee.section else '',
         'base_image_url': employee.base_image.url if employee.base_image else None,
         'login': (user.username if user is not None else '') or employee.login,
@@ -40,17 +41,17 @@ def employee_brief(employee):
 
 
 def timekeepers_payload():
-    """Барча цехлар (цех тартибида) ва уларнинг табелчиси (йўқ бўлса — None)."""
+    """Барча цехлар (штат дарахтидаги тартибда: Раҳбарият, 20-Цех, кейин қолганлари) ва уларнинг табелчиси (йўқ бўлса — None)."""
     assignments = {
         item.department_id: item
-        for item in Timekeeper.objects.select_related('employee', 'employee__user', 'employee__section')
+        for item in Timekeeper.objects.select_related('employee', 'employee__user', 'employee__section', 'employee__department')
     }
     counts = dict(
         Employee.objects.filter(is_deleted=False, is_active=True, department__isnull=False)
         .values_list('department_id').annotate(total=models.Count('id'))
     )
     payload = []
-    for department in Department.objects.order_by('sort_order', 'name'):
+    for department in sorted(Department.objects.all(), key=staff_tree_order):
         assignment = assignments.get(department.id)
         payload.append({
             'department': {'id': department.id, 'name': department.name},
@@ -60,29 +61,36 @@ def timekeepers_payload():
     return payload
 
 
-def candidates_for(department, search=''):
-    """Цехнинг фаол ходимлари (исм, табель ёки лавозим бўйича қидирув): табелчи бўлиши мумкинлар ва ҳолати.
+def candidates_for(search=''):
+    """Табелчи бўла оладиган ходимлар: барча цехларнинг фаол ходимлари, «Раҳбарият» цехи ходимларисиз.
 
-    Қайтади: (рўйхат, чекловга сиғмай қолганми).
+    Тартиб «Ходимлар рўйхати» саҳифасидагидек (штат дарахти): аввал 20-Цех (Завод бошқармаси), кейин қолган цехлар;
+    ҳар бир цех ичида — бўлимлар ва лавозимлар тартибида. Қидирув (ихтиёрий): ҳар бир сўз исм, табель ёки лавозимда.
     """
-    queryset = Employee.objects.select_related('user', 'user__profile', 'section', 'timekeeper_assignment__department').filter(
-        department=department, is_deleted=False, is_active=True,
-    ).order_by('last_name', 'first_name', 'surname', 'tabel_number')
+    queryset = Employee.objects.filter(is_deleted=False, is_active=True)
+    leadership_ids = [department.id for department in Department.objects.all() if is_leadership_department(department)]
+    if leadership_ids:
+        queryset = queryset.exclude(department_id__in=leadership_ids)
     for word in (search or '').split():
         queryset = queryset.filter(
             models.Q(first_name__icontains=word) | models.Q(last_name__icontains=word) | models.Q(surname__icontains=word)
             | models.Q(tabel_number__icontains=word) | models.Q(position__icontains=word)
         )
-    employees = list(queryset[:CANDIDATES_LIMIT + 1])
-    truncated = len(employees) > CANDIDATES_LIMIT
+    queryset = queryset.order_by('last_name', 'first_name', 'surname', 'tabel_number')
+    ordered_ids = StaffTreeOrder().sorted_ids(queryset)
+    by_id = {
+        employee.id: employee
+        for employee in queryset.select_related('user', 'user__profile', 'department', 'section', 'timekeeper_assignment__department')
+    }
     result = []
-    for employee in employees[:CANDIDATES_LIMIT]:
+    for employee_id in ordered_ids:
+        employee = by_id[employee_id]
         item = employee_brief(employee)
         assignment = getattr(employee, 'timekeeper_assignment', None)
         item['is_privileged'] = is_privileged_account(employee.user)
         item['timekeeper_of'] = assignment.department.name if assignment is not None else None
         result.append(item)
-    return result, truncated
+    return result
 
 
 def demote(employee):
@@ -130,8 +138,8 @@ def assign_timekeeper(department, employee, *, login='', password='', password_c
     """Цехга табелчи тайинлаш (олдингиси бўлса — алмашади). Қайтади: Timekeeper."""
     if employee.is_deleted or not employee.is_active:
         raise TimekeeperError('Фаол бўлмаган ходимни табелчи қилиб бўлмайди.', 'employee_id')
-    if employee.department_id != department.id:
-        raise TimekeeperError('Табелчи шу цехнинг ходими бўлиши керак.', 'employee_id')
+    if is_leadership_department(employee.department):
+        raise TimekeeperError('«Раҳбарият» цехи ходимини табелчи қилиб бўлмайди.', 'employee_id')
     other = Timekeeper.objects.select_related('department').filter(employee=employee).exclude(department=department).first()
     if other is not None:
         raise TimekeeperError(f'Бу ходим аллақачон «{other.department.name}» цехининг табелчиси.', 'employee_id')

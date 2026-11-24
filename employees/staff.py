@@ -23,10 +23,15 @@ UNIT_SECTION = 'section'
 # Верх дерева как в HRM: сначала руководство и заводоуправление, дальше цеха по sort_order.
 # Department.sort_order не меняется; по тому же порядку выстроена и таблица сотрудников (StaffTreeOrder).
 # Цех подбирается по началу названия (так же, как Department.save берёт номер из названия).
+LEADERSHIP_DEPARTMENT = re.compile(r'^\s*ра[хҳ]барият', re.IGNORECASE)   # «Раҳбарият» / «Рахбарият»
 PINNED_DEPARTMENTS = (
-    re.compile(r'^\s*ра[хҳ]барият', re.IGNORECASE),  # «Раҳбарият» / «Рахбарият»
+    LEADERSHIP_DEPARTMENT,
     re.compile(r'^\s*20(?!\d)'),                      # «20-Цех Завод бошқармаси», но не «200-…»
 )
+
+
+def is_leadership_department(department):
+    return department is not None and bool(LEADERSHIP_DEPARTMENT.match(department.name or ''))
 
 
 def staff_tree_order(department):

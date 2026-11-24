@@ -26,17 +26,16 @@ class TimekeeperListTemplateView(APIView):
 
 
 class TimekeeperCandidatesTemplateView(APIView):
-    """Цехнинг фаол ходимлари: табелчи қилиб тайинлаш учун қидирув (ҳисоби борми, тайинланганми — шу ерда кўринади)."""
+    """Табелчи қилиб тайинлаш мумкин ходимлар: барча цехларнинг фаол ходимлари (20-Цех биринчи, «Раҳбарият»сиз).
+
+    Ҳар бир ходимда: ҳисоби борми, администратор/HR эканми, бошқа цехнинг табелчисими — шу ерда кўринади.
+    """
 
     permission_classes = TIMEKEEPER_PERMISSIONS
 
     def get(self, request, *args, **kwargs):
-        department_id = request.query_params.get('department_id', '')
-        if not str(department_id).isdigit():
-            return Response({'success': False, 'message': 'Цехни кўрсатинг.'}, status=status.HTTP_400_BAD_REQUEST)
-        department = get_object_or_404(Department, pk=int(department_id))
-        data, truncated = candidates_for(department, request.query_params.get('search', ''))
-        return Response({'success': True, 'message': 'Ходимлар муваффақиятли олинди', 'data': data, 'truncated': truncated})
+        data = candidates_for(request.query_params.get('search', ''))
+        return Response({'success': True, 'message': 'Ходимлар муваффақиятли олинди', 'data': data})
 
 
 class TimekeeperDetailTemplateView(APIView):
@@ -49,7 +48,7 @@ class TimekeeperDetailTemplateView(APIView):
         employee_id = request.data.get('employee_id')
         if not str(employee_id or '').isdigit():
             return Response({'success': False, 'message': 'Ходимни танланг.', 'field': 'employee_id'}, status=status.HTTP_400_BAD_REQUEST)
-        employee = Employee.objects.select_related('user', 'section').filter(pk=int(employee_id), is_deleted=False).first()
+        employee = Employee.objects.select_related('user', 'department', 'section').filter(pk=int(employee_id), is_deleted=False).first()
         if employee is None:
             return Response({'success': False, 'message': 'Ходим топилмади.', 'field': 'employee_id'}, status=status.HTTP_404_NOT_FOUND)
         try:
