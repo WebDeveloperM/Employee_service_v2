@@ -48,14 +48,23 @@ def position_unit(department_id, section_id):
     return (UNIT_DEPARTMENT, department_id)
 
 
-# Бўлимлар, учун штат ажратилмайди («Шогиртлар»): уларнинг ходимлари рўйхатга қўшилади, лекин штат ва бўш иш
-# ўринларига кирмайди. Бўлим номининг боши бўйича аниқланади (катта-кичик ҳарф ва қўшимча бўшлиқлар аҳамиятсиз),
-# шунда ҳар бир цехдаги ва янги қўшиладиган «Шогиртлар» бўлими ўзи шундай ҳисобланади.
+# Бўлимлар, учун штат ажратилмайди («Шогиртлар», «Св.шт.» — штатдан ташқари): уларнинг ходимлари рўйхатга
+# қўшилади, лекин штат ва бўш иш ўринларига кирмайди. Бўлим номининг боши бўйича аниқланади (катта-кичик ҳарф ва
+# қўшимча бўшлиқлар аҳамиятсиз), шунда ҳар бир цехдаги ва янги қўшиладиган шундай бўлим ўзи шундай ҳисобланади.
 NO_STAFF_SECTION_PREFIXES = ('шогиртлар', 'шогирдлар', 'shogirtlar', 'shogirdlar')
+# «св.шт.» — «сверх штата» (штатдан ташқари): «св.шт», «св. шт.», «СВ ШТ», «сверх штата», «sv.sht». «Св» ёки «шт»
+# дан кейин ҳарф келса (масалан, «Св штатный…») мос келмайди — фақат шу қисқартма ва ибора.
+NO_STAFF_ABBREVIATION = re.compile(r'^(?:св\.?\s*шт(?![а-яёўқғҳ])|сверх\s*штат|sv\.?\s*sht(?![a-z]))')
+# Клавиатурада кирилл ўрнига лотин ҳарфи ёзилган бўлиши мумкин («CB.ШТ.»): ташқи кўриниши бир хил ҳарфлар.
+LATIN_LOOKALIKES = str.maketrans({'c': 'с', 'b': 'в', 't': 'т'})
 
 
 def is_no_staff_section_name(name):
-    return normalize_position(name).startswith(NO_STAFF_SECTION_PREFIXES)
+    normalized = normalize_position(name)
+    if normalized.startswith(NO_STAFF_SECTION_PREFIXES) or NO_STAFF_ABBREVIATION.match(normalized):
+        return True
+    # «cb.шт.» (лотин c, b) — кирилл «св.шт.» деб ўқилади; «sv.sht» эса юқорида алоҳида аниқланган.
+    return bool(NO_STAFF_ABBREVIATION.match(normalized.translate(LATIN_LOOKALIKES)))
 
 
 def no_staff_section_ids(section_ids):
