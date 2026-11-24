@@ -268,7 +268,7 @@
     </div>
 </div>
 
-<!-- Перевод сотрудника на другую должность той же единицы (кнопка «Таҳрирлаш» в окне «Ходимлар») -->
+<!-- Перевод сотрудника на другую должность той же единицы и доля ставки (кнопка «Таҳрирлаш» в окне «Ходимлар») -->
 <div id="employeeEditModal" class="fixed inset-0 z-[75] hidden overflow-y-auto bg-slate-950/40 px-4 py-10">
     <div class="mx-auto w-full max-w-md rounded-[28px] bg-white p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="employeeEditTitle">
         <div class="mb-1 flex items-center justify-between">
@@ -282,6 +282,11 @@
                 <label class="mb-2 block text-sm font-bold text-slate-700" for="employeeEditPosition">Лавозим</label>
                 <select id="employeeEditPosition" class="table-filter"></select>
                 <p id="employeeEditHint" class="mt-2 text-xs text-slate-500">Ходим шу цех ёки бўлимнинг танланган лавозимига ўтказилади.</p>
+            </div>
+            <div>
+                <label class="mb-2 block text-sm font-bold text-slate-700" for="employeeEditRate">Штат улуши</label>
+                <input type="number" id="employeeEditRate" min="0.25" max="2" step="0.25" inputmode="decimal" placeholder="1 ёки 0,5" class="table-filter">
+                <p id="employeeEditRateHint" class="mt-2 text-xs text-slate-500">Ходим неча штатда ишлайди: 1 — тўлиқ ставка, 0,5 — ярим ставка.</p>
             </div>
             <div class="flex justify-end gap-3 pt-2">
                 <button type="button" onclick="hideEmployeeEdit()" class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600">Бекор қилиш</button>
@@ -1138,8 +1143,11 @@
         document.getElementById('employeeEditHint').textContent = hasOtherChoice
             ? 'Ходим шу цех ёки бўлимнинг танланган лавозимига ўтказилади.'
             : 'Бу цех ёки бўлимда ўтказиш учун бўш иш ўрни бор бошқа лавозим йўқ.';
-        document.getElementById('employeeEditSave').disabled = !hasOtherChoice;
+        // Лавозимни алмаштириб бўлмаса ҳам, штат улушини ўзгартириш мумкин — «Сақлаш» доим ёқиқ.
+        document.getElementById('employeeEditSave').disabled = false;
 
+        // type="number" қиймати нуқта билан бўлади (0.5); экранда браузер ўз локалида кўрсатади (0,5).
+        document.getElementById('employeeEditRate').value = String(Number(employee.staff_rate ?? 1));
         document.getElementById('employeeEditId').value = employee.id;
         document.getElementById('employeeEditName').textContent = employee.full_name + ' · № ' + employee.tabel_number;
         document.getElementById('employeeEditModal').classList.remove('hidden');
@@ -1157,8 +1165,22 @@
 
         const button = document.getElementById('employeeEditSave');
         const employeeId = Number(document.getElementById('employeeEditId').value);
-        const targetId = Number(document.getElementById('employeeEditPosition').value);
-        if (!targetId || targetId === current.id) { // ничего не поменялось
+        const employee = staffState.employeeMembers.get(employeeId);
+        const targetId = Number(document.getElementById('employeeEditPosition').value) || current.id;
+
+        const rateInput = document.getElementById('employeeEditRate');
+        const rate = String(rateInput.value || '').trim() === '' && !(rateInput.validity && rateInput.validity.badInput)
+            ? null
+            : readStaffRate(rateInput);
+        if (rate === null) {
+            showToast('Штат улушини тўғри киритинг: 0 дан катта ва 2 дан ошмаган сон (масалан, 1 ёки 0,5).', 'error');
+            rateInput.focus();
+            return;
+        }
+
+        const positionChanged = targetId !== current.id;
+        const rateChanged = rate !== Number((employee && employee.staff_rate) ?? 1);
+        if (!positionChanged && !rateChanged) { // ничего не поменялось
             hideEmployeeEdit();
             return;
         }
@@ -1167,9 +1189,9 @@
         try {
             const response = await apiRequest('/template/staff/positions/' + current.id + '/employees/' + employeeId + '/', {
                 method: 'PATCH',
-                body: JSON.stringify({ position_id: targetId }),
+                body: JSON.stringify({ position_id: targetId, staff_rate: rate }),
             });
-            showToast('Ходим бошқа лавозимга ўтказилди');
+            showToast(positionChanged ? 'Ходим бошқа лавозимга ўтказилди' : 'Ходимнинг штат улуши ўзгартирилди');
             hideEmployeeEdit();
             await refreshAfterEmployeeChange(response);
         } catch (error) {

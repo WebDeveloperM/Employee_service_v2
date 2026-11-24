@@ -150,6 +150,115 @@ class StaffRateTests(StaffTestCase):
         self.assertEqual(response.status_code, 400, response.content)
         self.assertIn('бўш штат: 0,5', response.json()['detail'])
 
+    # --- «Ходимни таҳрирлаш»: штат улушини ўзгартириш ---
+
+    def edit(self, position, employee, **payload):
+        return self.client.patch(f'{self.employees_url(position)}{employee.pk}/', payload, format='json')
+
+    def test_rate_can_be_changed_in_the_same_position(self):
+        position = self.make_position('Фаррош', staff_count=6)
+        employee = self.newcomer()
+        self.add(position, employee)
+
+        response = self.edit(position, employee, position_id=position.pk, staff_rate='0,5')
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()['message'], 'Ходимнинг штат улуши ўзгартирилди')
+        employee.refresh_from_db()
+        self.assertEqual((employee.staff_position_id, employee.staff_rate), (position.pk, Decimal('0.5')))
+        meta = response.json()['position']
+        self.assertEqual((meta['occupied'], meta['vacant']), (0.5, 5.5))
+        self.assertEqual(response.json()['data'][0]['staff_rate'], 0.5)
+
+    def test_rate_alone_without_position_id_also_works(self):
+        position = self.make_position('Фаррош', staff_count=2)
+        employee = self.newcomer()
+        self.add(position, employee)
+
+        response = self.edit(position, employee, staff_rate=1.5)
+
+        self.assertEqual(response.status_code, 200, response.content)
+        employee.refresh_from_db()
+        self.assertEqual(employee.staff_rate, Decimal('1.5'))
+
+    def test_full_position_like_the_screenshot_still_allows_lowering_a_rate(self):
+        # «Штат: 6 · Банд: 6 · Бўш: 0»: бошқа лавозимга ўтказиб бўлмайди, лекин улушни камайтириш мумкин.
+        position = self.make_position('Ётоқхона фарроши', staff_count=6)
+        people = [self.newcomer() for _ in range(6)]
+        for person in people:
+            self.assertEqual(self.add(position, person).status_code, 201)
+
+        response = self.edit(position, people[-1], position_id=position.pk, staff_rate=0.5)
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()['position']['vacant'], 0.5)
+
+    def test_raising_a_rate_needs_free_room_left_by_the_others(self):
+        position = self.make_position('Фаррош', staff_count=2)
+        first, second = self.newcomer(), self.newcomer()
+        self.add(position, first, 0.5)
+        self.add(position, second, 1)
+
+        refused = self.edit(position, first, staff_rate=1.5)   # бошқалар 1, бўш 1
+        accepted = self.edit(position, first, staff_rate=1)
+
+        self.assertEqual(refused.status_code, 400, refused.content)
+        self.assertIn('бўш штат: 1, ходимнинг улуши эса 1,5', refused.json()['detail'])
+        self.assertEqual(accepted.status_code, 200, accepted.content)
+        self.assertEqual(accepted.json()['position']['vacant'], 0)
+
+    def test_lowering_is_allowed_even_when_the_position_is_over_its_staff(self):
+        position = self.make_position('Слесарь', staff_count=1)
+        legacy = [self.make_employee('Слесарь', department=self.department) for _ in range(3)]   # карточкадан: 3 > 1
+
+        response = self.edit(position, legacy[0], staff_rate=0.5)
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()['position']['occupied'], 2.5)
+
+    def test_nothing_to_change_and_bad_rates_are_refused(self):
+        position = self.make_position('Фаррош', staff_count=2)
+        employee = self.newcomer()
+        self.add(position, employee, 0.5)
+
+        same = self.edit(position, employee, position_id=position.pk, staff_rate='0.5')
+        nothing = self.edit(position, employee, position_id=position.pk)
+
+        self.assertEqual(same.status_code, 400, same.content)
+        self.assertIn('Ўзгариш йўқ', same.json()['detail'])
+        self.assertEqual(nothing.status_code, 400, nothing.content)
+        for value in (0, 3, 'abc'):
+            with self.subTest(value=value):
+                response = self.edit(position, employee, position_id=position.pk, staff_rate=value)
+                self.assertEqual(response.status_code, 400, response.content)
+                self.assertIn('staff_rate', response.json())
+        employee.refresh_from_db()
+        self.assertEqual(employee.staff_rate, Decimal('0.5'))
+
+    def test_transfer_with_a_new_rate_needs_only_the_new_rate_in_the_target(self):
+        source = self.make_position('Фаррош', staff_count=2)
+        target = self.make_position('Гардеробчи', staff_count=Decimal('0.5'))
+        employee = self.newcomer()
+        self.add(source, employee)   # 1 — тўлиқ, нишонда эса 0,5 бўш
+
+        response = self.edit(source, employee, position_id=target.pk, staff_rate=0.5)
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()['message'], 'Ходим бошқа лавозимга ўтказилди')
+        employee.refresh_from_db()
+        self.assertEqual((employee.staff_position_id, employee.staff_rate), (target.pk, Decimal('0.5')))
+
+    def test_edit_window_has_the_rate_input_and_sends_it(self):
+        web = Client(HTTP_HOST='192.168.101.6')
+        web.force_login(self.admin)
+
+        html = web.get('/staff/').content.decode()
+
+        self.assertIn('<input type="number" id="employeeEditRate" min="0.25" max="2" step="0.25" inputmode="decimal"', html)
+        self.assertIn("document.getElementById('employeeEditRate').value = String(Number(employee.staff_rate ?? 1));", html)
+        self.assertIn('body: JSON.stringify({ position_id: targetId, staff_rate: rate })', html)
+        self.assertIn("document.getElementById('employeeEditSave').disabled = false;", html)
+
     # --- карточка/импорт орқали келганлар (привязкасиз) ва бир хил номли лавозимлар ---
 
     def test_existing_employees_count_as_one_like_before(self):

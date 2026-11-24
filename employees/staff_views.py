@@ -322,15 +322,28 @@ class StaffPositionEmployeesTemplateView(APIView):
 
 
 class StaffPositionEmployeeDetailTemplateView(APIView):
-    """Один сотрудник должности: перевод на другую должность той же единицы (PUT/PATCH) и снятие с должности (DELETE)."""
+    """Один сотрудник должности (окно «Ходимни таҳрирлаш»): перевод на другую должность той же единицы и/или
+    новая доля ставки (PUT/PATCH: position_id, staff_rate), снятие с должности (DELETE)."""
 
     permission_classes = STAFF_PERMISSIONS
 
     def put(self, request, pk, employee_id, *args, **kwargs):
-        try:
-            target_id = int(request.data.get('position_id'))
-        except (TypeError, ValueError):
-            raise ValidationError({'detail': 'Лавозимни танланг.'})
+        raw_rate = request.data.get('staff_rate')
+        rate = None
+        if raw_rate not in (None, ''):
+            try:
+                rate = parse_staff_rate(raw_rate)
+            except ValueError as error:
+                raise ValidationError({'staff_rate': str(error)})
+
+        raw_target = request.data.get('position_id')
+        if raw_target in (None, '') and rate is not None:
+            target_id = pk   # только новая доля ставки, должность та же
+        else:
+            try:
+                target_id = int(raw_target)
+            except (TypeError, ValueError):
+                raise ValidationError({'detail': 'Лавозимни танланг.'})
 
         with transaction.atomic():
             # Обе должности блокируем в порядке pk, чтобы параллельные переводы не зашли в тупик.
@@ -348,19 +361,33 @@ class StaffPositionEmployeeDetailTemplateView(APIView):
             if (source.department_id, source.section_id) != (target.department_id, target.section_id):
                 raise ValidationError({'detail': 'Ходимни фақат шу цех ёки бўлимнинг бошқа лавозимига ўтказиш мумкин.'})
 
-            employee = next((item for item in employees_of_position(source) if item.pk == employee_id), None)
+            members = employees_of_position(source)
+            employee = next((item for item in members if item.pk == employee_id), None)
             if employee is None:
                 raise NotFound('Ходим бу лавозимда топилмади.')
-            # Номи бир хил бўлган бошқа қаторга ҳам ўтказиш мумкин: ходим ўша қаторга бириктирилади.
-            if target.pk == source.pk:
-                raise ValidationError({'detail': 'Ходим аллақачон шу лавозимда.'})
-            # Ходим ўз улуши билан ўтади (0,5 штатлик ходимга 0,5 бўш штат етарли).
-            ensure_rate_fits(target, employees_of_position(target), employee_rate(employee), target=True)
+            current_rate = employee_rate(employee)
 
-            assign_employee_to_position(employee, target)
+            if target.pk == source.pk:
+                # Шу лавозимда қолади — фақат штат улуши ўзгаради.
+                if rate is None:
+                    raise ValidationError({'detail': 'Ходим аллақачон шу лавозимда.'})
+                if rate == current_rate:
+                    raise ValidationError({'detail': 'Ўзгариш йўқ: ходимнинг штат улуши аллақачон шундай.'})
+                # Улушни камайтириш ҳар доим мумкин (штатдан ортиқча бўлса ҳам, ортиқчаси камаяди); оширишда
+                # бошқаларнинг улушидан қолган бўш штат етиши керак.
+                if rate > current_rate:
+                    ensure_rate_fits(source, [item for item in members if item.pk != employee.pk], rate)
+                assign_employee_to_position(employee, source, rate)
+                message = 'Ходимнинг штат улуши ўзгартирилди'
+            else:
+                # Номи бир хил бўлган бошқа қаторга ҳам ўтказиш мумкин: ходим ўша қаторга бириктирилади.
+                # Ходим ўз улуши (ёки янги киритилгани) билан ўтади: 0,5 штатлик ходимга 0,5 бўш штат етарли.
+                ensure_rate_fits(target, employees_of_position(target), rate if rate is not None else current_rate, target=True)
+                assign_employee_to_position(employee, target, rate)
+                message = 'Ходим бошқа лавозимга ўтказилди'
             employees = employees_of_position(source)
 
-        return Response(position_employees_payload(source, employees, request, 'Ходим бошқа лавозимга ўтказилди'))
+        return Response(position_employees_payload(source, employees, request, message))
 
     patch = put
 
