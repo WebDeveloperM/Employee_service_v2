@@ -2,7 +2,9 @@
 import json
 
 from django.contrib.auth.models import User
+from django.db import connection
 from django.test import Client, TestCase
+from django.test.utils import CaptureQueriesContext
 
 from .models import (
     Department, Employee, ROLE_ADMIN, ROLE_HR, ROLE_TIMEKEEPER, ROLE_USER, Timekeeper, UserProfile,
@@ -219,6 +221,28 @@ class TimekeeperManagementAccessTests(TimekeeperTestBase):
         self.assertEqual(data[0]['timekeeper']['login'], 'ali_login')
         self.assertTrue(data[0]['timekeeper']['has_account'])
         self.assertIsNone(data[1]['timekeeper'])
+
+    def test_candidates_list_the_whole_department_without_a_limit_in_a_few_queries(self):
+        for number in range(300, 350):
+            make_employee(number, self.dept_a)
+        url = f'/api/template/timekeepers/candidates/?department_id={self.dept_a.id}'
+
+        with CaptureQueriesContext(connection) as queries:
+            payload = self.admin_client.get(url).json()
+
+        self.assertEqual(len(payload['data']), 52)           # 2 та эски ходим + 50 та янги: чекловсиз
+        self.assertFalse(payload['truncated'])
+        self.assertLess(len(queries), 15)                    # ҳар бир ходим учун алоҳида сўров йўқ
+
+    def test_assign_dialog_searches_in_the_page_and_selects_by_tabel_number(self):
+        html = self.admin_client.get('/timekeepers/').content.decode()
+
+        self.assertIn('placeholder="Табель рақами, исм ёки лавозим бўйича қидириш..."', html)
+        self.assertIn('id="candidatesCount"', html)
+        self.assertIn('function filteredCandidates()', html)
+        self.assertIn('tabel === word', html)                # табели сўзга тўлиқ мос келганлар тепада
+        self.assertIn("event.key === 'Enter'", html)         # Enter — биринчи топилганни танлайди
+        self.assertNotIn('candidatesTimer', html)            # эски «ҳар ҳарфда серверга сўров» йўқ
 
     def test_candidates_are_the_departments_active_employees_with_their_state(self):
         self.assign(self.dept_a, self.ali)

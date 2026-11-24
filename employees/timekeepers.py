@@ -10,7 +10,8 @@ from django.db import models, transaction
 from .models import Department, Employee, ROLE_TIMEKEEPER, ROLE_USER, Timekeeper, UserProfile
 from .serializers import create_login_user, is_privileged_account, login_problem, password_problems
 
-CANDIDATES_LIMIT = 30
+# Цехнинг барча ходимлари бир марта юкланади (қидирув саҳифада). Бу чегара фақат ғайриоддий катта цехдан сақлайди.
+CANDIDATES_LIMIT = 2000
 
 
 class TimekeeperError(Exception):
@@ -64,7 +65,7 @@ def candidates_for(department, search=''):
 
     Қайтади: (рўйхат, чекловга сиғмай қолганми).
     """
-    queryset = Employee.objects.select_related('user', 'section', 'timekeeper_assignment__department').filter(
+    queryset = Employee.objects.select_related('user', 'user__profile', 'section', 'timekeeper_assignment__department').filter(
         department=department, is_deleted=False, is_active=True,
     ).order_by('last_name', 'first_name', 'surname', 'tabel_number')
     for word in (search or '').split():

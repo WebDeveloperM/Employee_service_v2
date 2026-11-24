@@ -54,10 +54,15 @@
             <button type="button" onclick="closeTimekeeperModal()" class="icon-action" aria-label="Ёпиш"><i class="fas fa-xmark"></i></button>
         </div>
 
-        <input type="text" id="candidateSearchInput" placeholder="Исм, табель рақами ёки лавозим бўйича қидириш..." autocomplete="off" class="table-filter">
-        <p class="mt-2 text-xs text-slate-500">Фақат шу цехнинг фаол ходимлари кўрсатилади.</p>
+        <input type="text" id="candidateSearchInput" placeholder="Табель рақами, исм ёки лавозим бўйича қидириш..." autocomplete="off" inputmode="search" class="table-filter">
+        <div class="mt-2 flex items-center justify-between gap-3 text-xs text-slate-500">
+            <span>Шу цехнинг барча фаол ходимлари. Табель рақамини ёзиб тез топинг, Enter — биринчисини танлайди.</span>
+            <span id="candidatesCount" class="shrink-0 font-semibold text-slate-600"></span>
+        </div>
 
-        <div id="candidatesList" class="mt-3 max-h-72 space-y-2 overflow-y-auto"></div>
+        <div id="candidatesList" class="mt-3 max-h-[45vh] min-h-[8rem] space-y-2 overflow-y-auto pr-1"></div>
+
+        <p id="selectedCandidateSummary" class="mt-3 hidden rounded-2xl bg-[var(--primary-soft)] px-4 py-2.5 text-sm font-semibold text-slate-800"></p>
 
         <div id="accountFields" class="mt-4 hidden space-y-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
             <p class="text-sm font-semibold text-amber-800">Бу ходимда ҳисоб (логин) йўқ. Тизимга кириши учун логин ва парол беринг.</p>
@@ -91,8 +96,7 @@
     let modalDepartment = null;      // {id, name} — модал қайси цех учун очилган
     let modalCandidates = [];
     let selectedCandidateId = null;
-    let candidatesTimer = null;
-    let candidatesRequest = 0;       // эскирган жавоб рўйхатни бузмаслиги учун
+    let candidatesLoading = false;
 
     function escapeHtml(value) {
         return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -173,6 +177,8 @@
         modalCandidates = [];
         document.getElementById('timekeeperModalDepartment').textContent = row.department.name;
         document.getElementById('candidateSearchInput').value = '';
+        document.getElementById('candidatesList').innerHTML = '';
+        document.getElementById('candidatesCount').textContent = '';
         resetAccountFields();
         updateAssignState();
         document.getElementById('timekeeperModal').classList.remove('hidden');
@@ -190,31 +196,46 @@
         document.getElementById('accountFields').classList.add('hidden');
     }
 
+    // Цехнинг барча ходимлари бир марта юкланади, қидирув эса шу ерда (браузерда) дарҳол ишлайди.
     async function loadCandidates() {
-        if (!modalDepartment) {
+        if (!modalDepartment || candidatesLoading) {
             return;
         }
-        const request = ++candidatesRequest;
-        const search = document.getElementById('candidateSearchInput').value.trim();
-        const params = new URLSearchParams({ department_id: modalDepartment.id, search });
-        const list = document.getElementById('candidatesList');
+        candidatesLoading = true;
+        const departmentId = modalDepartment.id;
+        document.getElementById('candidatesList').innerHTML = '<p class="px-4 py-6 text-center text-sm text-slate-500"><span class="loading"></span><span class="ml-2">Ходимлар юкланмоқда...</span></p>';
         try {
+            const params = new URLSearchParams({ department_id: departmentId });
             const payload = await apiRequest(`/template/timekeepers/candidates/?${params.toString()}`);
-            if (request !== candidatesRequest) {
-                return;
+            if (modalDepartment && modalDepartment.id === departmentId) {
+                modalCandidates = Array.isArray(payload?.data) ? payload.data : [];
+                renderCandidates();
             }
-            modalCandidates = Array.isArray(payload?.data) ? payload.data : [];
-            if (selectedCandidateId !== null && !selectedCandidate()) {   // танланган ходим янги қидирув натижасида йўқ
-                selectedCandidateId = null;
-                resetAccountFields();
-                updateAssignState();
-            }
-            renderCandidates(Boolean(payload?.truncated));
         } catch (error) {
-            if (request === candidatesRequest) {
-                list.innerHTML = '';
-            }
+            document.getElementById('candidatesList').innerHTML = '';
+        } finally {
+            candidatesLoading = false;
         }
+    }
+
+    // Қидирув: ҳар бир сўз табель, исм ёки лавозимда учраши керак. Табели сўзга тўлиқ ёки бошидан мос келганлар тепада.
+    function filteredCandidates() {
+        const words = document.getElementById('candidateSearchInput').value.toLowerCase().split(/\s+/).filter(Boolean);
+        if (!words.length) {
+            return modalCandidates;
+        }
+        const rank = (candidate) => {
+            const tabel = String(candidate.tabel_number || '').toLowerCase();
+            return words.some((word) => tabel === word) ? 0 : words.some((word) => tabel.startsWith(word)) ? 1 : 2;
+        };
+        return modalCandidates
+            .filter((candidate) => {
+                const text = [candidate.full_name, candidate.tabel_number, candidate.position, candidate.section_name].join(' ').toLowerCase();
+                return words.every((word) => text.includes(word));
+            })
+            .map((candidate, index) => ({ candidate, index, rank: rank(candidate) }))
+            .sort((a, b) => a.rank - b.rank || a.index - b.index)
+            .map((item) => item.candidate);
     }
 
     function candidateBlockReason(candidate) {
@@ -227,31 +248,40 @@
         return '';
     }
 
-    function renderCandidates(truncated) {
+    function candidateButtonClasses(candidate, reason) {
+        const selected = candidate.id === selectedCandidateId;
+        return `flex w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition ${selected ? 'border-[var(--primary)] bg-[var(--primary-soft)]' : 'border-slate-200 bg-white hover:bg-slate-50'} ${reason ? 'cursor-not-allowed opacity-60' : ''}`;
+    }
+
+    function renderCandidates() {
         const list = document.getElementById('candidatesList');
-        if (!modalCandidates.length) {
+        const visible = filteredCandidates();
+        document.getElementById('candidatesCount').textContent = visible.length === modalCandidates.length
+            ? `Ходимлар: ${modalCandidates.length}`
+            : `Топилди: ${visible.length} / ${modalCandidates.length}`;
+        if (!visible.length) {
             list.innerHTML = '<p class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm font-semibold text-slate-500">Ходим топилмади.</p>';
             return;
         }
-        list.innerHTML = modalCandidates.map((candidate) => {
+        list.innerHTML = visible.map((candidate) => {
             const reason = candidateBlockReason(candidate);
-            const selected = candidate.id === selectedCandidateId;
             const badge = reason
-                ? `<span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">${escapeHtml(reason)}</span>`
+                ? `<span class="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">${escapeHtml(reason)}</span>`
                 : candidate.has_account
-                    ? '<span class="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Ҳисоби бор</span>'
-                    : '<span class="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Ҳисоби йўқ</span>';
+                    ? '<span class="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Ҳисоби бор</span>'
+                    : '<span class="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Ҳисоби йўқ</span>';
+            const details = [candidate.position, candidate.section_name].filter(Boolean).map((part) => ` · ${part}`).join('');
             return `
             <button type="button" data-candidate-id="${candidate.id}" ${reason ? 'disabled' : ''} onclick="selectCandidate(${candidate.id})"
-                class="flex w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition ${selected ? 'border-[var(--primary)] bg-[var(--primary-soft)]' : 'border-slate-200 bg-white hover:bg-slate-50'} ${reason ? 'cursor-not-allowed opacity-60' : ''}">
+                class="${candidateButtonClasses(candidate, reason)}">
                 ${avatarHtml(candidate)}
                 <span class="min-w-0 flex-1">
                     <span class="block truncate text-sm font-semibold text-slate-900">${escapeHtml(candidate.full_name)}</span>
-                    <span class="block truncate text-xs text-slate-500">${escapeHtml([`№ ${candidate.tabel_number || '—'}`, candidate.position, candidate.section_name].filter(Boolean).join(' · '))}</span>
+                    <span class="block truncate text-xs text-slate-500"><span class="font-bold text-slate-700">№ ${escapeHtml(candidate.tabel_number || '—')}</span>${escapeHtml(details)}</span>
                 </span>
                 ${badge}
             </button>`;
-        }).join('') + (truncated ? '<p class="px-2 pt-1 text-center text-xs text-slate-400">Кўп натижа бор: қидирувни аниқлаштиринг.</p>' : '');
+        }).join('');
     }
 
     function selectedCandidate() {
@@ -268,12 +298,29 @@
             document.getElementById('accountPassword').value = '';
             document.getElementById('accountPasswordConfirm').value = '';
         }
-        renderCandidates(false);
+        // Узун рўйхатни қайта чизмаймиз (расмлар қайта юкланмасин): фақат ранглар алмашади.
+        document.querySelectorAll('#candidatesList [data-candidate-id]').forEach((button) => {
+            const item = modalCandidates.find((entry) => String(entry.id) === button.dataset.candidateId);
+            button.className = candidateButtonClasses(item, candidateBlockReason(item));
+        });
         updateAssignState();
     }
 
+    // Enter — қидирув натижасидаги биринчи танлаш мумкин бўлган ходимни танлайди (табелни ёзиб, Enter босиш кифоя).
+    function selectFirstCandidate() {
+        const first = filteredCandidates().find((candidate) => !candidateBlockReason(candidate));
+        if (first) {
+            selectCandidate(first.id);
+            document.querySelector(`#candidatesList [data-candidate-id="${first.id}"]`)?.scrollIntoView({ block: 'nearest' });
+        }
+    }
+
     function updateAssignState() {
-        document.getElementById('assignTimekeeperButton').disabled = !selectedCandidate();
+        const candidate = selectedCandidate();
+        document.getElementById('assignTimekeeperButton').disabled = !candidate;
+        const summary = document.getElementById('selectedCandidateSummary');
+        summary.classList.toggle('hidden', !candidate);
+        summary.textContent = candidate ? `Танланган: ${candidate.full_name} (№ ${candidate.tabel_number || '—'})` : '';
     }
 
     async function assignTimekeeper() {
@@ -321,9 +368,13 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('timekeeperSearchInput').addEventListener('input', renderTimekeepers);
-        document.getElementById('candidateSearchInput').addEventListener('input', () => {
-            window.clearTimeout(candidatesTimer);
-            candidatesTimer = window.setTimeout(loadCandidates, 250);
+        const searchInput = document.getElementById('candidateSearchInput');
+        searchInput.addEventListener('input', renderCandidates);
+        searchInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                selectFirstCandidate();
+            }
         });
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape' && modalDepartment) {
