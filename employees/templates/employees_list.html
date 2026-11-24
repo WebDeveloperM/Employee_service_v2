@@ -6,12 +6,13 @@
 <section class="space-y-4">
     <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-            <h2 class="font-display text-2xl font-bold text-slate-900">Ходимлар рўйхати</h2>
-            {# Табелчи: фақат ўз цехи ходимларини кўради, ўзгартира олмайди (импорт, экспорт, қўшиш, таҳрирлаш ва ўчириш йўқ). #}
-            {% if is_timekeeper %}<p class="mt-1 text-sm font-semibold text-slate-500">Цех: {{ timekeeper_department.name }}</p>{% endif %}
+            {# list_mode: full (администратор, HR) · directory (табелчи: барча ходимлар, фақат ўқиш) · department (табелчи: ўз цехи, CRUD). #}
+            <h2 class="font-display text-2xl font-bold text-slate-900">{% if list_mode == 'department' %}Цех ходимлари{% else %}Ходимлар рўйхати{% endif %}</h2>
+            {% if list_mode == 'department' %}<p class="mt-1 text-sm font-semibold text-slate-500">Цех: {{ timekeeper_department.name }}</p>{% endif %}
         </div>
-        {% if not is_timekeeper %}
+        {% if list_mode != 'directory' %}
         <div class="flex flex-wrap gap-2">
+            {% if list_mode != 'department' %}
             <button id="openImportModalButton" onclick="openImportModal()"
                 class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
                 <i class="fas fa-file-import text-blue-600"></i>
@@ -27,6 +28,7 @@
                 <i id="exportButtonIcon" class="fas fa-file-export text-emerald-600"></i>
                 Excel экспорти
             </button>
+            {% endif %}
             <a href="/employees/create/"
                 class="inline-flex items-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[var(--primary-hover)]">
                 <i class="fas fa-plus"></i>
@@ -127,7 +129,7 @@
                             <option value="">Барчаси</option>
                         </select>
                     </label>
-                    <label class="block text-sm font-semibold text-slate-500">
+                    <label class="block text-sm font-semibold text-slate-500{% if list_mode == 'directory' %} hidden{% endif %}">
                         Телефон рақами
                         <span class="mt-1.5 flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 focus-within:border-[var(--primary)]">
                             <i class="fas fa-phone text-xs text-slate-400"></i>
@@ -155,7 +157,7 @@
                         <th class="min-w-[400px] border-b border-slate-200 px-4 py-4">Ходим</th>
                         <th class="w-[240px] border-b border-slate-200 px-4 py-4">Бўлим</th>
                         <th class="border-b border-slate-200 px-4 py-4">Лавозим</th>
-                        {% if not is_timekeeper %}<th class="border-b border-slate-200 px-4 py-4 text-center">Амаллар</th>{% endif %}
+                        {% if list_mode != 'directory' %}<th class="border-b border-slate-200 px-4 py-4 text-center">Амаллар</th>{% endif %}
                     </tr>
                 </thead>
                 <tbody id="employeesTableBody"></tbody>
@@ -171,7 +173,7 @@
                     <i class="fas fa-users text-2xl"></i>
                 </div>
                 <p class="mt-4 text-sm font-semibold text-slate-700">Ходимлар топилмади</p>
-                <p class="mt-1 text-sm text-slate-500">{% if is_timekeeper %}Фильтрларни тозаланг.{% else %}Фильтрларни тозаланг ёки янги ходим қўшинг.{% endif %}</p>
+                <p class="mt-1 text-sm text-slate-500">{% if list_mode == 'directory' %}Фильтрларни тозаланг.{% else %}Фильтрларни тозаланг ёки янги ходим қўшинг.{% endif %}</p>
             </div>
         </div>
 
@@ -350,8 +352,12 @@
 
 
 <script>
-    // Табелчи: ўз цехи ходимларини фақат кўради (сервер ҳам шундай чеклайди; бу ерда тугмалар ва цех рўйхати яширилади).
-    const IS_TIMEKEEPER = {{ is_timekeeper|yesno:"true,false" }};
+    // Режим: full — администратор/HR; directory — табелчи, барча ходимлар (фақат ўқиш); department — табелчи, ўз цехи (CRUD).
+    // Сервер ҳам шундай чеклайди; бу ерда тугмалар, устунлар ва цех рўйхати мослаштирилади.
+    const LIST_MODE = '{{ list_mode|default:"full" }}';
+    const READ_ONLY_LIST = LIST_MODE === 'directory';
+    const DEPARTMENT_LIST = LIST_MODE === 'department';
+    const EMPLOYEES_API = READ_ONLY_LIST ? '/template/directory/' : '/template/employees/';
     const TIMEKEEPER_DEPARTMENT_ID = {{ timekeeper_department.id|default:"null" }};
     let employeesCache = [];
     let filteredEmployees = [];
@@ -1095,7 +1101,7 @@
     let employeesLoaded = false;
 
     async function loadStaffTotals() {
-        if (IS_TIMEKEEPER) {   // штат маълумоти табелчига берилмайди: фақат «Ходимлар» сони кўрсатилади
+        if (LIST_MODE !== 'full') {   // штат маълумоти табелчига берилмайди: фақат «Ходимлар» сони кўрсатилади
             staffTree = null;
             renderStatsLine();
             return;
@@ -1162,7 +1168,7 @@
 
         departmentsCache = Array.isArray(departments) ? departments : [];
         sectionsCache = Array.isArray(sections) ? sections : [];
-        if (IS_TIMEKEEPER) {   // дарахт ва филтрда фақат ўз цехи
+        if (DEPARTMENT_LIST) {   // дарахт ва филтрда фақат ўз цехи
             departmentsCache = departmentsCache.filter(department => department.id === TIMEKEEPER_DEPARTMENT_ID);
             sectionsCache = sectionsCache.filter(section => (section.department?.id ?? section.department_id) === TIMEKEEPER_DEPARTMENT_ID);
         }
@@ -1240,7 +1246,7 @@
             params.set('page', String(page));
             params.set('page_size', String(pageSize));
 
-            const payload = await apiRequest(`/template/employees/?${params.toString()}`);
+            const payload = await apiRequest(`${EMPLOYEES_API}?${params.toString()}`);
             if (!isLatest()) {
                 return;
             }
@@ -1293,7 +1299,7 @@
 
         // Сервер отдаёт сотрудников в порядке «Штат бирлиги ва лавозим»: цех → отделы (вложенные сразу после родителя).
         // Когда цех или отдел меняется, перед сотрудниками показываем полосу с его названием (как в HRM).
-        const COLUMN_COUNT = IS_TIMEKEEPER ? 4 : 5;   // №, Ходим, Бўлим, Лавозим, Амаллар (цех устуни йўқ: цех сарлавҳа полосасида кўрсатилади)
+        const COLUMN_COUNT = READ_ONLY_LIST ? 4 : 5;   // №, Ходим, Бўлим, Лавозим, Амаллар (цех устуни йўқ: цех сарлавҳа полосасида кўрсатилади)
         const ACTION_BUTTON = 'inline-flex h-9 w-9 items-center justify-center rounded-md border bg-white transition';
         const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
         // «Раҳбарият» ва «20-Цех Завод бошқармаси» учун катта цех сарлавҳаси чиқарилмайди: уларнинг бўлимлари ўзлари сарлавҳа бўлиб туради.
@@ -1363,13 +1369,13 @@
                 </td>
                 <td class="w-[240px] px-4 py-4 text-slate-700">${escapeHtml(employee.section?.name || '—')}</td>
                 <td class="px-4 py-4 text-slate-700">${escapeHtml(employee.position || '—')}</td>
-                ${IS_TIMEKEEPER ? '' : `<td class="px-4 py-4">
+                ${READ_ONLY_LIST ? '' : (employee.is_protected ? '<td class="px-4 py-4"></td>' : `<td class="px-4 py-4">
                     <div class="flex items-center justify-center gap-2">
                         <a class="${ACTION_BUTTON} border-[var(--primary)] text-[var(--primary)] hover:bg-[var(--primary-soft)]" href="/employees/${encodeURIComponent(employee.slug)}/" title="Кўриш"><i class="fas fa-eye"></i></a>
                         <a class="${ACTION_BUTTON} border-[var(--primary)] text-[var(--primary)] hover:bg-[var(--primary-soft)]" href="/employees/${encodeURIComponent(employee.slug)}/edit/" title="Таҳрирлаш"><i class="fas fa-pen"></i></a>
                         <a class="${ACTION_BUTTON} border-red-300 text-red-500 hover:bg-red-50" href="/employees/${encodeURIComponent(employee.slug)}/delete/" title="Ўчириш"><i class="fas fa-trash"></i></a>
                     </div>
-                </td>`}
+                </td>`)}
             </tr>
         `;
         }).join('');

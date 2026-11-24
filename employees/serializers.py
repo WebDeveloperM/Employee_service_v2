@@ -11,7 +11,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.validators import UniqueValidator
 
 from .models import Department, Employee, EmployeeCategory, PositionCategory, Section, StaffPosition, UserProfile, WorkSchedule, GRADE_RE, ROLE_ADMIN, ROLE_CHOICES, ROLE_HR, ROLE_TIMEKEEPER, ROLE_USER, WORK_STATUS_CHOICES, Timekeeper
-from .permissions import is_admin, is_service_api_request
+from .permissions import is_admin, is_service_api_request, timekeeper_department
 from .sections_tree import MAX_SECTION_DEPTH, SectionIndex
 from .staff import collect_staff_stats, is_no_staff_section_name, plain_number, vacant_places
 
@@ -929,7 +929,8 @@ class EmployeeUpsertSerializer(EmployeeSerializer):
 
 
 class TimekeeperEmployeeSerializer(EmployeeSerializer):
-    """Табелчи кўрадиган ходим: фақат рўйхат учун керакли майдонлар (телефон, туғилган сана, ўлчамлар, логин ва бошқалар йўқ)."""
+    """«Ходимлар рўйхати» (барча ходимлар, фақат ўқиш): рўйхат учун керакли майдонлар, холос
+    (телефон, туғилган сана, ўлчамлар, логин ва бошқалар йўқ)."""
 
     VISIBLE_FIELDS = (
         'id', 'slug', 'first_name', 'last_name', 'surname', 'full_name', 'tabel_number', 'base_image_url',
@@ -939,3 +940,45 @@ class TimekeeperEmployeeSerializer(EmployeeSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
         return {key: data[key] for key in self.VISIBLE_FIELDS if key in data}
+
+
+class TimekeeperManagedEmployeeSerializer(EmployeeSerializer):
+    """Табелчи ўз цехи ходимларини бошқарганда (қўшиш, ўзгартириш): унга берилмайдиган нарсалар шу ерда ўчади.
+
+    - Цех доим табелчининг цехи: ходим қўшилса шу цехга тушади, бошқа цехга ўтказиб ҳам, бошқа цех ходимини ҳам бўлмайди.
+    - Ҳисоб: янги ходимга логин ва парол берилади (ходим формасидаги каби, рол — оддий «Фойдаланувчи»), лекин мавжуд
+      ходимнинг логини ва пароли ўзгармайди. Рол, Face ID чиқиш белгиси, интеграция майдонлари ва цех/бўлим номи орқали
+      цех яратиш — табелчига эмас.
+    - Администратор ёки HR ҳисобига боғланган ходимга тегилмайди (уни фақат администратор бошқаради).
+    """
+
+    IGNORED_FIELDS = (
+        'role', 'department_name', 'section_name', 'boss_full_name', 'requires_face_id_checkout',
+        'source_system', 'external_id', 'metadata',
+    )
+    ACCOUNT_FIELDS = ('login', 'password', 'password_confirm')
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        department = timekeeper_department(getattr(request, 'user', None))
+        if department is None:
+            raise PermissionDenied('Сизда ходимларни бошқариш ҳуқуқи йўқ.')
+        for name in self.IGNORED_FIELDS:
+            attrs.pop(name, None)
+        if self.instance is not None:
+            if self.instance.department_id != department.id:
+                raise PermissionDenied('Бу ходим сизнинг цехингизга тегишли эмас.')
+            if is_privileged_account(self.instance.user):
+                raise PermissionDenied('Администратор ёки HR менежер ходимини фақат администратор ўзгартира олади.')
+            for name in self.ACCOUNT_FIELDS:
+                attrs.pop(name, None)
+        requested = attrs.get('department')
+        if requested is not None and requested.id != department.id:
+            raise serializers.ValidationError({'department_id': 'Ходимни бошқа цехга ўтказиб бўлмайди.'})
+        attrs['department'] = department
+        return super().validate(attrs)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data['is_protected'] = is_privileged_account(instance.user)   # администратор/HR ходими: рўйхатда амаллар чиқмайди
+        return data

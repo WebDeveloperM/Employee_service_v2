@@ -247,7 +247,7 @@
 
             <div class="mb-6 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--sidebar-muted)]">Меню</div>
             <nav class="space-y-2 text-sm font-semibold">
-                {# Табелчи менюда фақат «Ходимлар рўйхати»ни кўради: бош саҳифа ва «Созламалар» унга йўқ. #}
+                {# Табелчи менюда фақат «Ходимлар рўйхати» (барча ходимлар, фақат ўқиш) ва «Цех ходимлари» (ўз цехи, CRUD)ни кўради. #}
                 {% if request.user.profile.role != 'timekeeper' %}
                 <a href="/" class="sidebar-link {% if request.path == '/' %}active{% endif %}">
                     <i class="fas fa-house w-4"></i>
@@ -256,9 +256,16 @@
                 {% endif %}
 
                 {% if request.user.profile.role != 'user' %}
-                <a href="/employees/" class="sidebar-link {% if '/employees/' in request.path %}active{% endif %}">
+                <a href="/employees/" class="sidebar-link {% if request.user.profile.role == 'timekeeper' %}{% if request.path == '/employees/' %}active{% endif %}{% elif '/employees/' in request.path %}active{% endif %}">
                     <i class="fas fa-users w-4"></i>
                     <span>Ходимлар рўйхати</span>
+                </a>
+                {% endif %}
+
+                {% if request.user.profile.role == 'timekeeper' %}
+                <a href="/department-employees/" class="sidebar-link {% if '/department-employees/' in request.path or request.path != '/employees/' and '/employees/' in request.path %}active{% endif %}">
+                    <i class="fas fa-people-group w-4"></i>
+                    <span>Цех ходимлари</span>
                 </a>
                 {% endif %}
 

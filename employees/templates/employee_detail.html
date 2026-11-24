@@ -14,7 +14,7 @@
                 <p class="mt-2 text-sm text-slate-500">{{ employee }}</p>
             </div>
             <div class="flex flex-wrap gap-3">
-                <a href="/employees/"
+                <a href="{% if timekeeper_scope %}/department-employees/{% else %}/employees/{% endif %}"
                     class="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700">
                     <i class="fas fa-arrow-left"></i>
                     Рўйхатга
@@ -146,7 +146,7 @@
                     <div>
                         <div class="mb-2 flex items-center justify-between gap-3">
                             <label class="block text-sm font-bold text-slate-700">Цех</label>
-                            {% if page_mode == 'edit' and not can_edit_sizes_only %}
+                            {% if page_mode == 'edit' and not can_edit_sizes_only and not timekeeper_scope %}
                             <button type="button" id="openDepartmentInlineModalButton" onclick="openInlineOrgModal('department')"
                                 class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-[var(--info)] transition hover:border-blue-300 hover:bg-blue-100"
                                 title="Цех қўшиш" aria-label="Цех қўшиш">
@@ -154,7 +154,7 @@
                             </button>
                             {% endif %}
                         </div>
-                        <select id="department_id" class="table-filter" onchange="refreshSectionOptions(); syncClotheSizeVisibility()" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
+                        <select id="department_id" class="table-filter" onchange="refreshSectionOptions(); syncClotheSizeVisibility()" {% if page_mode == 'view' or can_edit_sizes_only or timekeeper_scope %}disabled{% endif %}>
                             <option value="">Цехни танланг</option>
                             {% for department in departments %}
                             <option value="{{ department.id }}" data-boss-full-name="{{ department.boss_full_name|default_if_none:'' }}" data-sort-order="{{ department.sort_order }}" {% if employee.department_id == department.id %}selected{% endif %}>{{ department.name }}</option>
@@ -164,7 +164,7 @@
                     <div>
                         <div class="mb-2 flex items-center justify-between gap-3">
                             <label class="block text-sm font-bold text-slate-700">Бўлим</label>
-                            {% if page_mode == 'edit' and not can_edit_sizes_only %}
+                            {% if page_mode == 'edit' and not can_edit_sizes_only and not timekeeper_scope %}
                             <button type="button" id="openSectionInlineModalButton" onclick="openInlineOrgModal('section')"
                                 class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
                                 title="Бўлим қўшиш" aria-label="Бўлим қўшиш">
@@ -181,7 +181,7 @@
                     </div>
                     <div>
                         <label class="mb-2 block text-sm font-bold text-slate-700">Цех раҳбари</label>
-                        <input type="text" id="boss_full_name" value="{{ employee.department.boss_full_name|default_if_none:'' }}" class="table-filter" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
+                        <input type="text" id="boss_full_name" value="{{ employee.department.boss_full_name|default_if_none:'' }}" class="table-filter" {% if page_mode == 'view' or can_edit_sizes_only or timekeeper_scope %}disabled{% endif %}>
                     </div>
                     <div>
                         <label class="mb-2 block text-sm font-bold text-slate-700">Ишга қабул қилинган сана</label>
@@ -199,7 +199,7 @@
                     <div>
                         <div class="mb-2 flex h-8 items-center justify-between gap-3">
                             <label class="block text-sm font-bold text-slate-700">Лавозим тоифаси</label>
-                            {% if page_mode == 'edit' and not can_edit_sizes_only %}
+                            {% if page_mode == 'edit' and not can_edit_sizes_only and not timekeeper_scope %}
                             <button type="button" id="openPositionCategoryModalButton" onclick="openCategoryModal('position')"
                                 class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-[var(--info)] transition hover:border-blue-300 hover:bg-blue-100"
                                 title="Тоифа қўшиш" aria-label="Тоифа қўшиш">
@@ -217,7 +217,7 @@
                     <div>
                         <div class="mb-2 flex h-8 items-center justify-between gap-3">
                             <label class="block text-sm font-bold text-slate-700">Иш тартиби</label>
-                            {% if page_mode == 'edit' and not can_edit_sizes_only %}
+                            {% if page_mode == 'edit' and not can_edit_sizes_only and not timekeeper_scope %}
                             <button type="button" id="openWorkScheduleModalButton" onclick="openCategoryModal('schedule')"
                                 class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-[var(--info)] transition hover:border-blue-300 hover:bg-blue-100"
                                 title="Иш тартибини қўшиш" aria-label="Иш тартибини қўшиш">
@@ -235,7 +235,7 @@
                     <div>
                         <div class="mb-2 flex h-8 items-center justify-between gap-3">
                             <label class="block text-sm font-bold text-slate-700">Ходимлар тоифаси</label>
-                            {% if page_mode == 'edit' and not can_edit_sizes_only %}
+                            {% if page_mode == 'edit' and not can_edit_sizes_only and not timekeeper_scope %}
                             <button type="button" id="openEmployeeCategoryModalButton" onclick="openCategoryModal('employee')"
                                 class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-[var(--info)] transition hover:border-blue-300 hover:bg-blue-100"
                                 title="Тоифа қўшиш" aria-label="Тоифа қўшиш">
@@ -253,7 +253,8 @@
 
                 </div>
 
-                {% if request.user.profile.role != 'user' %}
+                {% if timekeeper_scope %}<input type="hidden" id="login" value="{{ employee.login|default_if_none:'' }}">{% endif %}
+                {% if request.user.profile.role != 'user' and not timekeeper_scope %}
                 <div class="mt-6 rounded-2xl border border-blue-200 bg-blue-50/30 p-5">
                     <h4 class="mb-4 text-sm font-bold uppercase tracking-wider text-blue-600"><i class="fas fa-key mr-2"></i>Ҳисоб маълумотлари</h4>
                     <div class="grid grid-cols-1 gap-4">

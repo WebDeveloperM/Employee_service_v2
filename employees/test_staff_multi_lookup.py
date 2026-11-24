@@ -132,5 +132,7 @@ class MultiLookupTests(ApprenticeTestCase):
         self.assertIn("'Топилди: ' + foundCount + ' / ' + search.searched", html)
         self.assertIn("' · Топилмади (' + search.notFound.length + '): '", html)
         self.assertIn('employee.in_position = true;', html)            # қўшилгандан кейин рўйхат сақланади
-        self.assertIn("unitEmployeeSearch.addEventListener('paste'", html)   # Excel устунидан нусха
+        self.assertIn("input.addEventListener('paste'", html)               # Excel устунидан нусха
+        self.assertIn('pasteTabelNumbers(unitEmployeeSearch);', html)       # «Шогиртлар» қидирувида
+        self.assertIn("pasteTabelNumbers(document.getElementById('employeeTabelSearch'));", html)   # лавозим ойнасида ҳам
         self.assertIn('бир нечта бўлса — бўшлиқ билан ажратинг', html)

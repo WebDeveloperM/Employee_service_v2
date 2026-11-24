@@ -20,12 +20,16 @@ from rest_framework.pagination import PageNumberPagination
 
 from .models import Department, Employee, EmployeeCategory, EmployeeCertificate, PositionCategory, Section, Timekeeper, UserProfile, WorkSchedule, ROLE_ADMIN, ROLE_HR, ROLE_TIMEKEEPER, ROLE_USER
 from .ordering import order_sections_by_code
-from .permissions import AdminOrHrCanWrite, AdminOrHrOrTimekeeperRead, IsAdminOrHrRole, is_admin, is_admin_or_hr, timekeeper_department
+from .permissions import (
+    AdminOrHrCanWrite, AdminOrHrOrTimekeeperManage, AdminOrHrOrTimekeeperRead, IsAdminOrHrRole, is_admin, is_admin_or_hr,
+    timekeeper_department,
+)
 from .pki import generate_employee_pfx
 from .sections_tree import SectionIndex, delete_section_or_400, order_depth_first
 from .serializers import (
     DepartmentSerializer, EmployeeCategorySerializer, EmployeeSerializer, PositionCategorySerializer,
-    SectionSerializer, TimekeeperEmployeeSerializer, UserProfileSerializer, WorkScheduleSerializer,
+    SectionSerializer, TimekeeperEmployeeSerializer, TimekeeperManagedEmployeeSerializer, UserProfileSerializer,
+    WorkScheduleSerializer,
 )
 from .staff import StaffTreeOrder
 
@@ -290,30 +294,40 @@ class SectionDetailTemplateView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class EmployeeListCreateTemplateView(generics.ListCreateAPIView):
+    """Ходимларни бошқариш. Администратор ва HR — барча ходимлар; табелчи — фақат ўз цехи ходимлари (кўриш, қўшиш,
+    ўзгартириш, ўчириш), ҳисоб/рол/цех ўзгартириш чекловлари билан (TimekeeperManagedEmployeeSerializer)."""
+
     serializer_class = EmployeeSerializer
-    # Администратор и HR — тўлиқ; табелчи — фақат ўқиш ва фақат ўз цехи (get_queryset), ёнида қисқа маълумот билан.
-    permission_classes = [IsAuthenticated, AdminOrHrOrTimekeeperRead]
+    permission_classes = [IsAuthenticated, AdminOrHrOrTimekeeperManage]
     pagination_class = StandardResultsSetPagination
+    # Телефон ва ишга қабул санаси бўйича филтрлар рўйхатда кўрсатилмайдиган маълумотни «топтириб» қўймаслиги учун
+    # фақат-ўқиш рўйхатида (EmployeeDirectoryTemplateView) ўчирилади.
+    allow_private_filters = True
 
     def get_serializer_class(self):
         if not is_admin_or_hr(self.request.user):
-            return TimekeeperEmployeeSerializer
+            return TimekeeperManagedEmployeeSerializer
         return super().get_serializer_class()
+
+    def scope_queryset(self, queryset):
+        """Табелчи фақат ўз цехини кўради (қидирув ва филтрлар шу доирада ишлайди); цехи бўлмаса — ҳеч нимани."""
+        if is_admin_or_hr(self.request.user):
+            return queryset
+        department = timekeeper_department(self.request.user)
+        return queryset.filter(department=department) if department is not None else queryset.none()
 
     def get_queryset(self):
         # Порядок цех → отдел → должность задаёт StaffTreeOrder в list(); здесь — порядок внутри одного места.
         queryset = Employee.objects.select_related(
-            'department', 'section', 'section__department', 'position_category', 'employee_category', 'work_schedule'
+            'department', 'section', 'section__department', 'position_category', 'employee_category', 'work_schedule',
+            'user', 'user__profile',
         ).filter(is_deleted=False).order_by(
             'last_name',
             'first_name',
             'surname',
             'tabel_number',
         )
-        if not is_admin_or_hr(self.request.user):
-            # Табелчи фақат ўз цехи ходимларини кўради (қидирув ва филтрлар шу доирада ишлайди).
-            department = timekeeper_department(self.request.user)
-            queryset = queryset.filter(department=department) if department is not None else queryset.none()
+        queryset = self.scope_queryset(queryset)
 
         # Қидирув сўзларга бўлинади: ҳар бир сўз исм, фамилия, отасининг исми, табель ёки лавозимдан биронтасида
         # учраши керак. Шунинг учун «Фазилов Акбар» ҳам, «Акбар Фазилов Алишерович» ҳам ходимни топади.
@@ -333,7 +347,7 @@ class EmployeeListCreateTemplateView(generics.ListCreateAPIView):
         # Телефон бўйича қидирув: Телефон 1 ёки Телефон 2 дан биронтасида киритилган рақамлар учраши керак.
         # Рақамлар базада турлича сақланган («+998 90 123 45 67», «+998901234567», «901234567»), шунинг учун
         # икки томон ҳам фақат рақамларга келтирилади: «90 123», «+998(90)123» ва «901234567» бир хил ишлайди.
-        phone = self.request.query_params.get('phone', '').strip()
+        phone = self.request.query_params.get('phone', '').strip() if self.allow_private_filters else ''
         if phone:
             digits = re.sub(r'\D', '', phone)
             if not digits:
@@ -363,7 +377,7 @@ class EmployeeListCreateTemplateView(generics.ListCreateAPIView):
         if position:
             queryset = queryset.filter(position__icontains=position)
 
-        employment_date = self.request.query_params.get('employment_date', '').strip()
+        employment_date = self.request.query_params.get('employment_date', '').strip() if self.allow_private_filters else ''
         if employment_date:
             queryset = queryset.filter(date_of_employment=employment_date)
 
@@ -427,12 +441,40 @@ class EmployeeListCreateTemplateView(generics.ListCreateAPIView):
         }, status=status.HTTP_201_CREATED, headers=headers)
 
 
+class EmployeeDirectoryTemplateView(EmployeeListCreateTemplateView):
+    """«Ходимлар рўйхати» табелчи учун: барча цехларнинг ходимлари, фақат ўқиш, фақат рўйхат майдонлари
+    (телефон, туғилган сана ва бошқа шахсий маълумотсиз, телефон бўйича қидирувсиз)."""
+
+    serializer_class = TimekeeperEmployeeSerializer
+    permission_classes = [IsAuthenticated, AdminOrHrOrTimekeeperRead]
+    http_method_names = ['get', 'head', 'options']
+    allow_private_filters = False
+
+    def get_serializer_class(self):
+        return TimekeeperEmployeeSerializer
+
+    def scope_queryset(self, queryset):
+        return queryset   # рухсат синфи фақат администратор/HR ва ишлайдиган табелчини ўтказади
+
+
 class EmployeeDetailTemplateView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Employee.objects.select_related(
-        'department', 'section', 'section__department', 'position_category', 'employee_category', 'work_schedule'
-    ).filter(is_deleted=False)
     serializer_class = EmployeeSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrHrRole]
+    permission_classes = [IsAuthenticated, AdminOrHrOrTimekeeperManage]
+
+    def get_serializer_class(self):
+        if not is_admin_or_hr(self.request.user):
+            return TimekeeperManagedEmployeeSerializer
+        return super().get_serializer_class()
+
+    def get_queryset(self):
+        queryset = Employee.objects.select_related(
+            'department', 'section', 'section__department', 'position_category', 'employee_category', 'work_schedule',
+            'user', 'user__profile',
+        ).filter(is_deleted=False)
+        if not is_admin_or_hr(self.request.user):   # табелчи фақат ўз цехи ходимини кўради, ўзгартиради ва ўчиради
+            department = timekeeper_department(self.request.user)
+            queryset = queryset.filter(department=department) if department is not None else queryset.none()
+        return queryset
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -468,6 +510,8 @@ class EmployeeDetailTemplateView(generics.RetrieveUpdateDestroyAPIView):
             linked_user.is_superuser or (linked_profile is not None and linked_profile.role in {ROLE_ADMIN, ROLE_HR})
         ):
             raise PermissionDenied('Администратор ёки HR менежер ходимини фақат администратор ўчира олади.')
+        if linked_user is not None and linked_user.pk == request.user.pk and not is_admin_or_hr(request.user):
+            raise PermissionDenied('Ўз ходим карточкангизни ўчириб бўлмайди.')   # табелчи ўз ҳисобини ўчириб қўймасин
 
         with transaction.atomic():
             if instance.base_image:

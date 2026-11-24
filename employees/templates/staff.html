@@ -239,7 +239,8 @@
                 </button>
             </div>
             <p id="employeeAddNote" class="mt-3 hidden rounded-xl bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700"></p>
-            <div id="employeeSearchResults" class="mt-3 space-y-2"></div>
+            <p id="employeeSearchSummary" class="mt-3 hidden text-sm font-semibold text-slate-600"></p>
+            <div id="employeeSearchResults" class="mt-3 max-h-[28rem] space-y-2 overflow-y-auto pr-1"></div>
         </div>
 
         <div class="overflow-x-auto rounded-[24px] border border-slate-200 bg-white">
@@ -322,6 +323,8 @@
         employeesMeta: null,      // штат / занято / вакансии из последнего ответа
         employeesRequestId: 0,
         employeeResults: new Map(),
+        employeeSelected: new Set(),   // бир вақтда қўшиш учун белгиланган ходимлар (лавозим ойнаси)
+        employeeSearch: { multiple: false, notFound: [] },
         employeeSearchRequestId: 0,
         employeeSearchTimer: null,
         employeeMembers: new Map(), // id -> сотрудник текущей должности (для «Таҳрирлаш» / «Чиқариш»)
@@ -329,6 +332,7 @@
         unitEmployees: new Map(),   // id -> сотрудник отдела без штата («Шогиртлар»)
         unitEmployeesRequestId: 0,
         unitEmployeeResults: new Map(),
+        unitEmployeeSelected: new Set(),   // бир вақтда қўшиш учун белгиланган ходимлар (штатсиз бўлим)
         unitEmployeeSearch: { multiple: false, notFound: [] },   // нечта табель рақами қидирилгани ва топилмаганлари
         unitEmployeeSearchRequestId: 0,
         unitEmployeeSearchTimer: null,
@@ -363,8 +367,11 @@
         document.getElementById('positionMenu').addEventListener('click', onPositionMenuClick);
         document.getElementById('employeeSearchResults').addEventListener('click', onEmployeeResultClick);
         document.getElementById('employeeSearchResults').addEventListener('keydown', onEmployeeRateKeydown);
+        document.getElementById('employeeSearchResults').addEventListener('change', onEmployeeResultChange);
+        document.getElementById('employeeSearchResults').addEventListener('input', onEmployeeResultInput);
         document.getElementById('employeesTableBody').addEventListener('click', onEmployeeRowClick);
         document.getElementById('unitEmployeeSearchResults').addEventListener('click', onUnitEmployeeResultClick);
+        document.getElementById('unitEmployeeSearchResults').addEventListener('change', onUnitEmployeeResultChange);
         document.getElementById('unitEmployeesTableBody').addEventListener('click', onUnitEmployeeRowClick);
 
         const unitEmployeeSearch = document.getElementById('unitEmployeeTabelSearch');
@@ -379,14 +386,18 @@
             searchUnitEmployees();
         });
         // Excel устунидан нусха олинган рақамлар (янги қатор/Tab билан) бир қаторга, бўшлиқ билан келтирилади.
-        unitEmployeeSearch.addEventListener('paste', function (event) {
-            const text = (event.clipboardData || window.clipboardData).getData('text');
-            if (!/[\r\n\t]/.test(text)) return;
-            event.preventDefault();
-            const joined = text.trim().split(/[\s,;]+/).join(' ');
-            unitEmployeeSearch.setRangeText(joined, unitEmployeeSearch.selectionStart, unitEmployeeSearch.selectionEnd, 'end');
-            unitEmployeeSearch.dispatchEvent(new Event('input'));
-        });
+        function pasteTabelNumbers(input) {
+            input.addEventListener('paste', function (event) {
+                const text = (event.clipboardData || window.clipboardData).getData('text');
+                if (!/[\r\n\t]/.test(text)) return;
+                event.preventDefault();
+                const joined = text.trim().split(/[\s,;]+/).join(' ');
+                input.setRangeText(joined, input.selectionStart, input.selectionEnd, 'end');
+                input.dispatchEvent(new Event('input'));
+            });
+        }
+        pasteTabelNumbers(unitEmployeeSearch);
+        pasteTabelNumbers(document.getElementById('employeeTabelSearch'));
 
         // Меню закрывается кликом мимо, прокруткой панели и изменением размера окна.
         document.addEventListener('click', function (event) {
@@ -1033,6 +1044,7 @@
         document.querySelectorAll('#employeeSearchResults [data-add], #employeeSearchResults [data-rate-for]').forEach(function (control) {
             control.disabled = hasNoVacancy();
         });
+        updateEmployeeBulkBar();
     }
 
     function toggleEmployeeAdd(force) {
@@ -1046,10 +1058,17 @@
             input.focus();
         } else {
             input.value = '';
-            document.getElementById('employeeSearchResults').innerHTML = '';
-            staffState.employeeResults = new Map();
+            clearEmployeeResults();
             staffState.employeeSearchRequestId += 1;
         }
+    }
+
+    function clearEmployeeResults() {
+        document.getElementById('employeeSearchResults').innerHTML = '';
+        document.getElementById('employeeSearchSummary').classList.add('hidden');
+        staffState.employeeResults = new Map();
+        staffState.employeeSelected = new Set();
+        staffState.employeeSearch = { multiple: false, notFound: [] };
     }
 
     async function searchEmployees() {
@@ -1060,8 +1079,7 @@
         if (!current) return;
 
         if (!term) {
-            results.innerHTML = '';
-            staffState.employeeResults = new Map();
+            clearEmployeeResults();
             return;
         }
 
@@ -1070,7 +1088,16 @@
             const params = new URLSearchParams({ tabel_number: term, position_id: String(current.id) });
             const response = await apiRequest('/template/staff/employee-lookup/?' + params.toString());
             if (requestId !== staffState.employeeSearchRequestId) return;
-            renderEmployeeResults(Array.isArray(response.data) ? response.data : []);
+            const employees = Array.isArray(response.data) ? response.data : [];
+            staffState.employeeSearch = {
+                multiple: Boolean(response.multiple),
+                searched: Number(response.searched) || 0,
+                notFound: Array.isArray(response.not_found) ? response.not_found : [],
+                truncated: Boolean(response.truncated),
+            };
+            // Бир нечта табель рақами ёзилган бўлса, топилганларнинг ҳаммаси белгиланган туради (керакмасини олиб ташлаш мумкин).
+            staffState.employeeSelected = new Set(staffState.employeeSearch.multiple ? employees.filter(function (employee) { return !employee.in_position; }).map(function (employee) { return employee.id; }) : []);
+            renderEmployeeResults(employees);
         } catch (error) {
             if (requestId !== staffState.employeeSearchRequestId) return;
             console.error('Ходимни қидиришда хато:', error);
@@ -1084,17 +1111,54 @@
         return (place || 'Цех кўрсатилмаган') + (employee.position ? ' — ' + employee.position : '');
     }
 
+    // «Топилди: 14 / 16 · Топилмади (2): 1234, 5678» — бир нечта табель рақами киритилганда (иккала қидирув учун ҳам).
+    function searchSummaryText(search, foundCount) {
+        if (!search || !search.multiple) return '';
+        let text = 'Топилди: ' + foundCount + ' / ' + search.searched;
+        if (search.notFound.length > 0) {
+            text += ' · Топилмади (' + search.notFound.length + '): ' + search.notFound.join(', ');
+        }
+        if (search.truncated) {
+            text += ' · Фақат дастлабки ' + search.searched + ' та рақам қидирилди.';
+        }
+        return text;
+    }
+
+    const BULK_BAR_CLASS = 'flex flex-wrap items-center gap-3 rounded-2xl border border-emerald-200 bg-white px-3 py-2.5';
+    const BULK_BUTTON_CLASS = 'ml-auto shrink-0 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40';
+    const CHECKBOX_CLASS = 'h-4 w-4 shrink-0 cursor-pointer accent-emerald-600';
+
     function renderEmployeeResults(employees) {
         const results = document.getElementById('employeeSearchResults');
         staffState.employeeResults = new Map(employees.map(function (employee) { return [employee.id, employee]; }));
 
+        const summary = document.getElementById('employeeSearchSummary');
+        const summaryText = searchSummaryText(staffState.employeeSearch, employees.length);
+        summary.textContent = summaryText;
+        summary.classList.toggle('hidden', !summaryText);
+
         if (employees.length === 0) {
-            results.innerHTML = '<div class="px-2 py-3 text-sm font-semibold text-slate-500">Бундай табель рақамли ходим топилмади.</div>';
+            results.innerHTML = '<div class="px-2 py-3 text-sm font-semibold text-slate-500">' +
+                (staffState.employeeSearch && staffState.employeeSearch.multiple ? 'Киритилган табель рақамлари бўйича ходим топилмади.' : 'Бундай табель рақамли ходим топилмади.') + '</div>';
             return;
         }
 
-        results.innerHTML = employees.map(function (employee) {
+        // Қўшиш мумкин бўлган камида 2 та ходим бўлса — ҳаммасини бирданига танлаб қўшиш имконияти.
+        const bulk = employees.filter(function (employee) { return !employee.in_position; }).length >= 2;
+        const bulkBar = bulk
+            ? '<div id="employeeBulkBar" class="sticky top-0 z-10 ' + BULK_BAR_CLASS + '">' +
+              '<label class="inline-flex cursor-pointer items-center gap-2 text-sm font-bold text-slate-700">' +
+              '<input type="checkbox" id="employeeSelectAll" class="' + CHECKBOX_CLASS + '">Барчасини танлаш</label>' +
+              '<span id="employeeBulkInfo" class="text-xs font-semibold text-slate-500"></span>' +
+              '<button type="button" id="employeeBulkAdd" class="' + BULK_BUTTON_CLASS + '">Танланганларни қўшиш</button></div>'
+            : '';
+
+        results.innerHTML = bulkBar + employees.map(function (employee) {
             const disabled = hasNoVacancy() ? ' disabled' : '';
+            const checkbox = bulk && !employee.in_position
+                ? '<input type="checkbox" data-select="' + employee.id + '" class="' + CHECKBOX_CLASS + '"' + (staffState.employeeSelected.has(employee.id) ? ' checked' : '') +
+                  ' aria-label="Танлаш: ' + esc(employee.full_name) + '">'
+                : '';
             // «Штат»: ходим неча штатда ишлайди — 1 (тўлиқ) ёки 0,5 (ярим) ва ҳ.к.; «Банд» шу улушлар йиғиндиси.
             const rateInput = '<label class="flex shrink-0 items-center gap-2 text-xs font-bold text-slate-500" title="Ходим неча штатда ишлайди: 1 — тўлиқ ставка, 0,5 — ярим ставка">' +
                 'Штат' +
@@ -1108,13 +1172,74 @@
                   ' class="shrink-0 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40">Қўшиш</button></div>';
             // Тор экранда «Штат» ва «Қўшиш» ходим маълумоти остидаги қаторга тушади (flex-wrap; маълумот камида 10rem).
             return '<div class="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2">' +
-                employeeAvatarHtml(employee) +
+                checkbox + employeeAvatarHtml(employee) +
                 '<div class="min-w-0" style="flex: 1 1 10rem">' +
                 '<div class="truncate text-sm font-semibold text-slate-900">' + esc(employee.full_name) +
                 '<span class="ml-2 text-xs font-bold text-slate-500">№ ' + esc(employee.tabel_number) + '</span></div>' +
                 '<div class="truncate text-xs text-slate-500" title="' + esc(describeAssignment(employee)) + '">' + esc(describeAssignment(employee)) + '</div>' +
                 '</div>' + action + '</div>';
         }).join('');
+        updateEmployeeBulkBar();
+    }
+
+    function addableEmployeeResults() {
+        return Array.from(staffState.employeeResults.values()).filter(function (employee) { return !employee.in_position; });
+    }
+
+    // Танланганлар сони, уларнинг жами штат улуши ва бўш штат: сиғмаса — қизил ва тугма ўчирилади.
+    function updateEmployeeBulkBar() {
+        const addAll = document.getElementById('employeeBulkAdd');
+        if (!addAll) return;
+        const addable = addableEmployeeResults();
+        const chosen = addable.filter(function (employee) { return staffState.employeeSelected.has(employee.id); });
+
+        let total = 0;
+        let invalid = false;
+        chosen.forEach(function (employee) {
+            const rate = readStaffRate(document.querySelector('#employeeSearchResults [data-rate-for="' + employee.id + '"]'));
+            if (rate === null) invalid = true; else total += rate;
+        });
+        total = Math.round(total * 100) / 100;
+        const vacant = Number(staffState.employeesMeta && staffState.employeesMeta.vacant);
+        const knownVacant = Number.isFinite(vacant);
+        const over = knownVacant && total > vacant + 1e-9;
+
+        const info = document.getElementById('employeeBulkInfo');
+        if (chosen.length === 0) {
+            info.textContent = 'Қўшиш учун ходимларни белгиланг';
+        } else if (invalid) {
+            info.textContent = 'Штат улуши нотўғри киритилган';
+        } else {
+            info.textContent = 'Танланган: ' + chosen.length + ' · жами штат: ' + formatNumber(total) + (knownVacant ? ' · бўш: ' + formatNumber(vacant) : '') +
+                (over ? ' — бўш штат етмайди' : '');
+        }
+        info.className = 'text-xs font-semibold ' + (invalid || over ? 'text-red-600' : 'text-slate-500');
+
+        addAll.textContent = 'Танланганларни қўшиш' + (chosen.length ? ' (' + chosen.length + ')' : '');
+        addAll.disabled = chosen.length === 0 || invalid || over || hasNoVacancy();
+
+        const selectAll = document.getElementById('employeeSelectAll');
+        selectAll.checked = addable.length > 0 && chosen.length === addable.length;
+        selectAll.indeterminate = chosen.length > 0 && chosen.length < addable.length;
+    }
+
+    function onEmployeeResultChange(event) {
+        const target = event.target;
+        if (target.id === 'employeeSelectAll') {
+            staffState.employeeSelected = new Set(target.checked ? addableEmployeeResults().map(function (employee) { return employee.id; }) : []);
+            document.querySelectorAll('#employeeSearchResults [data-select]').forEach(function (box) { box.checked = target.checked; });
+        } else if (target.matches('[data-select]')) {
+            const id = Number(target.dataset.select);
+            if (target.checked) staffState.employeeSelected.add(id); else staffState.employeeSelected.delete(id);
+        } else {
+            return;
+        }
+        updateEmployeeBulkBar();
+    }
+
+    // Штат улуши ўзгарса, жами қайта ҳисобланади.
+    function onEmployeeResultInput(event) {
+        if (event.target.matches('[data-rate-for]')) updateEmployeeBulkBar();
     }
 
     /* ---------- «Амаллар» в строке сотрудника: перевод (Таҳрирлаш) и снятие с должности ---------- */
@@ -1234,8 +1359,68 @@
     }
 
     function onEmployeeResultClick(event) {
+        const bulkButton = event.target.closest('#employeeBulkAdd');
+        if (bulkButton) {
+            if (!bulkButton.disabled) addSelectedEmployeesToPosition();
+            return;
+        }
         const button = event.target.closest('[data-add]');
         if (button && !button.disabled) addEmployeeToPosition(Number(button.dataset.add), button);
+    }
+
+    // Танланган ходимларнинг ҳаммаси битта амал билан қўшилади: бирортаси сиғмаса, ҳеч ким қўшилмайди ва сабаби айтилади.
+    async function addSelectedEmployeesToPosition() {
+        const current = staffState.employeesPosition;
+        if (!current) return;
+        const chosen = addableEmployeeResults().filter(function (employee) { return staffState.employeeSelected.has(employee.id); });
+        if (chosen.length === 0) return;
+
+        const items = [];
+        for (const employee of chosen) {
+            const rateInput = document.querySelector('#employeeSearchResults [data-rate-for="' + employee.id + '"]');
+            const rate = readStaffRate(rateInput);
+            if (rate === null) {
+                showToast('Штат улушини тўғри киритинг: 0 дан катта ва 2 дан ошмаган сон (масалан, 1 ёки 0,5).', 'error');
+                if (rateInput) rateInput.focus();
+                return;
+            }
+            items.push({ employee_id: employee.id, staff_rate: rate });
+        }
+
+        // Қўшиш ходимларнинг цех/бўлим/лавозимини ўзгартиради — ўтказишни бир марта тасдиқлатамиз.
+        const moving = chosen.filter(function (employee) { return employee.department || employee.section || employee.position; });
+        let question = chosen.length + ' та ходим «' + positionLabel(current) + '» лавозимига қўшилади.';
+        if (moving.length > 0) {
+            question += '\n\nШундан ' + moving.length + ' таси ҳозир бошқа цех ёки лавозимда, улар шу лавозимга ўтказилади:\n' +
+                moving.slice(0, 8).map(function (employee) { return '• ' + employee.full_name + ' — ' + describeAssignment(employee); }).join('\n') +
+                (moving.length > 8 ? '\n… ва яна ' + (moving.length - 8) + ' та' : '');
+        }
+        if (!confirmAction(question + '\n\nДавом этасизми?')) return;
+
+        const button = document.getElementById('employeeBulkAdd');
+        setLoading(button, true, '...');
+        try {
+            const response = await apiRequest('/template/staff/positions/' + current.id + '/employees/bulk/', {
+                method: 'POST',
+                body: JSON.stringify({ items: items }),
+            });
+            showToast(response.message || 'Ходимлар лавозимга қўшилди');
+            if (staffState.employeesPosition && staffState.employeesPosition.id === current.id) {
+                chosen.forEach(function (employee) {
+                    employee.in_position = true;
+                    staffState.employeeSelected.delete(employee.id);
+                });
+                renderPositionEmployees(response);
+                // Рўйхат сақланади: қўшилганлар «Қўшилган» бўлиб қолади, қолганларини ҳам қўшиш мумкин.
+                renderEmployeeResults(Array.from(staffState.employeeResults.values()));
+            }
+            await Promise.all([loadPositions(), loadTree()]);
+        } catch (error) {
+            console.error('Ходимларни қўшишда хато:', error);
+            reportApiError(error);
+            setLoading(button, false);
+            loadPositionEmployees(); // вакансии могли измениться — перечитываем
+        }
     }
 
     // «Штат» майдонида Enter — ёнидаги «Қўшиш» тугмасини босиш билан бир хил.
@@ -1293,10 +1478,16 @@
             showToast('Ходим лавозимга қўшилди');
             if (staffState.employeesPosition && staffState.employeesPosition.id === current.id) {
                 renderPositionEmployees(response);
-                document.getElementById('employeeTabelSearch').value = '';
-                document.getElementById('employeeSearchResults').innerHTML = '';
-                staffState.employeeResults = new Map();
-                document.getElementById('employeeTabelSearch').focus();
+                if (staffState.employeeSearch && staffState.employeeSearch.multiple) {
+                    // Рўйхат сақланади: қўшилгани «Қўшилган» бўлиб қолади, қолганларини ҳам қўшиш мумкин.
+                    employee.in_position = true;
+                    staffState.employeeSelected.delete(employee.id);
+                    renderEmployeeResults(Array.from(staffState.employeeResults.values()));
+                } else {
+                    document.getElementById('employeeTabelSearch').value = '';
+                    clearEmployeeResults();
+                    document.getElementById('employeeTabelSearch').focus();
+                }
             }
             // Таблица должностей и дерево показывают «Банд»/«Бўш» — обновляем и их.
             await Promise.all([loadPositions(), loadTree()]);
@@ -1388,6 +1579,7 @@
         document.getElementById('unitEmployeeSearchResults').innerHTML = '';
         document.getElementById('unitEmployeeSearchSummary').classList.add('hidden');
         staffState.unitEmployeeResults = new Map();
+        staffState.unitEmployeeSelected = new Set();
         staffState.unitEmployeeSearch = { multiple: false, notFound: [] };
     }
 
@@ -1414,7 +1606,10 @@
                 notFound: Array.isArray(response.not_found) ? response.not_found : [],
                 truncated: Boolean(response.truncated),
             };
-            renderUnitEmployeeResults(Array.isArray(response.data) ? response.data : []);
+            const employees = Array.isArray(response.data) ? response.data : [];
+            // Бир нечта табель рақами ёзилган бўлса, топилганларнинг ҳаммаси белгиланган туради (керакмасини олиб ташлаш мумкин).
+            staffState.unitEmployeeSelected = new Set(staffState.unitEmployeeSearch.multiple ? employees.filter(function (employee) { return !employee.in_position; }).map(function (employee) { return employee.id; }) : []);
+            renderUnitEmployeeResults(employees);
         } catch (error) {
             if (requestId !== staffState.unitEmployeeSearchRequestId) return;
             console.error('Ходимни қидиришда хато:', error);
@@ -1425,20 +1620,9 @@
     // Бир нечта табель рақами киритилганда: «Топилди: 14 / 16» ва топилмаган рақамлар рўйхати.
     function renderUnitEmployeeSummary(foundCount) {
         const summary = document.getElementById('unitEmployeeSearchSummary');
-        const search = staffState.unitEmployeeSearch || {};
-        if (!search.multiple) {
-            summary.classList.add('hidden');
-            return;
-        }
-        let text = 'Топилди: ' + foundCount + ' / ' + search.searched;
-        if (search.notFound.length > 0) {
-            text += ' · Топилмади (' + search.notFound.length + '): ' + search.notFound.join(', ');
-        }
-        if (search.truncated) {
-            text += ' · Фақат дастлабки ' + search.searched + ' та рақам қидирилди.';
-        }
+        const text = searchSummaryText(staffState.unitEmployeeSearch, foundCount);
         summary.textContent = text;
-        summary.classList.remove('hidden');
+        summary.classList.toggle('hidden', !text);
     }
 
     function renderUnitEmployeeResults(employees) {
@@ -1452,24 +1636,116 @@
             return;
         }
 
-        results.innerHTML = employees.map(function (employee) {
+        const bulk = employees.filter(function (employee) { return !employee.in_position; }).length >= 2;
+        const bulkBar = bulk
+            ? '<div id="unitBulkBar" class="sticky top-0 z-10 ' + BULK_BAR_CLASS + '">' +
+              '<label class="inline-flex cursor-pointer items-center gap-2 text-sm font-bold text-slate-700">' +
+              '<input type="checkbox" id="unitSelectAll" class="' + CHECKBOX_CLASS + '">Барчасини танлаш</label>' +
+              '<span id="unitBulkInfo" class="text-xs font-semibold text-slate-500"></span>' +
+              '<button type="button" id="unitBulkAdd" class="' + BULK_BUTTON_CLASS + '">Танланганларни қўшиш</button></div>'
+            : '';
+
+        results.innerHTML = bulkBar + employees.map(function (employee) {
             const action = employee.in_position
                 ? '<span class="shrink-0 rounded-xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-500">Қўшилган</span>'
                 : '<button type="button" data-unit-add="' + employee.id + '"' +
                   ' class="shrink-0 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40">Қўшиш</button>';
+            const checkbox = bulk && !employee.in_position
+                ? '<input type="checkbox" data-unit-select="' + employee.id + '" class="' + CHECKBOX_CLASS + '"' + (staffState.unitEmployeeSelected.has(employee.id) ? ' checked' : '') +
+                  ' aria-label="Танлаш: ' + esc(employee.full_name) + '">'
+                : '';
             return '<div class="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2">' +
-                employeeAvatarHtml(employee) +
+                checkbox + employeeAvatarHtml(employee) +
                 '<div class="min-w-0 flex-1">' +
                 '<div class="truncate text-sm font-semibold text-slate-900">' + esc(employee.full_name) +
                 '<span class="ml-2 text-xs font-bold text-slate-500">№ ' + esc(employee.tabel_number) + '</span></div>' +
                 '<div class="truncate text-xs text-slate-500" title="' + esc(describeAssignment(employee)) + '">' + esc(describeAssignment(employee)) + '</div>' +
                 '</div>' + action + '</div>';
         }).join('');
+        updateUnitBulkBar();
+    }
+
+    function addableUnitResults() {
+        return Array.from(staffState.unitEmployeeResults.values()).filter(function (employee) { return !employee.in_position; });
+    }
+
+    function updateUnitBulkBar() {
+        const addAll = document.getElementById('unitBulkAdd');
+        if (!addAll) return;
+        const addable = addableUnitResults();
+        const chosen = addable.filter(function (employee) { return staffState.unitEmployeeSelected.has(employee.id); });
+        document.getElementById('unitBulkInfo').textContent = chosen.length === 0 ? 'Қўшиш учун ходимларни белгиланг' : 'Танланган: ' + chosen.length;
+        addAll.textContent = 'Танланганларни қўшиш' + (chosen.length ? ' (' + chosen.length + ')' : '');
+        addAll.disabled = chosen.length === 0;
+
+        const selectAll = document.getElementById('unitSelectAll');
+        selectAll.checked = addable.length > 0 && chosen.length === addable.length;
+        selectAll.indeterminate = chosen.length > 0 && chosen.length < addable.length;
+    }
+
+    function onUnitEmployeeResultChange(event) {
+        const target = event.target;
+        if (target.id === 'unitSelectAll') {
+            staffState.unitEmployeeSelected = new Set(target.checked ? addableUnitResults().map(function (employee) { return employee.id; }) : []);
+            document.querySelectorAll('#unitEmployeeSearchResults [data-unit-select]').forEach(function (box) { box.checked = target.checked; });
+        } else if (target.matches('[data-unit-select]')) {
+            const id = Number(target.dataset.unitSelect);
+            if (target.checked) staffState.unitEmployeeSelected.add(id); else staffState.unitEmployeeSelected.delete(id);
+        } else {
+            return;
+        }
+        updateUnitBulkBar();
     }
 
     function onUnitEmployeeResultClick(event) {
+        const bulkButton = event.target.closest('#unitBulkAdd');
+        if (bulkButton) {
+            if (!bulkButton.disabled) addSelectedEmployeesToUnit();
+            return;
+        }
         const button = event.target.closest('[data-unit-add]');
         if (button && !button.disabled) addEmployeeToUnit(Number(button.dataset.unitAdd), button);
+    }
+
+    // Танланган ходимларнинг ҳаммаси бўлимга битта амал билан қўшилади.
+    async function addSelectedEmployeesToUnit() {
+        const selected = staffState.selected;
+        const found = selected ? findNode(selected.type, selected.id) : null;
+        const chosen = addableUnitResults().filter(function (employee) { return staffState.unitEmployeeSelected.has(employee.id); });
+        if (!selected || !found || chosen.length === 0) return;
+
+        const moving = chosen.filter(function (employee) { return employee.department || employee.section || employee.position; });
+        let question = chosen.length + ' та ходим «' + found.node.name + '» бўлимига қўшилади.';
+        if (moving.length > 0) {
+            question += '\n\nШундан ' + moving.length + ' таси ҳозир бошқа цех ёки бўлимда, улар шу бўлимга ўтказилади:\n' +
+                moving.slice(0, 8).map(function (employee) { return '• ' + employee.full_name + ' — ' + describeAssignment(employee); }).join('\n') +
+                (moving.length > 8 ? '\n… ва яна ' + (moving.length - 8) + ' та' : '');
+        }
+        if (!confirmAction(question + '\n\nДавом этасизми?')) return;
+
+        const button = document.getElementById('unitBulkAdd');
+        setLoading(button, true, '...');
+        try {
+            const response = await apiRequest('/template/staff/sections/' + selected.id + '/employees/bulk/', {
+                method: 'POST',
+                body: JSON.stringify({ employee_ids: chosen.map(function (employee) { return employee.id; }) }),
+            });
+            showToast(response.message || 'Ходимлар бўлимга қўшилди');
+            if (staffState.selected && staffState.selected.id === selected.id) {
+                chosen.forEach(function (employee) {
+                    employee.in_position = true;
+                    staffState.unitEmployeeSelected.delete(employee.id);
+                });
+                // Рўйхат сақланади: қўшилганлар «Қўшилган» бўлиб қолади.
+                renderUnitEmployeeResults(Array.from(staffState.unitEmployeeResults.values()));
+            }
+            await refreshAfterUnitEmployeeChange(selected, response);
+        } catch (error) {
+            console.error('Ходимларни бўлимга қўшишда хато:', error);
+            reportApiError(error);
+            setLoading(button, false);
+            loadUnitEmployees();
+        }
     }
 
     function onUnitEmployeeRowClick(event) {
@@ -1510,6 +1786,7 @@
                 if (staffState.unitEmployeeSearch && staffState.unitEmployeeSearch.multiple) {
                     // Рўйхат сақланади: қўшилгани «Қўшилган» бўлиб қолади, қолганларини ҳам қўшиш мумкин.
                     employee.in_position = true;
+                    staffState.unitEmployeeSelected.delete(employee.id);
                     renderUnitEmployeeResults(Array.from(staffState.unitEmployeeResults.values()));
                 } else {
                     const input = document.getElementById('unitEmployeeTabelSearch');

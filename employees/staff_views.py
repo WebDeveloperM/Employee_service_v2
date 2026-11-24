@@ -61,17 +61,25 @@ def serialize_staff_employee(employee, request):
     }
 
 
-def ensure_rate_fits(position, members, rate, *, target=False):
-    """Новая доля ставки помещается в свободные ставки должности, иначе — понятная ошибка (400)."""
+def rate_problem(position, members, rate, *, target=False):
+    """Новая доля ставки помещается в свободные ставки должности? Если нет — понятное объяснение, иначе ''."""
     vacant = vacant_places(position.staff_count, occupied_rate(members))
     where = 'Танланган лавозимда' if target else 'Бу лавозимда'
     if vacant <= 0:
-        raise ValidationError({'detail': f'{where} бўш иш ўрни йўқ. Аввал штатлар сонини кўпайтиринг.'})
+        return f'{where} бўш иш ўрни йўқ. Аввал штатлар сонини кўпайтиринг.'
     if rate > vacant:
-        raise ValidationError({'detail': (
+        return (
             f'{where} бўш штат: {format_rate(vacant)}, ходимнинг улуши эса {format_rate(rate)}. '
             f'Улушни {format_rate(vacant)} ёки ундан кам қилинг ёки аввал штатлар сонини кўпайтиринг.'
-        )})
+        )
+    return ''
+
+
+def ensure_rate_fits(position, members, rate, *, target=False):
+    """Новая доля ставки помещается в свободные ставки должности, иначе — понятная ошибка (400)."""
+    problem = rate_problem(position, members, rate, target=target)
+    if problem:
+        raise ValidationError({'detail': problem})
 
 
 def get_position(pk, *, for_update=False):
@@ -325,6 +333,70 @@ class StaffPositionEmployeesTemplateView(APIView):
         )
 
 
+class StaffPositionEmployeesBulkTemplateView(APIView):
+    """Бир нечта ходимни лавозимга бир вақтда қўшиш: {items: [{employee_id, staff_rate}, …]}.
+
+    Битта амал: ҳаммаси қўшилади ёки (бирортаси сиғмаса) ҳеч ким қўшилмайди ва қайси ходим сиғмагани айтилади.
+    Лавозимда аллақачон турган ходим ўтказиб юборилади.
+    """
+
+    permission_classes = STAFF_PERMISSIONS
+
+    def post(self, request, pk, *args, **kwargs):
+        items = request.data.get('items')
+        if not isinstance(items, list) or not items:
+            raise ValidationError({'detail': 'Ходимларни танланг.'})
+        if len(items) > MULTI_LOOKUP_LIMIT:
+            raise ValidationError({'detail': f'Бир вақтда {MULTI_LOOKUP_LIMIT} тадан ортиқ ходимни қўшиб бўлмайди.'})
+
+        chosen = {}   # employee_id -> улуш; тартиб — танланган тартибда, такрорлар олиб ташланади
+        for item in items:
+            if not isinstance(item, dict):
+                raise ValidationError({'detail': 'Ходимни танланг.'})
+            try:
+                employee_id = int(item.get('employee_id'))
+            except (TypeError, ValueError):
+                raise ValidationError({'detail': 'Ходимни танланг.'})
+            try:
+                rate = parse_staff_rate(item.get('staff_rate'))
+            except ValueError as error:
+                raise ValidationError({'staff_rate': str(error)})
+            chosen.setdefault(employee_id, rate)
+
+        with transaction.atomic():
+            # Блокировка должности: параллельные назначения не должны превысить штат.
+            position = get_position(pk, for_update=True)
+            found = {
+                employee.pk: employee
+                for employee in Employee.objects.select_related('department', 'section').filter(
+                    pk__in=list(chosen), is_deleted=False, is_active=True,
+                )
+            }
+            if len(found) != len(chosen):
+                raise ValidationError({'detail': 'Баъзи ходимлар топилмади ёки фаол эмас. Рўйхатни янгилаб, қайта уриниб кўринг.'})
+
+            added = 0
+            for employee_id, rate in chosen.items():
+                employee = found[employee_id]
+                members = employees_of_position(position)
+                if any(member.pk == employee.pk for member in members):
+                    continue
+                problem = rate_problem(position, members, rate)
+                if problem:
+                    # Транзакция бекор бўлади: олдинги ходимлар ҳам қўшилмайди.
+                    raise ValidationError({'detail': f'«{employee}» қўшилмади. {problem} Ҳеч ким қўшилмади.'})
+                assign_employee_to_position(employee, position, rate)
+                added += 1
+            if not added:
+                raise ValidationError({'detail': 'Танланган ходимлар аллақачон шу лавозимда.'})
+            employees = employees_of_position(position)
+
+        return Response(
+            position_employees_payload(position, employees, request, f'{added} та ходим лавозимга қўшилди'),
+            status=status.HTTP_201_CREATED,
+        )
+
+
 class StaffPositionEmployeeDetailTemplateView(APIView):
     """Один сотрудник должности (окно «Ходимни таҳрирлаш»): перевод на другую должность той же единицы и/или
     новая доля ставки (PUT/PATCH: position_id, staff_rate), снятие с должности (DELETE)."""
@@ -434,6 +506,49 @@ class StaffSectionEmployeesTemplateView(APIView):
 
         return Response(
             section_employees_payload(section, section_employees(section), request, 'Ходим бўлимга қўшилди'),
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class StaffSectionEmployeesBulkTemplateView(APIView):
+    """Бир нечта ходимни штатсиз бўлимга («Шогиртлар», «св.шт.») бир вақтда қўшиш: {employee_ids: [..]}."""
+
+    permission_classes = STAFF_PERMISSIONS
+
+    def post(self, request, pk, *args, **kwargs):
+        raw_ids = request.data.get('employee_ids')
+        if not isinstance(raw_ids, list) or not raw_ids:
+            raise ValidationError({'detail': 'Ходимларни танланг.'})
+        if len(raw_ids) > MULTI_LOOKUP_LIMIT:
+            raise ValidationError({'detail': f'Бир вақтда {MULTI_LOOKUP_LIMIT} тадан ортиқ ходимни қўшиб бўлмайди.'})
+        try:
+            employee_ids = list(dict.fromkeys(int(value) for value in raw_ids))   # такрорсиз, тартиб сақланади
+        except (TypeError, ValueError):
+            raise ValidationError({'detail': 'Ходимни танланг.'})
+
+        with transaction.atomic():
+            section = get_no_staff_section(pk)
+            found = {
+                employee.pk: employee
+                for employee in Employee.objects.select_related('department', 'section').filter(
+                    pk__in=employee_ids, is_deleted=False, is_active=True,
+                )
+            }
+            if len(found) != len(employee_ids):
+                raise ValidationError({'detail': 'Баъзи ходимлар топилмади ёки фаол эмас. Рўйхатни янгилаб, қайта уриниб кўринг.'})
+
+            added = 0
+            for employee_id in employee_ids:
+                employee = found[employee_id]
+                if employee.section_id == section.pk:
+                    continue
+                assign_employee_to_section(employee, section)
+                added += 1
+            if not added:
+                raise ValidationError({'detail': 'Танланган ходимлар аллақачон шу бўлимда.'})
+
+        return Response(
+            section_employees_payload(section, section_employees(section), request, f'{added} та ходим бўлимга қўшилди'),
             status=status.HTTP_201_CREATED,
         )
 

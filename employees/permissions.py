@@ -86,7 +86,7 @@ class IsAdminOrHrRole(BasePermission):
 
 
 class AdminOrHrOrTimekeeperRead(BasePermission):
-    """Ходимлар рўйхати: администратор ва HR — тўлиқ; табелчи — фақат ўқиш (GET), ўз цехи доирасида."""
+    """«Ходимлар рўйхати» (барча ходимлар): администратор ва HR — тўлиқ; табелчи — фақат ўқиш (GET)."""
 
     message = 'Сизда ушбу бўлимга кириш ҳуқуқи йўқ.'
 
@@ -94,6 +94,19 @@ class AdminOrHrOrTimekeeperRead(BasePermission):
         if is_admin_or_hr(request.user):
             return True
         return request.method in SAFE_METHODS and timekeeper_department(request.user) is not None
+
+
+class AdminOrHrOrTimekeeperManage(BasePermission):
+    """Ходимларни бошқариш (ўқиш, қўшиш, ўзгартириш, ўчириш): администратор ва HR — ҳаммасини; табелчи — фақат ўз цехи.
+
+    Табелчининг доираси ва чекловлари (бошқа цех йўқ, ҳисоб/рол ўзгармайди, администратор/HR ходими тегилмайди) —
+    queryset ва TimekeeperManagedEmployeeSerializer да.
+    """
+
+    message = 'Сизда ушбу бўлимга кириш ҳуқуқи йўқ.'
+
+    def has_permission(self, request, view):
+        return is_admin_or_hr(request.user) or timekeeper_department(request.user) is not None
 
 
 class AdminOrHrCanWrite(BasePermission):
@@ -108,6 +121,18 @@ class AdminOrHrCanWrite(BasePermission):
         if request.method in SAFE_METHODS or is_service_api_request(request):
             return True
         return is_admin_or_hr(request.user)
+
+
+class AdminOrHrOrTimekeeperCanWrite(AdminOrHrCanWrite):
+    """Ходимлар API си: ўқиш — ҳамма, ёзиш — администратор, HR, сервис калити ва (ўз цехи доирасида) табелчи.
+
+    Фақат ходим қўшиш/ўзгартириш API лари учун: цех ва бўлим API ларида AdminOrHrCanWrite қолади.
+    """
+
+    def has_permission(self, request, view):
+        if super().has_permission(request, view):
+            return True
+        return timekeeper_department(request.user) is not None
 
 
 class AdminOrHrOrServiceKey(BasePermission):
