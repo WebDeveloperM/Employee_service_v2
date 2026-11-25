@@ -10,8 +10,9 @@ from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.validators import UniqueValidator
 
-from .models import Department, Employee, EmployeeCategory, PositionCategory, Section, StaffPosition, UserProfile, WorkSchedule, GRADE_RE, ROLE_ADMIN, ROLE_CHOICES, ROLE_HR, ROLE_TIMEKEEPER, ROLE_USER, WORK_STATUS_CHOICES, Timekeeper
+from .models import Department, Employee, EmployeeCategory, PositionCategory, Section, StaffPosition, UserProfile, WorkSchedule, GRADE_RE, STATUS_WORKING, ROLE_ADMIN, ROLE_CHOICES, ROLE_HR, ROLE_TIMEKEEPER, ROLE_USER, WORK_STATUS_CHOICES, Timekeeper
 from .permissions import is_admin, is_service_api_request, timekeeper_department
+from .replacements import ReplacementError, clear_replacement, resolve_substitute, set_replacement
 from .sections_tree import MAX_SECTION_DEPTH, SectionIndex
 from .staff import collect_staff_stats, is_no_staff_section_name, plain_number, vacant_places
 
@@ -646,6 +647,9 @@ class EmployeeSerializer(serializers.ModelSerializer):
         choices=WORK_STATUS_CHOICES, required=False, allow_null=True, allow_blank=True,
         error_messages={'invalid_choice': 'Номаълум ҳолат танланган.'},
     )
+    # Ўринбосар (ходим таътил/сафар/касаллик/… ҳолатида бўлганда унинг ўрнига ишлайдиган, шу цехдаги ходим): фақат ёзиш.
+    # Юборилмаса — ўзгармайди; бўш/null — олиб ташланади. Ходим «Фаол» бўлса, ўринбосар керак эмас ва ёзув ўчади.
+    replacement_employee_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     # Иш тартиби: ўқишда {id, name}, ёзишда work_schedule_id (бўш/null — танланмаган).
     work_schedule = WorkScheduleSerializer(read_only=True)
     work_schedule_id = serializers.PrimaryKeyRelatedField(
@@ -700,6 +704,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'slug',
             'is_active',
             'work_status',
+            'replacement_employee_id',
             'work_schedule',
             'work_schedule_id',
             'is_deleted',
@@ -732,6 +737,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
         section = attrs.get('section', getattr(self.instance, 'section', None))
         if department and section and section.department_id != department.id:
             raise serializers.ValidationError({'section_id': 'Бўлим танланган цехга тегишли эмас.'})
+        self._replacement_change = self._resolve_replacement_change(attrs, is_active, department)
 
         password = attrs.get('password', '')
         password_confirm = attrs.get('password_confirm', '')
@@ -777,6 +783,33 @@ class EmployeeSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({'login': 'Бундай логинли фойдаланувчи аллақачон мавжуд.'})
 
         return attrs
+
+    def _resolve_replacement_change(self, attrs, is_active, department):
+        """`replacement_employee_id` ни attrs дан олиб, ('clear', None) / ('set', ходим) / None (ўзгармайди) қайтаради."""
+        if 'replacement_employee_id' not in attrs:
+            return None
+        substitute_id = attrs.pop('replacement_employee_id')
+        if substitute_id is None:
+            return ('clear', None)
+        if self.instance is None:
+            raise serializers.ValidationError({'replacement_employee_id': 'Ўринбосарни ходим яратилгандан кейин тайинланг.'})
+        work_status = attrs.get('work_status', self.instance.work_status)
+        if is_active and not work_status:
+            return ('clear', None)   # ходим «Фаол»: ўрни бўшамайди, ўринбосар керак эмас
+        try:
+            return ('set', resolve_substitute(substitute_id, absent=self.instance, department=department))
+        except ReplacementError as error:
+            raise serializers.ValidationError({'replacement_employee_id': str(error)})
+
+    def _apply_replacement(self, employee):
+        """Ходим «Фаол» бўлса ўринбосар ёзуви ўчади; акс ҳолда танлов (бор бўлса) сақланади ёки олиб ташланади."""
+        change = getattr(self, '_replacement_change', None)
+        if employee.status_key == STATUS_WORKING or (change is not None and change[0] == 'clear'):
+            clear_replacement(employee)
+        elif change is not None:
+            request = self.context.get('request')
+            assigned_by = getattr(request, 'user', None)
+            set_replacement(employee, change[1], assigned_by if getattr(assigned_by, 'pk', None) else None)
 
     def _clone_uploaded_image(self, uploaded_file, fallback_name):
         if uploaded_file in (None, serializers.empty):
@@ -890,6 +923,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
         employee = super().update(instance, validated_data)
         if base_image is not serializers.empty and employee.user_id:
             self._sync_profile_face_image(employee.user.profile, base_image)
+        self._apply_replacement(employee)
         return employee
 
     def _resolve_department_section(self, department, section, department_name, section_name, boss_full_name):

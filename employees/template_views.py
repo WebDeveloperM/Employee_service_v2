@@ -18,13 +18,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.pagination import PageNumberPagination
 
-from .models import Department, Employee, EmployeeCategory, EmployeeCertificate, PositionCategory, Section, Timekeeper, UserProfile, WorkSchedule, ROLE_ADMIN, ROLE_HR, ROLE_TIMEKEEPER, ROLE_USER
+from .models import Department, Employee, EmployeeCategory, EmployeeCertificate, EmployeeReplacement, PositionCategory, Section, Timekeeper, UserProfile, WorkSchedule, ROLE_ADMIN, ROLE_HR, ROLE_TIMEKEEPER, ROLE_USER
 from .ordering import order_sections_by_code
 from .permissions import (
     AdminOrHrCanWrite, AdminOrHrOrTimekeeperManage, AdminOrHrOrTimekeeperRead, IsAdminOrHrRole, is_admin, is_admin_or_hr,
     timekeeper_department,
 )
 from .pki import generate_employee_pfx
+from .replacements import CANDIDATE_LIMIT, substitute_candidates
 from .sections_tree import SectionIndex, delete_section_or_400, order_depth_first
 from .serializers import (
     DepartmentSerializer, EmployeeCategorySerializer, EmployeeSerializer, PositionCategorySerializer,
@@ -502,6 +503,8 @@ class EmployeeDetailTemplateView(generics.RetrieveUpdateDestroyAPIView):
         })
 
     def destroy(self, request, *args, **kwargs):
+        if not is_admin_or_hr(request.user):
+            raise PermissionDenied('Табелчи ходимни ўчира олмайди.')   # табелчи ўз цехи ходимларини қўшади ва таҳрирлайди, лекин ўчирмайди
         instance = self.get_object()
         linked_user = instance.user
         linked_profile = getattr(linked_user, 'profile', None) if linked_user is not None else None
@@ -510,8 +513,6 @@ class EmployeeDetailTemplateView(generics.RetrieveUpdateDestroyAPIView):
             linked_user.is_superuser or (linked_profile is not None and linked_profile.role in {ROLE_ADMIN, ROLE_HR})
         ):
             raise PermissionDenied('Администратор ёки HR менежер ходимини фақат администратор ўчира олади.')
-        if linked_user is not None and linked_user.pk == request.user.pk and not is_admin_or_hr(request.user):
-            raise PermissionDenied('Ўз ходим карточкангизни ўчириб бўлмайди.')   # табелчи ўз ҳисобини ўчириб қўймасин
 
         with transaction.atomic():
             if instance.base_image:
@@ -526,6 +527,46 @@ class EmployeeDetailTemplateView(generics.RetrieveUpdateDestroyAPIView):
             'success': True,
             'message': 'Ходим муваффақиятли ўчирилди'
         }, status=status.HTTP_204_NO_CONTENT)
+
+
+class EmployeeReplacementCandidatesTemplateView(APIView):
+    """Ходимнинг «Ҳолати» ўзгартирилганда очиладиган ойна учун: унинг ўрнига ишлай оладиган, шу цехдаги ходимлар.
+
+    `department_id` — формада танланган цех (ходим бошқа цехга ўтказилаётган бўлиши мумкин); берилмаса — ходимнинг цехи.
+    Табелчи учун доим унинг ўз цехи."""
+
+    permission_classes = [IsAuthenticated, AdminOrHrOrTimekeeperManage]
+
+    def get(self, request, pk, *args, **kwargs):
+        employees = Employee.objects.select_related('department').filter(is_deleted=False)
+        own_department = None
+        if not is_admin_or_hr(request.user):
+            own_department = timekeeper_department(request.user)
+            employees = employees.filter(department=own_department) if own_department is not None else employees.none()
+        employee = generics.get_object_or_404(employees, pk=pk)
+
+        department = employee.department
+        requested = request.query_params.get('department_id', '').strip()
+        if own_department is None and requested.isdigit():
+            department = Department.objects.filter(pk=int(requested)).first()
+        if department is None:
+            return Response({'department': None, 'data': [], 'truncated': False, 'current': None})
+
+        found = list(substitute_candidates(department.pk, exclude_pk=employee.pk)[:CANDIDATE_LIMIT + 1])
+        record = EmployeeReplacement.objects.filter(employee=employee).first()
+        return Response({
+            'department': {'id': department.pk, 'name': department.name},
+            'data': [{
+                'id': person.pk,
+                'full_name': str(person),
+                'tabel_number': person.tabel_number,
+                'position': person.position,
+                'section_name': person.section.name if person.section_id else '',
+                'base_image_url': person.base_image.url if person.base_image else None,
+            } for person in found[:CANDIDATE_LIMIT]],
+            'truncated': len(found) > CANDIDATE_LIMIT,
+            'current': record.substitute_id if record is not None else None,
+        })
 
 
 class EmployeeStatsTemplateView(APIView):

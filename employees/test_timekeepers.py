@@ -377,6 +377,9 @@ class TimekeeperAccessScopeTests(TimekeeperTestBase):
         self.assertIn('Амаллар</th>', html)
         for forbidden in ('id="openImportModalButton"', 'id="exportButton"'):
             self.assertNotIn(forbidden, html)
+        self.assertIn('id="treeFilterControl" class="relative hidden"', html)   # цех/бўлим бўйича қидириш чизилмайди
+        self.assertIn('/edit/" title="Таҳрирлаш"', html)
+        self.assertIn("${DEPARTMENT_LIST ? '' : `<a class=\"${ACTION_BUTTON} border-red-300", html)   # ўчириш тугмаси «Цех ходимлари»да чизилмайди
 
     def test_admin_and_hr_do_not_use_the_department_page_and_keep_the_full_list(self):
         self.assertEqual(self.admin_client.get('/department-employees/').status_code, 302)
@@ -384,6 +387,7 @@ class TimekeeperAccessScopeTests(TimekeeperTestBase):
         html = self.admin_client.get('/employees/').content.decode()
 
         self.assertIn("const LIST_MODE = 'full';", html)
+        self.assertIn('id="treeFilterControl" class="relative"', html)
         self.assertIn('const TIMEKEEPER_DEPARTMENT_ID = null;', html)
         for expected in ('id="openImportModalButton"', 'id="exportButton"', 'href="/employees/create/"', 'Амаллар</th>'):
             self.assertIn(expected, html)
@@ -474,7 +478,7 @@ class TimekeeperAccessScopeTests(TimekeeperTestBase):
 
 
 class TimekeeperManagedEmployeesTests(TimekeeperTestBase):
-    """«Цех ходимлари»: табелчи ўз цехи ходимларини қўшади, кўради, ўзгартиради ва ўчиради — чекловлар билан."""
+    """«Цех ходимлари»: табелчи ўз цехи ходимларини қўшади, кўради ва ўзгартиради — чекловлар билан; ўчира олмайди."""
 
     def setUp(self):
         super().setUp()
@@ -552,20 +556,30 @@ class TimekeeperManagedEmployeesTests(TimekeeperTestBase):
         self.assertEqual(self.timekeeper_client.get(f'/api/template/employees/{self.bobur.id}/').status_code, 200)
         self.assertEqual(self.timekeeper_client.get(f'/api/template/employees/{self.sardor.id}/').status_code, 404)
 
-    # --- ўчириш ---
-    def test_delete_removes_an_employee_of_the_department(self):
-        response = self.timekeeper_client.delete(f'/api/template/employees/{self.bobur.id}/')
+    # --- ўчириш: табелчига берилмайди ---
+    def test_a_timekeeper_cannot_delete_anyone(self):
+        everyone = [self.bobur, self.sardor, self.boss, self.ali]   # ўз цехи ходими, бошқа цех, администратор ҳисоби ва ўзи
+
+        for employee in everyone:
+            with self.subTest(employee=employee.tabel_number):
+                response = self.timekeeper_client.delete(f'/api/template/employees/{employee.id}/')
+                self.assertEqual(response.status_code, 403, response.content)
+
+        self.assertEqual(Employee.objects.filter(pk__in=[e.pk for e in everyone]).count(), 4)
+        self.assertTrue(User.objects.filter(username__in=['bobur_login', 'boss_admin', 'ali_login']).count() == 3)
+
+    def test_the_employee_list_api_has_no_delete_for_a_timekeeper(self):
+        for url in ('/api/template/employees/', '/api/template/directory/', f'/api/employees/{self.bobur.slug}/'):
+            with self.subTest(url=url):
+                self.assertIn(self.timekeeper_client.delete(url).status_code, (403, 405))
+        self.assertTrue(Employee.objects.filter(pk=self.bobur.pk).exists())
+
+    def test_admin_still_deletes_an_employee_of_the_department(self):
+        response = self.admin_client.delete(f'/api/template/employees/{self.bobur.id}/')
 
         self.assertEqual(response.status_code, 204)
         self.assertFalse(Employee.objects.filter(pk=self.bobur.pk).exists())
         self.assertFalse(User.objects.filter(username='bobur_login').exists())
-
-    def test_delete_is_refused_for_another_department_a_protected_account_and_himself(self):
-        self.assertEqual(self.timekeeper_client.delete(f'/api/template/employees/{self.sardor.id}/').status_code, 404)
-        self.assertEqual(self.timekeeper_client.delete(f'/api/template/employees/{self.boss.id}/').status_code, 403)
-        self.assertEqual(self.timekeeper_client.delete(f'/api/template/employees/{self.ali.id}/').status_code, 403)
-        self.assertEqual(Employee.objects.filter(pk__in=[self.sardor.pk, self.boss.pk, self.ali.pk]).count(), 3)
-        self.assertTrue(User.objects.filter(username='ali_login').exists())
 
     # --- саҳифалар ---
     def test_create_page_offers_only_the_own_department_and_no_dictionary_buttons(self):
@@ -575,6 +589,8 @@ class TimekeeperManagedEmployeesTests(TimekeeperTestBase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(department_option_ids(html), [self.dept_a.id])
         self.assertIn('Ходим сизнинг цехингизга қўшилади', html)
+        photo_start = html.index('id="base_image"')
+        self.assertNotIn('required', html[html.rfind('<input', 0, photo_start): html.index('>', photo_start) + 1])   # фотосурат ихтиёрий
         for hidden in ('id="openDepartmentInlineModalButton"', 'id="openSectionInlineModalButton"', 'id="openPositionCategoryModalButton"',
                        'id="openWorkScheduleModalButton"', 'id="openEmployeeCategoryModalButton"'):
             self.assertNotIn(hidden, html)
@@ -588,7 +604,7 @@ class TimekeeperManagedEmployeesTests(TimekeeperTestBase):
         self.assertNotIn('Ходим сизнинг цехингизга қўшилади', html)
 
     def test_card_pages_of_the_own_department_open_without_account_controls(self):
-        for suffix in ('', 'edit/', 'delete/'):
+        for suffix in ('', 'edit/'):
             with self.subTest(page=suffix):
                 self.assertEqual(self.timekeeper_client.get(f'/employees/{self.bobur.slug}/{suffix}').status_code, 200)
 
@@ -607,10 +623,18 @@ class TimekeeperManagedEmployeesTests(TimekeeperTestBase):
                     response = self.timekeeper_client.get(f'/employees/{owner.slug}/{suffix}', follow=True)
                     self.assertEqual(response.redirect_chain[-1][0], '/department-employees/')
 
-    def test_delete_page_returns_to_the_department_page(self):
-        html = self.timekeeper_client.get(f'/employees/{self.bobur.slug}/delete/').content.decode()
+    def test_delete_page_is_closed_to_a_timekeeper_even_for_the_own_department(self):
+        response = self.timekeeper_client.get(f'/employees/{self.bobur.slug}/delete/', follow=True)
 
-        self.assertIn("window.location.href = '/department-employees/';", html)
+        self.assertEqual(response.redirect_chain[-1][0], '/department-employees/')
+        self.assertNotIn('Ходимни ўчириш', response.content.decode())
+        self.assertEqual(self.admin_client.get(f'/employees/{self.bobur.slug}/delete/').status_code, 200)
+
+    def test_card_page_has_no_delete_link_for_a_timekeeper_but_admin_keeps_it(self):
+        link = f'href="/employees/{self.bobur.slug}/delete/"'
+
+        self.assertNotIn(link, self.timekeeper_client.get(f'/employees/{self.bobur.slug}/').content.decode())
+        self.assertIn(link, self.admin_client.get(f'/employees/{self.bobur.slug}/').content.decode())
 
 
 class TimekeeperRoleConsistencyTests(TimekeeperTestBase):

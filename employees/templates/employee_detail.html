@@ -25,11 +25,13 @@
                     <i class="fas fa-pen"></i>
                     Таҳрирлаш
                 </a>
+                {% if not timekeeper_scope %}
                 <a href="/employees/{{ employee.slug }}/delete/"
                     class="inline-flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-5 py-3 text-sm font-bold text-red-600">
                     <i class="fas fa-trash"></i>
                     Ўчириш
                 </a>
+                {% endif %}
                 {% endif %}
             </div>
         </div>
@@ -154,7 +156,7 @@
                             </button>
                             {% endif %}
                         </div>
-                        <select id="department_id" class="table-filter" onchange="refreshSectionOptions(); syncClotheSizeVisibility()" {% if page_mode == 'view' or can_edit_sizes_only or timekeeper_scope %}disabled{% endif %}>
+                        <select id="department_id" class="table-filter" onchange="refreshSectionOptions(); syncClotheSizeVisibility(); onReplacementDepartmentChange()" {% if page_mode == 'view' or can_edit_sizes_only or timekeeper_scope %}disabled{% endif %}>
                             <option value="">Цехни танланг</option>
                             {% for department in departments %}
                             <option value="{{ department.id }}" data-boss-full-name="{{ department.boss_full_name|default_if_none:'' }}" data-sort-order="{{ department.sort_order }}" {% if employee.department_id == department.id %}selected{% endif %}>{{ department.name }}</option>
@@ -190,11 +192,24 @@
                     <div>
                         <div class="mb-2 flex h-8 items-center"><label class="block text-sm font-bold text-slate-700">Ҳолати</label></div>
                         {# Фаол + иш ҳолатлари (таътил, хизмат сафари, касаллик, бола парвариши) + Фаол эмас. Сақлашда is_active ва work_status га ажратилади. #}
-                        <select id="employee_status" class="table-filter" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% endif %}>
+                        <select id="employee_status" class="table-filter" {% if page_mode == 'view' or can_edit_sizes_only %}disabled{% else %}onchange="onEmployeeStatusChange()"{% endif %}>
                             {% for value, label in status_choices %}
                             <option value="{{ value }}" {% if value == employee.status_key %}selected{% endif %}>{{ label }}</option>
                             {% endfor %}
                         </select>
+                        {# Ўринбосар: «Фаол»дан бошқа ҳолат танланса, ўрнига ишлайдиган ходимни шу цехдан танлаш ойнаси очилади (replacementModal). #}
+                        {% with replacement=employee.replacement %}
+                        <div id="replacementSummary" class="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3{% if not replacement %} hidden{% endif %}">
+                            <p class="text-xs font-bold uppercase tracking-wider text-amber-700">Ўрнига ишлайди</p>
+                            <p id="replacementSummaryName" class="mt-1 text-sm font-bold text-slate-900">{% if replacement %}{{ replacement.substitute }} · {{ replacement.substitute.tabel_number }}{% endif %}</p>
+                            {% if page_mode == 'edit' and not can_edit_sizes_only %}
+                            <div class="mt-2 flex gap-4 text-xs font-bold">
+                                <button type="button" onclick="openReplacementModal()" class="text-[var(--info)] hover:underline">Ўзгартириш</button>
+                                <button type="button" onclick="removeReplacement()" class="text-red-500 hover:underline">Олиб ташлаш</button>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endwith %}
                     </div>
                     <div>
                         <div class="mb-2 flex h-8 items-center justify-between gap-3">
@@ -464,6 +479,43 @@
                     <button type="submit" id="inlineSectionSaveButton" class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white">Сақлаш</button>
                 </div>
             </form>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if page_mode == 'edit' and not can_edit_sizes_only %}
+    <div id="replacementModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/75 px-4"
+        onclick="if (event.target === this) closeReplacementModal()">
+        <div class="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-[28px] bg-white p-6 shadow-2xl">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <h3 class="font-display text-2xl font-bold text-slate-900">Ўринбосар тайинлаш</h3>
+                    <p class="mt-1 text-sm text-slate-500">
+                        <span class="font-bold text-slate-700">{{ employee }}</span> — <span id="replacementStatusText" class="font-bold text-amber-700"></span>.
+                        Унинг ўрнига ишлайдиган ходимни ўз цехидан танланг.
+                    </p>
+                    <p id="replacementDepartment" class="mt-1 text-xs font-bold uppercase tracking-wider text-slate-400"></p>
+                </div>
+                <button type="button" onclick="closeReplacementModal()" class="rounded-xl border border-slate-200 px-3 py-2 text-slate-500 hover:bg-slate-50" aria-label="Ёпиш">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div class="mt-4 flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2.5 focus-within:border-[var(--primary)]">
+                <i class="fas fa-magnifying-glass text-slate-400"></i>
+                <input id="replacementSearch" type="text" placeholder="Табель рақами ёки Ф.И.Ш. бўйича қидириш..."
+                    autocomplete="off" spellcheck="false" oninput="renderReplacementList()"
+                    class="w-full border-0 bg-transparent p-0 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none">
+            </div>
+            <p id="replacementCount" class="mt-2 text-xs font-semibold text-slate-500"></p>
+            <div id="replacementList" class="mt-2 min-h-[220px] flex-1 space-y-1.5 overflow-y-auto pr-1"></div>
+
+            <div class="mt-5 flex flex-wrap justify-end gap-3">
+                <button type="button" id="replacementSkipButton" onclick="skipReplacement()"
+                    class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50">Ўринбосарсиз давом этиш</button>
+                <button type="button" id="replacementConfirmButton" onclick="confirmReplacement()" disabled
+                    class="rounded-xl bg-[var(--info)] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">Тайинлаш</button>
+            </div>
         </div>
     </div>
     {% endif %}
@@ -813,6 +865,189 @@
         }
     }
 
+    // ---- Ўринбосар ----
+    // «Ҳолати» «Фаол»дан бошқа қийматга ўзгартирилса (таътил, сафар, касаллик, бола парвариши, св.шт., фаол эмас),
+    // ходим ўрнига ишлайдиган ходимни шу цехдан танлаш ойнаси очилади. Танлов «Сақлаш» босилгандагина ёзилади.
+    const replacementState = {
+        id: '{{ employee.replacement.substitute_id|default_if_none:""|escapejs }}',           // тайинланган ёки танланган ўринбосар
+        label: '{% if employee.replacement %}{{ employee.replacement.substitute|escapejs }} · {{ employee.replacement.substitute.tabel_number|escapejs }}{% endif %}',
+        departmentId: '{{ employee.department_id|default_if_none:""|escapejs }}',        // ўринбосар қайси цех учун танланган
+        touched: false,                                                                  // шу саҳифада ўзгартирилгандагина серверга юборилади
+    };
+    let replacementCandidates = [];
+    let replacementPick = '';
+
+    function replacementEscape(value) {
+        return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    }
+
+    function selectedStatusLabel() {
+        const select = document.getElementById('employee_status');
+        return select.options[select.selectedIndex]?.textContent.trim() || '';
+    }
+
+    function syncReplacementSummary() {
+        const box = document.getElementById('replacementSummary');
+        if (!box) {
+            return;
+        }
+        const working = document.getElementById('employee_status').value === 'working';
+        document.getElementById('replacementSummaryName').textContent = replacementState.label;
+        box.classList.toggle('hidden', working || !replacementState.id);
+    }
+
+    function onEmployeeStatusChange() {
+        syncReplacementSummary();
+        if (document.getElementById('employee_status').value !== 'working') {
+            openReplacementModal();
+        }
+    }
+
+    function onReplacementDepartmentChange() {
+        // Ўринбосар ходим билан бир цехдан бўлиши керак: цех ўзгарса, эски цехдан танланган ўринбосар бекор бўлади.
+        const departmentId = document.getElementById('department_id').value;
+        if (replacementState.id && String(replacementState.departmentId) !== String(departmentId)) {
+            Object.assign(replacementState, { id: '', label: '', touched: true });
+            syncReplacementSummary();
+            showToast('Цех ўзгарди: ўринбосар танлови бекор қилинди, керак бўлса қайта танланг', 'error');
+        }
+    }
+
+    async function openReplacementModal() {
+        const modal = document.getElementById('replacementModal');
+        if (!modal || pageMode !== 'edit' || canEditSizesOnly) {
+            return;
+        }
+        replacementPick = replacementState.id || '';
+        document.getElementById('replacementStatusText').textContent = selectedStatusLabel();
+        document.getElementById('replacementSearch').value = '';
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        await loadReplacementCandidates();
+        document.getElementById('replacementSearch').focus();
+    }
+
+    function closeReplacementModal() {
+        const modal = document.getElementById('replacementModal');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+    }
+
+    async function loadReplacementCandidates() {
+        const list = document.getElementById('replacementList');
+        const departmentId = document.getElementById('department_id').value;
+        replacementCandidates = [];
+        document.getElementById('replacementDepartment').textContent = '';
+        document.getElementById('replacementCount').textContent = '';
+        updateReplacementConfirm();
+        if (!departmentId) {
+            list.innerHTML = '<p class="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm font-semibold text-slate-500">Ўринбосар танлаш учун аввал ходимнинг цехини танланг.</p>';
+            return;
+        }
+        list.innerHTML = '<p class="px-4 py-8 text-center text-sm font-semibold text-slate-500">Юкланмоқда...</p>';
+        try {
+            const response = await fetch(`${API_BASE}/template/employees/${employeeId}/replacement-candidates/?department_id=${encodeURIComponent(departmentId)}`, {
+                headers: { 'Accept': 'application/json' }, credentials: 'same-origin',
+            });
+            const payload = await response.json().catch(() => null);
+            if (!response.ok) {
+                throw new Error(extractApiErrorMessage(payload) || 'Ходимлар рўйхатини олиб бўлмади');
+            }
+            replacementCandidates = payload.data || [];
+            document.getElementById('replacementDepartment').textContent = payload.department ? `Цех: ${payload.department.name}` : '';
+            renderReplacementList(payload.truncated);
+        } catch (error) {
+            list.innerHTML = `<p class="rounded-xl border border-dashed border-red-200 px-4 py-8 text-center text-sm font-semibold text-red-600">${replacementEscape(error.message)}</p>`;
+        }
+    }
+
+    function renderReplacementList(truncated) {
+        const list = document.getElementById('replacementList');
+        const query = document.getElementById('replacementSearch').value.trim().toLowerCase();
+        const rank = person => {
+            const tabel = String(person.tabel_number || '').toLowerCase();
+            return tabel === query ? 0 : tabel.startsWith(query) ? 1 : 2;
+        };
+        const visible = replacementCandidates
+            .filter(person => !query || String(person.tabel_number || '').toLowerCase().includes(query) || String(person.full_name || '').toLowerCase().includes(query))
+            .sort((a, b) => (query ? rank(a) - rank(b) : 0));
+        document.getElementById('replacementCount').textContent = replacementCandidates.length
+            ? `Цехда ${replacementCandidates.length} та ходим${query ? ` · топилди: ${visible.length}` : ''}${truncated === true ? ' · рўйхат қисқартирилган, қидирув ишлатинг' : ''}`
+            : '';
+        if (!visible.length) {
+            list.innerHTML = `<p class="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm font-semibold text-slate-500">${replacementCandidates.length ? 'Ҳеч ким топилмади.' : 'Бу цехда ўринбосар бўла оладиган бошқа ходим йўқ.'}</p>`;
+            updateReplacementConfirm();
+            return;
+        }
+        list.innerHTML = visible.map(person => {
+            const picked = String(person.id) === String(replacementPick);
+            const photo = person.base_image_url
+                ? `<img src="${replacementEscape(person.base_image_url)}" alt="" class="h-10 w-10 shrink-0 rounded-lg object-cover">`
+                : '<span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-400"><i class="fas fa-user"></i></span>';
+            const details = [person.tabel_number, person.position, person.section_name].filter(Boolean).join(' · ');
+            return `
+                <label class="flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 transition ${picked ? 'border-[var(--info)] bg-blue-50' : 'border-slate-200 hover:bg-slate-50'}">
+                    <input type="radio" name="replacementPick" value="${replacementEscape(person.id)}" ${picked ? 'checked' : ''} onchange="pickReplacement(this.value)" class="h-4 w-4 shrink-0">
+                    ${photo}
+                    <span class="min-w-0 flex-1">
+                        <span class="block truncate text-sm font-bold text-slate-900">${replacementEscape(person.full_name)}</span>
+                        <span class="block truncate text-xs text-slate-500">${replacementEscape(details)}</span>
+                    </span>
+                </label>`;
+        }).join('');
+        updateReplacementConfirm();
+    }
+
+    function pickReplacement(value) {
+        replacementPick = String(value);
+        renderReplacementList();
+    }
+
+    function updateReplacementConfirm() {
+        const button = document.getElementById('replacementConfirmButton');
+        if (button) {
+            button.disabled = !replacementCandidates.some(person => String(person.id) === String(replacementPick));
+        }
+    }
+
+    function confirmReplacement() {
+        const person = replacementCandidates.find(item => String(item.id) === String(replacementPick));
+        if (!person) {
+            return;
+        }
+        Object.assign(replacementState, {
+            id: String(person.id),
+            label: `${person.full_name} · ${person.tabel_number}`,
+            departmentId: document.getElementById('department_id').value,
+            touched: true,
+        });
+        syncReplacementSummary();
+        closeReplacementModal();
+    }
+
+    function removeReplacement() {
+        Object.assign(replacementState, { id: '', label: '', touched: true });
+        syncReplacementSummary();
+    }
+
+    function skipReplacement() {
+        removeReplacement();   // «Ўринбосарсиз»: олдин танланган бўлса, у ҳам олиб ташланади
+        closeReplacementModal();
+    }
+
+    function replacementValueForSave() {
+        // null — серверга юборилмайди (ўзгармайди); '' — олиб ташлаш; бошқача — ўринбосар ID си.
+        return replacementState.touched ? replacementState.id : null;
+    }
+
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+            closeReplacementModal();
+        }
+    });
+
     async function saveEmployeePage(event) {
         event.preventDefault();
         if (pageMode !== 'edit') {
@@ -847,6 +1082,10 @@
         const employeeStatus = document.getElementById('employee_status').value;
         formData.append('is_active', employeeStatus !== 'inactive');
         formData.append('work_status', ['inactive', 'working'].includes(employeeStatus) ? '' : employeeStatus);
+        const replacementValue = employeeStatus === 'working' ? null : replacementValueForSave();   // «Фаол» ходимга ўринбосар керак эмас: сервер ёзувни ўчиради
+        if (replacementValue !== null) {
+            formData.append('replacement_employee_id', replacementValue);
+        }
 
         const faceIdCheckoutField = document.getElementById('requires_face_id_checkout');
         if (faceIdCheckoutField) {

@@ -394,3 +394,27 @@ class Timekeeper(models.Model):
 
     def __str__(self):
         return f'{self.department} — {self.employee}'
+
+
+class EmployeeReplacement(models.Model):
+    """Ўринбосар: ходим вақтинча ишда бўлмаганда (таътил, хизмат сафари, касаллик, бола парвариши, фаол эмас)
+    унинг ўрнига ишлайдиган, шу цехдаги ходим. Ходим яна «Фаол» ҳолатига қайтса, ёзув ўчади (employees/replacements.py).
+
+    Ходимга биттагина ўринбосар тайинланади; битта ходим бир нечта ходимнинг ўрнига ишлаши мумкин.
+    """
+
+    employee = models.OneToOneField(Employee, on_delete=models.CASCADE, related_name='replacement', verbose_name='Ходим (ўрни бўшаган)')
+    substitute = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='replacing', verbose_name='Ўринбосар')
+    assigned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='+', verbose_name='Тайинлаган')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Тайинланган')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Янгиланган')
+
+    class Meta:
+        verbose_name = 'Ўринбосар'
+        verbose_name_plural = 'Ўринбосарлар'
+        constraints = [
+            models.CheckConstraint(condition=~models.Q(employee=models.F('substitute')), name='employee_replacement_not_self'),
+        ]
+
+    def __str__(self):
+        return f'{self.employee} → {self.substitute}'

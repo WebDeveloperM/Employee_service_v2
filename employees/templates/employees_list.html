@@ -38,7 +38,8 @@
         {% endif %}
     </div>
 
-    <div id="treeFilterControl" class="relative">
+    {# Табелчининг «Цех ходимлари» саҳифасида цех/бўлим бўйича қидириш йўқ: рўйхат ўзи фақат унинг цехи ходимларини қайтаради. #}
+    <div id="treeFilterControl" class="relative{% if list_mode == 'department' %} hidden{% endif %}">
         <div class="flex w-full items-center rounded-lg border border-slate-200 bg-white transition focus-within:border-emerald-400 hover:border-slate-300">
             <button id="treeFilterButton" type="button" onclick="toggleTreeFilterDropdown()"
                 class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-4 py-3.5 text-left text-base text-slate-800 focus:outline-none">
@@ -1373,7 +1374,7 @@
                     <div class="flex items-center justify-center gap-2">
                         <a class="${ACTION_BUTTON} border-[var(--primary)] text-[var(--primary)] hover:bg-[var(--primary-soft)]" href="/employees/${encodeURIComponent(employee.slug)}/" title="Кўриш"><i class="fas fa-eye"></i></a>
                         <a class="${ACTION_BUTTON} border-[var(--primary)] text-[var(--primary)] hover:bg-[var(--primary-soft)]" href="/employees/${encodeURIComponent(employee.slug)}/edit/" title="Таҳрирлаш"><i class="fas fa-pen"></i></a>
-                        <a class="${ACTION_BUTTON} border-red-300 text-red-500 hover:bg-red-50" href="/employees/${encodeURIComponent(employee.slug)}/delete/" title="Ўчириш"><i class="fas fa-trash"></i></a>
+                        ${DEPARTMENT_LIST ? '' : `<a class="${ACTION_BUTTON} border-red-300 text-red-500 hover:bg-red-50" href="/employees/${encodeURIComponent(employee.slug)}/delete/" title="Ўчириш"><i class="fas fa-trash"></i></a>`}
                     </div>
                 </td>`)}
             </tr>

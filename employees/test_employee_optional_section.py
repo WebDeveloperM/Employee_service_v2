@@ -119,6 +119,18 @@ class EmployeeSectionIsOptionalTests(TestCase):
         self.assertIn('Ишга қабул қилинган сана', label)
         self.assertNotIn('text-red-500', label)
 
+    def test_photo_is_optional_on_the_create_page_and_in_the_api(self):
+        web = Client(HTTP_HOST='192.168.101.6')
+        web.force_login(self.admin)
+
+        html = web.get('/employees/create/').content.decode()
+
+        input_start = html.index('id="base_image"')
+        self.assertNotIn('required', html[html.rfind('<input', 0, input_start): html.index('>', input_start) + 1])
+        self.assertNotIn("getElementById('base_image').setAttribute('required'", html)   # «Суратни ўчириш» уни қайта мажбурий қилмасин
+        self.assertEqual(self.api.post(CREATE_URL, self.payload('OPT-PH'), format='multipart').status_code, 201)
+        self.assertFalse(Employee.objects.get(tabel_number='OPT-PH').base_image)
+
     def test_pages_show_the_server_error_text_instead_of_a_generic_message(self):
         web = Client(HTTP_HOST='192.168.101.6')
         web.force_login(self.admin)

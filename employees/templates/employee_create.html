@@ -78,7 +78,7 @@
                     <h4 class="font-display text-lg font-bold text-slate-900">Фотосурат</h4>
                     <div class="mt-4">
                         <div class="flex items-center gap-3">
-                            <input type="file" id="base_image" accept="image/*" required class="table-filter flex-1">
+                            <input type="file" id="base_image" accept="image/*" class="table-filter flex-1">
                             <button type="button" onclick="openCamera()"
                                 class="rounded-xl bg-slate-100 px-3 py-2 text-sm font-bold text-slate-600 hover:bg-slate-200"
                                 title="Камерадан суратга олиш">
@@ -807,12 +807,6 @@
             document.getElementById('capturedImage').src = url;
             document.getElementById('capturedPreview').classList.remove('hidden');
 
-            const fileInput = document.getElementById('base_image');
-            fileInput.removeAttribute('required');
-            fileInput.classList.remove('border-red-500', 'ring-1', 'ring-red-500');
-            const msg = fileInput.closest('div').querySelector('.field-error');
-            if (msg) msg.remove();
-
             closeCamera();
         }, 'image/jpeg', 0.9);
     }
@@ -820,7 +814,6 @@
     function removeCapturedPhoto() {
         window._capturedBlob = null;
         document.getElementById('capturedPreview').classList.add('hidden');
-        document.getElementById('base_image').setAttribute('required', '');
     }
 </script>
 

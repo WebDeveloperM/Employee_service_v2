@@ -78,7 +78,7 @@
 
             showToast('Ходим муваффақиятли ўчирилди');
             window.setTimeout(() => {
-                window.location.href = '{% if timekeeper_scope %}/department-employees/{% else %}{% url 'employees-web' %}{% endif %}';
+                window.location.href = '{% url 'employees-web' %}';
             }, 300);
         } catch (error) {
             showToast(error.message, 'error');

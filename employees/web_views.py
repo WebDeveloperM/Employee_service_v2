@@ -352,7 +352,7 @@ def timekeeper_form_context(department):
 
 
 def render_timekeeper_card(request, slug, template_name, page_mode=None):
-    """Табелчи ўз цехи ходимининг карточкасини (кўриш, таҳрирлаш, ўчириш) очади. Бошқа цех ходими, администратор/HR
+    """Табелчи ўз цехи ходимининг карточкасини (кўриш, таҳрирлаш) очади. Бошқа цех ходими, администратор/HR
     ҳисобидаги ходим ёки цехи бўлмаган табелчи — ўз цех ходимлари рўйхатига қайтарилади."""
     department = timekeeper_department(request.user)
     if department is None:
@@ -582,8 +582,8 @@ class EmployeeDeleteWebView(AuthenticatedTemplateView):
     template_name = 'employee_delete.html'
 
     def get(self, request, slug, *args, **kwargs):
-        if is_timekeeper(request.user):
-            return render_timekeeper_card(request, slug, self.template_name)
+        if is_timekeeper(request.user):   # табелчи ходимларни ўчира олмайди
+            return HttpResponseRedirect('/department-employees/')
         denied = redirect_unless_admin_or_hr(request)
         if denied is not None:
             return denied
