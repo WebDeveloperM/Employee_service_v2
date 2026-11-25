@@ -10,6 +10,7 @@ Face ID эталони, TB интеграцияси) ўзгармайди — п
 import logging
 import os
 import tempfile
+from stat import S_IROTH
 
 from django.conf import settings
 from django.core.files.storage import default_storage
@@ -22,6 +23,9 @@ THUMB_PREFIX = 'thumbs'
 # Узун томони. Рўйхатдаги энг катта превью 64×80 CSS px: 2x экранда ҳам аниқ кўриниши учун 256 px.
 THUMB_SIZE = 256
 THUMB_QUALITY = 82
+# tempfile.mkstemp creates files as 0600 (owner only). nginx runs as another user and sends the thumbnail itself
+# (X-Accel-Redirect, media_views.py): with 0600 it answers 403 and every list photo is a broken image.
+THUMB_FILE_MODE = 0o644
 
 
 def thumbnail_name(original_name):
@@ -58,7 +62,10 @@ def ensure_thumbnail(original_name):
     except OSError:
         return None   # асл фото ўчирилган: эски превью ҳам берилмайди
     try:
-        if os.stat(thumb_path).st_mtime >= original_mtime:
+        thumb_stat = os.stat(thumb_path)
+        if thumb_stat.st_mtime >= original_mtime:
+            if not thumb_stat.st_mode & S_IROTH:
+                os.chmod(thumb_path, THUMB_FILE_MODE)   # made by an earlier build with mkstemp's 0600: heal it on first use
             return thumb_path
     except OSError:
         pass
@@ -86,6 +93,7 @@ def _render_thumbnail(original_path, thumb_path):
         try:
             with os.fdopen(handle, 'wb') as output:
                 image.save(output, 'JPEG', quality=THUMB_QUALITY, optimize=True, progressive=True)
+            os.chmod(temp_path, THUMB_FILE_MODE)
             os.replace(temp_path, thumb_path)
         except BaseException:
             try:

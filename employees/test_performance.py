@@ -9,8 +9,10 @@
 import os
 import re
 import shutil
+import stat
 import tempfile
 import time
+import unittest
 from io import BytesIO
 from unittest.mock import patch
 
@@ -121,6 +123,22 @@ class ThumbnailTests(TempMediaMixin, TestCase):
         os.remove(original)
         self.assertIsNone(ensure_thumbnail(employee.base_image.name))
         self.assertEqual(Client().get(self.thumb_path(employee)).status_code, 404)
+
+    @unittest.skipUnless(os.name == 'posix', 'файл рухсатлари фақат Linux/Unix да маъноли (Windows да ҳамма файл 666)')
+    def test_thumbnail_can_be_read_by_nginx_which_runs_as_another_user(self):
+        """tempfile.mkstemp файлни 0600 қилади: nginx (бошқа фойдаланувчи) X-Accel орқали уни ўқий олмай 403 берарди ва
+        рўйхатдаги барча расмлар «синган» кўринарди (Docker Desktop/Windows да ҳамма файл 777, шунинг учун у ерда сезилмайди)."""
+        employee = self.make_employee(5008)
+        path = ensure_thumbnail(employee.base_image.name)
+        self.assertEqual(stat.S_IMODE(os.stat(path).st_mode) & 0o044, 0o044)   # гуруҳ ва бошқалар ўқий олади
+
+    @unittest.skipUnless(os.name == 'posix', 'файл рухсатлари фақат Linux/Unix да маъноли')
+    def test_a_thumbnail_made_earlier_with_private_permissions_is_healed_on_first_use(self):
+        employee = self.make_employee(5009)
+        path = ensure_thumbnail(employee.base_image.name)
+        os.chmod(path, 0o600)   # сервердаги ҳозирги ҳолат
+        self.assertEqual(ensure_thumbnail(employee.base_image.name), path)
+        self.assertTrue(os.stat(path).st_mode & stat.S_IROTH)
 
     def test_not_an_image_falls_back_to_the_original_file(self):
         Employee.objects.create(first_name='A', last_name='B', tabel_number='5005')
@@ -329,6 +347,14 @@ class StaticAssetsTests(TestCase):
         self.assertRegex(html, r'^/static/app/app\.css\?v=[0-9a-f]{12}$')
         self.assertEqual(Template("{% load assets %}{% asset 'app/missing.css' %}").render(Context()), '/static/app/missing.css')
 
+    def test_bumping_the_asset_version_changes_every_url(self):
+        from .templatetags import assets
+        render = lambda: Template("{% load assets %}{% asset 'app/app.css' %}").render(Context())
+        before = render()
+        with patch.object(assets, 'ASSET_VERSION', 'other'):
+            self.assertNotEqual(render(), before)
+        self.assertEqual(render(), before)
+
     def test_list_pages_show_thumbnails_not_full_photos(self):
         employees = (TEMPLATES_DIR / 'employees_list.html').read_text(encoding='utf-8')
         self.assertIn('employee.base_image_thumb_url || fullPhoto', employees)
@@ -362,3 +388,18 @@ class InfrastructureSettingsTests(TestCase):
                 self.assertIn('gzip on;', conf)
                 self.assertIn('http2 on;', conf)
                 self.assertIn('ssl_session_cache shared:SSL:10m;', conf)
+
+    def test_a_missing_static_file_falls_back_to_django_and_errors_are_never_cached(self):
+        """nginx.standalone.conf: «Cache-Control ... always» 404 га ҳам 1 йиллик «immutable» ёпиштирарди — браузер бир марта
+        олинган 404 ни (?v= ўзгармагунча) йил давомида сақлаб, CSS оддий F5 билан ҳам тикланмасди."""
+        for name in ('nginx.standalone.conf', 'nginx.conf'):
+            conf = (settings.BASE_DIR / name).read_text(encoding='utf-8')
+            with self.subTest(conf=name):
+                static_block = conf[conf.index('location /static/ {'):conf.index('location /protected-media/ {')]
+                self.assertIn('add_header Cache-Control $static_cache_control;', static_block)   # «always» йўқ
+                self.assertNotIn('Cache-Control $static_cache_control always', conf)
+                self.assertIn('error_page 403 404 = @django;', static_block)   # nginx кўрмаса — Django (whitenoise) беради
+                # @django ва «location /» бир хил прокси созламаларига эга (бири ўзгарса, иккинчиси ҳам).
+                named = re.search(r'location @django \{(.*?)\n    \}', conf, re.S).group(1)
+                main = re.search(r'location / \{(.*?)\n    \}', conf, re.S).group(1)
+                self.assertEqual(named.strip(), main.strip())
