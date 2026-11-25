@@ -15,6 +15,7 @@ from .permissions import is_admin, is_service_api_request, timekeeper_department
 from .replacements import ReplacementError, clear_replacement, resolve_substitute, set_replacement
 from .sections_tree import MAX_SECTION_DEPTH, SectionIndex
 from .staff import collect_staff_stats, is_no_staff_section_name, plain_number, vacant_places
+from .thumbnails import thumbnail_url
 
 from django.contrib.auth.models import User as AuthUser
 
@@ -637,6 +638,8 @@ class EmployeeSerializer(serializers.ModelSerializer):
     boss_full_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
     full_name = serializers.SerializerMethodField()
     base_image_url = serializers.SerializerMethodField()
+    # Рўйхатлар учун кичик превью (employees/thumbnails.py); base_image_url — асл фото, ўзгармайди (TB, Face ID).
+    base_image_thumb_url = serializers.SerializerMethodField()
     base_image = SanitizedImageField(required=False, allow_null=True)
     password = serializers.CharField(write_only=True, required=False, allow_blank=True)
     password_confirm = serializers.CharField(write_only=True, required=False, allow_blank=True)
@@ -686,6 +689,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'role',
             'base_image',
             'base_image_url',
+            'base_image_thumb_url',
             'department',
             'section',
             'department_id',
@@ -956,6 +960,9 @@ class EmployeeSerializer(serializers.ModelSerializer):
             return obj.base_image.url
         return request.build_absolute_uri(obj.base_image.url)
 
+    def get_base_image_thumb_url(self, obj):
+        return thumbnail_url(obj.base_image, self.context.get('request'))
+
 
 class EmployeeUpsertSerializer(EmployeeSerializer):
     class Meta(EmployeeSerializer.Meta):
@@ -968,7 +975,7 @@ class TimekeeperEmployeeSerializer(EmployeeSerializer):
 
     VISIBLE_FIELDS = (
         'id', 'slug', 'first_name', 'last_name', 'surname', 'full_name', 'tabel_number', 'base_image_url',
-        'department', 'section', 'position', 'is_active', 'work_status',
+        'base_image_thumb_url', 'department', 'section', 'position', 'is_active', 'work_status',
     )
 
     def to_representation(self, instance):

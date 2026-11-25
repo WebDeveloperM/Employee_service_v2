@@ -6,6 +6,7 @@
 Цех или отдел без сотрудников (с учётом вложенных) в файл не попадает.
 """
 from collections import defaultdict
+from copy import copy
 from dataclasses import dataclass, field
 from io import BytesIO
 
@@ -108,16 +109,32 @@ def keep_as_text(sheet, row):
             cell.data_type = 's'
 
 
-def style_row(sheet, row, *, font=None, fill=None, alignment=None):
-    for column in range(1, len(EXPORT_COLUMNS) + 1):
-        cell = sheet.cell(row=row, column=column)
-        cell.border = CELL_BORDER
-        if font is not None:
-            cell.font = font
-        if fill is not None:
-            cell.fill = fill
-        if alignment is not None:
-            cell.alignment = alignment
+class RowStyler:
+    """Оформление строк. Каждый набор стилей (рамка + шрифт/заливка/выравнивание) собирается один раз, дальше
+    ячейкам копируется готовый индекс стиля: присваивание cell.font/border/… каждый раз хэширует объекты стиля,
+    и на ~3500 строк это занимало больше секунды."""
+
+    def __init__(self, sheet):
+        self.sheet = sheet
+        self.arrays = {}
+
+    def style(self, row, column, key, **attrs):
+        cell = self.sheet.cell(row=row, column=column)
+        array = self.arrays.get(key)
+        if array is None:
+            cell.border = CELL_BORDER
+            for name, value in attrs.items():
+                setattr(cell, name, value)
+            self.arrays[key] = copy(cell._style)
+        else:
+            cell._style = copy(array)
+
+    def row(self, row, key, **attrs):
+        for column in range(1, len(EXPORT_COLUMNS) + 1):
+            self.style(row, column, key, **attrs)
+
+
+CENTER = Alignment(horizontal='center')
 
 
 def build_staff_workbook(groups):
@@ -125,10 +142,11 @@ def build_staff_workbook(groups):
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = SHEET_TITLE
+    styler = RowStyler(sheet)
 
     sheet.append([title for title, _ in EXPORT_COLUMNS])
-    style_row(
-        sheet, 1,
+    styler.row(
+        1, 'header',
         font=Font(bold=True, color='FFFFFF'),
         fill=HEADER_FILL,
         alignment=Alignment(horizontal='center', vertical='center'),
@@ -136,16 +154,19 @@ def build_staff_workbook(groups):
     for column, (_, width) in enumerate(EXPORT_COLUMNS, start=1):
         sheet.column_dimensions[get_column_letter(column)].width = width
 
+    # Номер строки считаем сами: sheet.max_row каждый раз перебирает все ячейки листа (квадратичное время).
+    row = 1
     for group in groups:
         sheet.append([group.title])
-        row = sheet.max_row
+        row += 1
         keep_as_text(sheet, row)
         sheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=len(EXPORT_COLUMNS))
-        style_row(
-            sheet, row,
+        indent = max(group.level - 1, 0) * 2
+        styler.row(
+            row, ('group', group.level == 0, indent),
             font=Font(bold=True, size=12 if group.level == 0 else 11),
             fill=DEPARTMENT_FILL if group.level == 0 else SECTION_FILL,
-            alignment=Alignment(vertical='center', indent=max(group.level - 1, 0) * 2),
+            alignment=Alignment(vertical='center', indent=indent),
         )
 
         for number, employee in enumerate(group.employees, start=1):
@@ -155,10 +176,12 @@ def build_staff_workbook(groups):
                 employee.tabel_number or '',
                 ' '.join((employee.position or '').split()),
             ])
-            keep_as_text(sheet, sheet.max_row)
-            style_row(sheet, sheet.max_row)
-            sheet.cell(row=sheet.max_row, column=1).alignment = Alignment(horizontal='center')
-            sheet.cell(row=sheet.max_row, column=3).alignment = Alignment(horizontal='center')
+            row += 1
+            keep_as_text(sheet, row)
+            styler.style(row, 1, 'employee-center', alignment=CENTER)
+            styler.style(row, 2, 'employee')
+            styler.style(row, 3, 'employee-center', alignment=CENTER)
+            styler.style(row, 4, 'employee')
 
     sheet.freeze_panes = 'A2'
     # Печать: шапка на каждой странице, по ширине — одна страница.

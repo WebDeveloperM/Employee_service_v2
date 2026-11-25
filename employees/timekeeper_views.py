@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 
 from .models import Department, Employee
 from .permissions import IsAdminOrHrRole
+from .staff import is_leadership_department
 from .timekeepers import (
     TimekeeperError, assign_timekeeper, candidates_for, employee_brief, remove_timekeeper, timekeepers_payload,
 )
@@ -26,16 +27,30 @@ class TimekeeperListTemplateView(APIView):
 
 
 class TimekeeperCandidatesTemplateView(APIView):
-    """Табелчи қилиб тайинлаш мумкин ходимлар: барча цехларнинг фаол ходимлари (20-Цех биринчи, «Раҳбарият»сиз).
+    """Цехга табелчи қилиб тайинлаш мумкин ходимлар: фақат шу цехнинг (`department_id`) фаол ходимлари.
 
     Ҳар бир ходимда: ҳисоби борми, администратор/HR эканми, бошқа цехнинг табелчисими — шу ерда кўринади.
+    «Раҳбарият» цехига табелчи тайинланмайди: рўйхат бўш ва `empty_reason` да сабаби.
     """
 
     permission_classes = TIMEKEEPER_PERMISSIONS
 
     def get(self, request, *args, **kwargs):
-        data = candidates_for(request.query_params.get('search', ''))
-        return Response({'success': True, 'message': 'Ходимлар муваффақиятли олинди', 'data': data})
+        department_id = request.query_params.get('department_id', '').strip()
+        if not department_id.isdigit():
+            return Response({'success': False, 'message': 'Цехни кўрсатинг (department_id).', 'field': 'department_id'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        department = get_object_or_404(Department, pk=int(department_id))
+        data = candidates_for(department, request.query_params.get('search', ''))
+        empty_reason = ''
+        if is_leadership_department(department):
+            empty_reason = '«Раҳбарият» цехига табелчи тайинланмайди: унинг ходимлари табелчи бўла олмайди.'
+        elif not data and not request.query_params.get('search', '').strip():
+            empty_reason = 'Бу цехда фаол ходим йўқ.'
+        return Response({
+            'success': True, 'message': 'Ходимлар муваффақиятли олинди',
+            'department': {'id': department.id, 'name': department.name}, 'data': data, 'empty_reason': empty_reason,
+        })
 
 
 class TimekeeperDetailTemplateView(APIView):

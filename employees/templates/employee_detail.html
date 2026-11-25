@@ -1,4 +1,8 @@
 {% extends 'base.html' %}
+{% load assets %}
+
+{# IMask (телефон ва сана маскаси) — фақат ходим формаларида керак; defer: DOMContentLoaded дан олдин тайёр бўлади. #}
+{% block extra_head %}<script src="{% asset 'vendor/imask/imask.min.js' %}" defer></script>{% endblock %}
 
 {% block title %}{% if page_mode == 'edit' %}Ходимни таҳрирлаш{% else %}Ходимни кўриш{% endif %} - Ходимлар хизмати{% endblock %}
 
@@ -984,7 +988,7 @@
         list.innerHTML = visible.map(person => {
             const picked = String(person.id) === String(replacementPick);
             const photo = person.base_image_url
-                ? `<img src="${replacementEscape(person.base_image_url)}" alt="" class="h-10 w-10 shrink-0 rounded-lg object-cover">`
+                ? `<img src="${replacementEscape(person.base_image_thumb_url || person.base_image_url)}" alt="" loading="lazy" decoding="async" class="h-10 w-10 shrink-0 rounded-lg object-cover">`
                 : '<span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-400"><i class="fas fa-user"></i></span>';
             const details = [person.tabel_number, person.position, person.section_name].filter(Boolean).join(' · ');
             return `

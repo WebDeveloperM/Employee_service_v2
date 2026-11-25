@@ -20,3 +20,4 @@ nginx.conf
 nginx.standalone.conf
 certs
 .pytest_cache
+frontend/node_modules

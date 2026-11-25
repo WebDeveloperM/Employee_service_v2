@@ -20,3 +20,6 @@ staticfiles/
 
 # Audit report with vulnerability details: keep it out of the (shared) repository.
 SECURITY_AUDIT.md
+
+# CSS build tooling (frontend/README.md); the built CSS in employees/static/app/ is committed.
+frontend/node_modules/

@@ -5,36 +5,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Тизимга кириш</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Manrope', 'system-ui', 'sans-serif'],
-                        display: ['IBM Plex Sans', 'system-ui', 'sans-serif'],
-                    },
-                    colors: {
-                        // base.html билан бир хил палитра: асосий ранг #4154f1.
-                        blue: {
-                            50: '#f1f3fe', 100: '#e4e8fd', 200: '#ced5fc', 300: '#aab5f9', 400: '#7e8cf6', 500: '#5a6bf3',
-                            600: '#4154f1', 700: '#3342d4', 800: '#2c39ab', 900: '#273487', 950: '#181f52',
-                        },
-                    },
-                }
-            }
-        }
-    </script>
+    {% load assets %}
+    {# Шрифтлар, иконкалар ва Tailwind — ўз серверимиздан (frontend/README.md), CDN дан эмас. #}
+    <link rel="stylesheet" href="{% asset 'vendor/fonts/fonts.css' %}">
+    <link rel="stylesheet" href="{% asset 'vendor/fontawesome/css/all.min.css' %}">
     <style>
         body {
             font-family: 'Manrope', system-ui, sans-serif;
             background: #f4f6fb;
         }
     </style>
+    {# Tailwind — <head> нинг охирида (илгари CDN ўз <style> ини шу ерга қўшарди). #}
+    <link rel="stylesheet" href="{% asset 'app/login.css' %}">
 </head>
 
 <body class="min-h-screen text-slate-900">

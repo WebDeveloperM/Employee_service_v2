@@ -38,6 +38,7 @@ from .staff import (
 from .sections_tree import SectionIndex
 from .staff_export import build_staff_workbook, staff_export_file_name, staff_export_groups
 from .template_views import StandardResultsSetPagination
+from .thumbnails import thumbnail_url
 
 
 STAFF_PERMISSIONS = [IsAuthenticated, IsAdminOrHrRole]
@@ -46,7 +47,7 @@ MULTI_LOOKUP_LIMIT = 200   # бир сўровда бўшлиқ билан аж�
 
 
 def serialize_staff_employee(employee, request):
-    photo = request.build_absolute_uri(employee.base_image.url) if employee.base_image else ''
+    photo = thumbnail_url(employee.base_image, request) or ''   # 40×40 px аватар: асл фото эмас, превью
     return {
         'id': employee.pk,
         'slug': employee.slug,

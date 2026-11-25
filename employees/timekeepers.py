@@ -12,6 +12,7 @@ from django.db import models, transaction
 from .models import Department, Employee, ROLE_TIMEKEEPER, ROLE_USER, Timekeeper, UserProfile
 from .serializers import create_login_user, is_privileged_account, login_problem, password_problems
 from .staff import StaffTreeOrder, is_leadership_department, staff_tree_order
+from .thumbnails import thumbnail_url
 
 
 class TimekeeperError(Exception):
@@ -35,6 +36,7 @@ def employee_brief(employee):
         'department_name': employee.department.name if employee.department else '',
         'section_name': employee.section.name if employee.section else '',
         'base_image_url': employee.base_image.url if employee.base_image else None,
+        'base_image_thumb_url': thumbnail_url(employee.base_image),
         'login': (user.username if user is not None else '') or employee.login,
         'has_account': user is not None,
     }
@@ -61,16 +63,15 @@ def timekeepers_payload():
     return payload
 
 
-def candidates_for(search=''):
-    """Табелчи бўла оладиган ходимлар: барча цехларнинг фаол ходимлари, «Раҳбарият» цехи ходимларисиз.
+def candidates_for(department, search=''):
+    """Цехга табелчи бўла оладиган ходимлар: фақат шу цехнинг фаол ходимлари («Раҳбарият» цехига — ҳеч ким).
 
-    Тартиб «Ходимлар рўйхати» саҳифасидагидек (штат дарахти): аввал 20-Цех (Завод бошқармаси), кейин қолган цехлар;
-    ҳар бир цех ичида — бўлимлар ва лавозимлар тартибида. Қидирув (ихтиёрий): ҳар бир сўз исм, табель ёки лавозимда.
+    Тартиб «Ходимлар рўйхати» саҳифасидагидек (штат дарахти): бўлимлар ва лавозимлар тартибида.
+    Қидирув (ихтиёрий): ҳар бир сўз исм, табель ёки лавозимда.
     """
-    queryset = Employee.objects.filter(is_deleted=False, is_active=True)
-    leadership_ids = [department.id for department in Department.objects.all() if is_leadership_department(department)]
-    if leadership_ids:
-        queryset = queryset.exclude(department_id__in=leadership_ids)
+    if is_leadership_department(department):
+        return []
+    queryset = Employee.objects.filter(is_deleted=False, is_active=True, department=department)
     for word in (search or '').split():
         queryset = queryset.filter(
             models.Q(first_name__icontains=word) | models.Q(last_name__icontains=word) | models.Q(surname__icontains=word)
@@ -143,6 +144,8 @@ def assign_timekeeper(department, employee, *, login='', password='', password_c
     other = Timekeeper.objects.select_related('department').filter(employee=employee).exclude(department=department).first()
     if other is not None:
         raise TimekeeperError(f'Бу ходим аллақачон «{other.department.name}» цехининг табелчиси.', 'employee_id')
+    if employee.department_id != department.id:
+        raise TimekeeperError('Табелчи шу цехнинг ўз ходими бўлиши керак.', 'employee_id')
 
     user = employee.user
     if user is not None:

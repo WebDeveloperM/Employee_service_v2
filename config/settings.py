@@ -2,6 +2,7 @@ from pathlib import Path
 import os
 import json
 import sys
+import tempfile
 from urllib.parse import urlparse
 from django.core.exceptions import ImproperlyConfigured
 
@@ -174,6 +175,10 @@ DATABASES = {
         'PASSWORD': os.environ.get('EMPLOYEE_SERVICE_DB_PASSWORD', '').strip(),
         'HOST': resolve_db_host(os.environ.get('EMPLOYEE_SERVICE_DB_HOST', 'localhost')),
         'PORT': os.environ.get('EMPLOYEE_SERVICE_DB_PORT', '5432').strip(),
+        # Persistent connections: before, every request opened a new PostgreSQL connection (TCP + auth).
+        # The health check replaces a stale connection (e.g. after a PostgreSQL restart) before it is used.
+        'CONN_MAX_AGE': int(os.environ.get('EMPLOYEE_SERVICE_DB_CONN_MAX_AGE', '60')),
+        'CONN_HEALTH_CHECKS': True,
     }
 }
 
@@ -202,6 +207,10 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # https://<host>:5000/media/... in its pages (<img>) and its media proxy fetches them without the API key,
 # so a login check here breaks its photos. Turn on (true) only after TB sends X-Employee-Service-Key.
 MEDIA_REQUIRE_AUTH = env_bool('MEDIA_REQUIRE_AUTH', False)
+# Behind nginx (docker-compose): Django checks access, nginx streams the file from its internal location
+# (nginx.standalone.conf, /protected-media/). Off by default: without that nginx location the body would be empty.
+MEDIA_X_ACCEL_REDIRECT = env_bool('MEDIA_X_ACCEL_REDIRECT', False)
+MEDIA_X_ACCEL_PREFIX = '/protected-media/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -375,16 +384,23 @@ X_FRAME_OPTIONS = 'DENY'
 SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '0'))   # enable once the certificate is trusted
 SECURE_HSTS_INCLUDE_SUBDOMAINS = False
 
-# ---- Cache: login/Face ID counters and API throttles (employees/security.py) ----
-# LocMem is per process: with several gunicorn workers set a shared cache (Redis/DatabaseCache).
+# ---- Cache: login/Face ID counters, API throttles, bnpzID one-time codes (employees/security.py) ----
+# Shared by all gunicorn workers of the container: files in a local temp directory (not the bind mount).
+# LocMem was per process, so with several workers every worker had its own counters.
 # Under "manage.py test" the cache is a no-op so that counters do not leak between tests
 # (the security tests switch a real cache on for themselves).
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.dummy.DummyCache' if sys.argv[1:2] == ['test']
-        else 'django.core.cache.backends.locmem.LocMemCache',
-    },
-}
+if sys.argv[1:2] == ['test']:
+    CACHES = {'default': {'BACKEND': 'django.core.cache.backends.dummy.DummyCache'}}
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+            'LOCATION': os.environ.get('EMPLOYEE_SERVICE_CACHE_DIR', '').strip()
+            or os.path.join(tempfile.gettempdir(), 'employee_service_cache'),
+            # Culling drops a third of the entries at random: keep it rare so lockout counters survive.
+            'OPTIONS': {'MAX_ENTRIES': 20000},
+        },
+    }
 
 # ---- Login protection (employees/security.py) ----
 LOGIN_FAILURE_LIMIT = int(os.environ.get('LOGIN_FAILURE_LIMIT', '5'))          # per login + IP

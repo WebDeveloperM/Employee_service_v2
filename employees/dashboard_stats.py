@@ -4,6 +4,7 @@
 """
 from collections import Counter
 
+from django.db.models import Count
 from django.utils import timezone
 
 from .models import (
@@ -41,6 +42,12 @@ def active_employees():
     return Employee.objects.filter(is_deleted=False, is_active=True)
 
 
+def count_by(field):
+    """Фаол ходимлар сони майдон қиймати бўйича (Counter): санаш базада (GROUP BY), ҳар бир ходим Python га юкланмайди."""
+    rows = active_employees().order_by().values(field).annotate(total=Count('id')).values_list(field, 'total')
+    return Counter(dict(rows))
+
+
 def age_on(today, born):
     """Полных лет на дату today."""
     return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
@@ -74,14 +81,14 @@ def staff_chart():
 def age_chart(today):
     counts = [0] * len(AGE_GROUPS)
     unknown = 0
-    for born in active_employees().values_list('date_of_birth', flat=True).iterator():
+    for born, total in count_by('date_of_birth').items():
         age = age_on(today, born) if born else -1
         if age < 0:
-            unknown += 1
+            unknown += total
             continue
         for index, (_, low, high, _) in enumerate(AGE_GROUPS):
             if age >= low and (high is None or age <= high):
-                counts[index] += 1
+                counts[index] += total
                 break
 
     # «18 ёшгача» (low == 0) фақат шундай ходим бўлса кўрсатилади; қолган гуруҳлар доим кўринади.
@@ -93,11 +100,11 @@ def age_chart(today):
 def gender_chart():
     genders = {'M': 0, 'F': 0}
     unknown = 0
-    for gender in active_employees().values_list('gender', flat=True).iterator():
+    for gender, total in count_by('gender').items():
         if gender in genders:
-            genders[gender] += 1
+            genders[gender] += total
         else:
-            unknown += 1
+            unknown += total
     rows = [row('Эркаклар', genders['M'], BLUE), row('Аёллар', genders['F'], ORANGE)]
     note = f'Жинси кўрсатилмаган: {unknown}' if unknown else ''
     return make_chart('gender', 'Эркаклар & Аёллар', rows, note=note)
@@ -109,7 +116,7 @@ def status_chart():
     Ходим формасидаги «Ҳолати» дан олинади: work_status бўш (NULL) бўлса — «ишда». «Фаол эмас» ходимлар диаграммага
     кирмайди, лекин жами тушунарли бўлиши учун изоҳда санаб қўйилади.
     """
-    counts = Counter(active_employees().values_list('work_status', flat=True).iterator())
+    counts = count_by('work_status')
     working = sum(count for status, count in counts.items() if not status)   # NULL ва бўш қатор
     rows = [
         row('Ишдаги ходимлар', working, BLUE),
@@ -129,7 +136,7 @@ def dictionary_chart(key, title, model, field):
 
     Жадвал қаторлари йиғиндиси фаол ходимлар сонига тенг («Ходимлар ҳолати» диаграммаси билан бир хил асос).
     """
-    counts = Counter(active_employees().values_list(f'{field}_id', flat=True).iterator())
+    counts = count_by(f'{field}_id')
     values = list(model.objects.order_by('id').values_list('id', 'name'))
 
     rows = [row(name, counts[pk], CATEGORY_COLORS[index]) for index, (pk, name) in enumerate(values[:len(CATEGORY_COLORS)])]

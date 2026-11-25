@@ -1,4 +1,8 @@
 {% extends 'base.html' %}
+{% load assets %}
+
+{# IMask (телефон ва сана маскаси) — фақат ходим формаларида керак; defer: DOMContentLoaded дан олдин тайёр бўлади. #}
+{% block extra_head %}<script src="{% asset 'vendor/imask/imask.min.js' %}" defer></script>{% endblock %}
 
 {% block title %}Ходим қўшиш - Ходимлар хизмати{% endblock %}
 

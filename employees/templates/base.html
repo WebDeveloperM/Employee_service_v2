@@ -5,47 +5,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Ходимлар хизмати{% endblock %}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Manrope', 'system-ui', 'sans-serif'],
-                        display: ['IBM Plex Sans', 'system-ui', 'sans-serif'],
-                    },
-                    colors: {
-                        ink: '#1f2937',
-                        shell: '#f4f6fb',
-                        accent: '#eb6834',
-                        cobalt: '#4154f1',
-                        panel: '#ffffff',
-                        // Сайтнинг асосий ранги #4154f1 (600): барча blue-* ва violet-* синфлар шу шкалага ўтади,
-                        // шунда тугмалар, ҳаволалар ва белгилар битта палитрада бўлади.
-                        blue: {
-                            50: '#f1f3fe', 100: '#e4e8fd', 200: '#ced5fc', 300: '#aab5f9', 400: '#7e8cf6', 500: '#5a6bf3',
-                            600: '#4154f1', 700: '#3342d4', 800: '#2c39ab', 900: '#273487', 950: '#181f52',
-                        },
-                        violet: {
-                            50: '#f1f3fe', 100: '#e4e8fd', 200: '#ced5fc', 300: '#aab5f9', 400: '#7e8cf6', 500: '#5a6bf3',
-                            600: '#4154f1', 700: '#3342d4', 800: '#2c39ab', 900: '#273487', 950: '#181f52',
-                        },
-                    },
-                    boxShadow: {
-                        panel: '0 24px 60px rgba(15, 23, 42, 0.08)',
-                    }
-                }
-            }
-        }
-    </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
-        rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-    <script src="https://unpkg.com/imask@7.6.0/dist/imask.min.js"></script>
+    {% load assets %}
+    {# Шрифтлар, иконкалар ва Tailwind — ўз серверимиздан (frontend/README.md): Google/CDN га ҳар саҳифада мурожаат йўқ, #}
+    {# Tailwind CSS эса олдиндан йиғилган (илгари cdn.tailwindcss.com уни ҳар саҳифада браузерда компиляция қиларди). #}
+    {# XLSX (950 КБ) фақат Excel импорт/экспортда юкланади (loadXlsx), IMask — фақат ходим формаларида. #}
+    <link rel="stylesheet" href="{% asset 'vendor/fonts/fonts.css' %}">
+    <link rel="stylesheet" href="{% asset 'vendor/fontawesome/css/all.min.css' %}">
     <style>
         :root {
             /* Сайт палитраси (Refleksiv portfolio намунасидан): қоронғи сайдбар, асосий ранг #4154f1,
@@ -222,6 +187,9 @@
             }
         }
     </style>
+    {# Tailwind — <head> нинг охирида: илгари CDN ўз <style> ини шу ерга қўшарди, юқоридаги inline стиллардан кейин. #}
+    <link rel="stylesheet" href="{% asset 'app/app.css' %}">
+    {% block extra_head %}{% endblock %}
 </head>
 
 <body>

@@ -56,7 +56,7 @@
 
         <input type="text" id="candidateSearchInput" placeholder="Табель рақами, исм ёки лавозим бўйича қидириш..." autocomplete="off" inputmode="search" class="table-filter">
         <div class="mt-2 flex items-center justify-between gap-3 text-xs text-slate-500">
-            <span>Барча цехларнинг ходимлари (20-Цех биринчи, «Раҳбарият» кўрсатилмайди). Табель рақамини ёзиб тез топинг, Enter — биринчисини танлайди.</span>
+            <span>Фақат шу цехнинг фаол ходимлари (бўлимлар бўйича). Табель рақамини ёзиб тез топинг, Enter — биринчисини танлайди.</span>
             <span id="candidatesCount" class="shrink-0 font-semibold text-slate-600"></span>
         </div>
 
@@ -95,6 +95,7 @@
     let timekeeperRows = [];
     let modalDepartment = null;      // {id, name} — модал қайси цех учун очилган
     let modalCandidates = [];
+    let modalEmptyReason = '';       // рўйхат бўш бўлса — сабаби («Раҳбарият» ёки цехда фаол ходим йўқ)
     let selectedCandidateId = null;
     let candidatesLoading = false;
 
@@ -103,8 +104,9 @@
     }
 
     function avatarHtml(person, size = 'h-10 w-10') {
-        if (person?.base_image_url) {
-            return `<img src="${escapeHtml(person.base_image_url)}" alt="" loading="lazy" decoding="async" class="${size} shrink-0 rounded-full object-cover">`;
+        const photo = person?.base_image_thumb_url || person?.base_image_url;   // кичик аватар: превью етарли
+        if (photo) {
+            return `<img src="${escapeHtml(photo)}" alt="" loading="lazy" decoding="async" class="${size} shrink-0 rounded-full object-cover">`;
         }
         return `<div class="flex ${size} shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-400"><i class="fas fa-user text-sm"></i></div>`;
     }
@@ -175,6 +177,7 @@
         modalDepartment = row.department;
         selectedCandidateId = null;
         modalCandidates = [];
+        modalEmptyReason = '';
         document.getElementById('timekeeperModalDepartment').textContent = row.department.name;
         document.getElementById('candidateSearchInput').value = '';
         document.getElementById('candidatesList').innerHTML = '';
@@ -196,7 +199,7 @@
         document.getElementById('accountFields').classList.add('hidden');
     }
 
-    // Барча цехларнинг ходимлари бир марта юкланади (штат дарахти тартибида), қидирув эса шу ерда (браузерда) дарҳол ишлайди.
+    // Шу цехнинг ходимлари бир марта юкланади (штат дарахти тартибида), қидирув эса шу ерда (браузерда) дарҳол ишлайди.
     async function loadCandidates() {
         if (!modalDepartment || candidatesLoading) {
             return;
@@ -205,9 +208,10 @@
         const departmentId = modalDepartment.id;
         document.getElementById('candidatesList').innerHTML = '<p class="px-4 py-6 text-center text-sm text-slate-500"><span class="loading"></span><span class="ml-2">Ходимлар юкланмоқда...</span></p>';
         try {
-            const payload = await apiRequest('/template/timekeepers/candidates/');
+            const payload = await apiRequest(`/template/timekeepers/candidates/?department_id=${encodeURIComponent(departmentId)}`);
             if (modalDepartment && modalDepartment.id === departmentId) {
                 modalCandidates = Array.isArray(payload?.data) ? payload.data : [];
+                modalEmptyReason = payload?.empty_reason || '';
                 renderCandidates();
             }
         } catch (error) {
@@ -259,27 +263,28 @@
             ? `Ходимлар: ${modalCandidates.length}`
             : `Топилди: ${visible.length} / ${modalCandidates.length}`;
         if (!visible.length) {
-            list.innerHTML = '<p class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm font-semibold text-slate-500">Ходим топилмади.</p>';
+            const emptyText = !modalCandidates.length && modalEmptyReason ? modalEmptyReason : 'Ходим топилмади.';
+            list.innerHTML = `<p class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm font-semibold text-slate-500">${escapeHtml(emptyText)}</p>`;
             return;
         }
-        // Қидирувсиз рўйхат цехлар бўйича гуруҳланади (20-Цех биринчи); қидирувда — битта рўйхат, цех номи қаторда.
+        // Қидирувсиз рўйхат шу цехнинг бўлимлари бўйича гуруҳланади; қидирувда — битта рўйхат, бўлим номи қаторда.
         const searching = document.getElementById('candidateSearchInput').value.trim() !== '';
-        const departmentTotals = {};
-        visible.forEach((candidate) => { departmentTotals[candidate.department_name] = (departmentTotals[candidate.department_name] || 0) + 1; });
-        let previousDepartment = null;
+        const sectionTotals = {};
+        visible.forEach((candidate) => { sectionTotals[candidate.section_name] = (sectionTotals[candidate.section_name] || 0) + 1; });
+        let previousSection;
         list.innerHTML = visible.map((candidate) => {
             const reason = candidateBlockReason(candidate);
             let header = '';
-            if (!searching && candidate.department_name !== previousDepartment) {
-                previousDepartment = candidate.department_name;
-                header = `<div class="sticky top-0 z-10 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">${escapeHtml(candidate.department_name || 'Цех кўрсатилмаган')} <span class="font-semibold text-slate-400">· ${departmentTotals[candidate.department_name]}</span></div>`;
+            if (!searching && candidate.section_name !== previousSection) {
+                previousSection = candidate.section_name;
+                header = `<div class="sticky top-0 z-10 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">${escapeHtml(candidate.section_name || 'Бўлим кўрсатилмаган')} <span class="font-semibold text-slate-400">· ${sectionTotals[candidate.section_name]}</span></div>`;
             }
             const badge = reason
                 ? `<span class="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">${escapeHtml(reason)}</span>`
                 : candidate.has_account
                     ? '<span class="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Ҳисоби бор</span>'
                     : '<span class="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">Ҳисоби йўқ</span>';
-            const details = [searching ? candidate.department_name : '', candidate.position, candidate.section_name].filter(Boolean).map((part) => ` · ${part}`).join('');
+            const details = [candidate.position, searching ? candidate.section_name : ''].filter(Boolean).map((part) => ` · ${part}`).join('');
             return `${header}
             <button type="button" data-candidate-id="${candidate.id}" ${reason ? 'disabled' : ''} onclick="selectCandidate(${candidate.id})"
                 class="${candidateButtonClasses(candidate, reason)}">

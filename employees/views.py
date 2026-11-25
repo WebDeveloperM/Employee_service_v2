@@ -1,9 +1,7 @@
-from io import BytesIO
 import hashlib
 import hmac
 import json
 
-from PIL import Image
 from django.conf import settings
 from django.contrib.auth import login
 from django.core import signing
@@ -29,7 +27,10 @@ from .permissions import (
     is_service_api_request,
     timekeeper_department,
 )
-from .face import calculate_face_similarity, decode_image_to_pil, detect_face_boxes, estimate_head_pose_from_frames
+from .face import (
+    UnreadableReferenceImage, calculate_face_similarity, decode_image_to_pil, detect_face_boxes, estimate_head_pose_from_frames,
+    reference_face_from_file,
+)
 from .bnpzid import build_bnpzid_redirect, get_bnpzid_client_config, is_allowed_redirect_uri, read_bnpzid_code
 from .models import Department, Employee, EmployeeBaseImageChangeLog, Section, UserProfile, ROLE_ADMIN
 from .sections_tree import delete_section_or_400
@@ -113,11 +114,10 @@ def _collect_face_payloads(request):
 
 
 def _load_reference_image(reference_file, error_message):
-    reference_bytes = reference_file.read()
-    reference_file.close()
+    """Эталон юз белгилари (face.ReferenceFace): кадрлар сонидан қатъи назар бир марта, файл ўзгармагунча — кешдан."""
     try:
-        return Image.open(BytesIO(reference_bytes)).convert('RGB'), None
-    except Exception:
+        return reference_face_from_file(reference_file), None
+    except UnreadableReferenceImage:
         return None, Response({'error': error_message}, status=status.HTTP_400_BAD_REQUEST)
 
 

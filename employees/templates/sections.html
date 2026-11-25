@@ -139,13 +139,10 @@ async function loadDepartments() {
         const departmentSelect = document.getElementById('department_id');
         const departmentFilter = document.getElementById('departmentFilter');
         
-        departmentSelect.innerHTML = '<option value="">Цехни танланг</option>';
-        departmentFilter.innerHTML = '<option value="">Барча цехлар</option>';
-        
-        departments.forEach(dept => {
-            departmentSelect.innerHTML += `<option value="${escHtml(dept.id)}">${escHtml(dept.name)}</option>`;
-            departmentFilter.innerHTML += `<option value="${escHtml(dept.id)}">${escHtml(dept.name)}</option>`;
-        });
+        // Бир марта ёзилади («innerHTML +=» ҳар қадамда бутун рўйхатни қайта ўқиб-ёзарди).
+        const options = departments.map(dept => `<option value="${escHtml(dept.id)}">${escHtml(dept.name)}</option>`).join('');
+        departmentSelect.innerHTML = '<option value="">Цехни танланг</option>' + options;
+        departmentFilter.innerHTML = '<option value="">Барча цехлар</option>' + options;
     } catch (error) {
         console.error('Цехларни юклашда хато:', error);
     }

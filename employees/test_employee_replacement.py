@@ -244,7 +244,7 @@ class ReplacementCandidatesTests(ReplacementTestBase):
         self.assertFalse(body['truncated'])
         item = next(entry for entry in body['data'] if entry['id'] == self.sub.pk)
         self.assertEqual((item['tabel_number'], item['full_name'], item['position']), ('102', str(self.sub), 'Фаррош'))
-        self.assertEqual(set(item), {'id', 'full_name', 'tabel_number', 'position', 'section_name', 'base_image_url'})   # шахсий маълумот йўқ
+        self.assertEqual(set(item), {'id', 'full_name', 'tabel_number', 'position', 'section_name', 'base_image_url', 'base_image_thumb_url'})   # шахсий маълумот йўқ (превью — ўша фотонинг кичик нусхаси)
 
     def test_reports_the_current_substitute(self):
         self.assertIsNone(self.api.get(CANDIDATES.format(self.absent.pk)).json()['current'])

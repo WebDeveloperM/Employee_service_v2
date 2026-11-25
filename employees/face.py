@@ -1,3 +1,5 @@
+from collections import OrderedDict
+from dataclasses import dataclass
 from functools import lru_cache
 from io import BytesIO
 import base64
@@ -368,12 +370,91 @@ def _hog_similarity(face_a: np.ndarray, face_b: np.ndarray) -> float:
     return max(0.0, ((value + 1.0) / 2.0) * 100.0)
 
 
-def calculate_face_similarity(reference_image: Image.Image, captured_image: Image.Image) -> float:
+@dataclass(frozen=True)
+class ReferenceFace:
+    """Эталон фотодан бир марта олинадиган белгилар: SFace эмбеддинги ва Haar кесими (160×160, кулранг).
+
+    Илгари улар ҳар бир кадр учун қайта ҳисобланарди: 12 Мп эталон фотода бир кадрга ~2 с CPU (YuNet + Haar),
+    Face ID кириши 3 кадр юборади — бир текширишга ~6 с, шу вақт ичида бошқа юз текширишлари қулф кутарди.
+    Ҳисоб детерминистик: натижа (ўхшашлик фоизи) аввалгидек чиқади.
+    """
+
+    embedding: object   # np.ndarray | None
+    face: object        # np.ndarray | None
+
+
+class UnreadableReferenceImage(ValueError):
+    """Эталон файлни расм сифатида очиб бўлмади."""
+
+
+def prepare_reference_face(reference_image: Image.Image) -> ReferenceFace:
+    try:
+        embedding, _ = _extract_face_embedding(reference_image)
+        face = extract_primary_face(reference_image)
+    except ValueError:
+        # OpenCV/модель йўқ: илгаригидек ҳар бир кадр «юз топилмади» бўлиб ўтказилади (calculate_face_similarity).
+        return ReferenceFace(None, None)
+    for array in (embedding, face):
+        if array is not None:
+            array.setflags(write=False)   # кешдаги эталон тасодифан ўзгартирилмасин
+    return ReferenceFace(embedding, face)
+
+
+REFERENCE_CACHE_SIZE = 256
+_REFERENCE_CACHE = OrderedDict()
+_REFERENCE_CACHE_LOCK = threading.Lock()
+
+
+def _reference_cache_key(field_file):
+    try:
+        path = field_file.path
+        stat = os.stat(path)
+    except Exception:   # файл омборда маҳаллий йўлсиз ёки йўқ: кешсиз
+        return None
+    return path, stat.st_size, stat.st_mtime_ns
+
+
+def reference_face_from_file(field_file) -> ReferenceFace:
+    """Эталон фото файлидан белгилар: файл (йўли, ҳажми, mtime) ўзгармагунча процессда бир марта ҳисобланади.
+    Файлни расм сифатида ўқиб бўлмаса — UnreadableReferenceImage."""
+    key = _reference_cache_key(field_file)
+    if key is not None:
+        with _REFERENCE_CACHE_LOCK:
+            cached = _REFERENCE_CACHE.get(key)
+            if cached is not None:
+                _REFERENCE_CACHE.move_to_end(key)
+                return cached
+
+    field_file.open('rb')   # ёпилган файлни ҳам қайта очади (бир FieldFile дан иккинчи марта ўқиш)
+    try:
+        reference_bytes = field_file.read()
+    finally:
+        field_file.close()
+    try:
+        image = Image.open(BytesIO(reference_bytes)).convert('RGB')
+    except Exception as exc:
+        raise UnreadableReferenceImage('reference image is not readable') from exc
+    reference = prepare_reference_face(image)
+
+    # Юз топилмаган ёки модель ишламаган натижа кешланмайди: файл алмашса ёки модель тикланса, қайта уринилади.
+    if key is not None and reference.embedding is not None:
+        with _REFERENCE_CACHE_LOCK:
+            _REFERENCE_CACHE[key] = reference
+            _REFERENCE_CACHE.move_to_end(key)
+            while len(_REFERENCE_CACHE) > REFERENCE_CACHE_SIZE:
+                _REFERENCE_CACHE.popitem(last=False)
+    return reference
+
+
+def calculate_face_similarity(reference, captured_image: Image.Image) -> float:
+    """reference — ReferenceFace (тавсия: бир неча кадр учун бир марта тайёрланади) ёки эталон PIL тасвири."""
     cv2_module = _require_cv2()
-    reference_embedding, _ = _extract_face_embedding(reference_image)
+    if not isinstance(reference, ReferenceFace):
+        reference = prepare_reference_face(reference)
+    reference_embedding = reference.embedding
     captured_embedding, _ = _extract_face_embedding(captured_image)
 
-    ref_face = extract_primary_face(reference_image)
+    ref_face = reference.face
     cap_face = extract_primary_face(captured_image)
     if ref_face is None or cap_face is None:
         raise ValueError('Face not detected in one of the images')

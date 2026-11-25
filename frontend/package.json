@@ -1,0 +1,13 @@
+{
+  "name": "employee-service-assets",
+  "private": true,
+  "description": "Builds the static CSS that replaced the Tailwind Play CDN (cdn.tailwindcss.com). Output is committed: the Docker image needs no Node.",
+  "scripts": {
+    "build": "npm run build:app && npm run build:login",
+    "build:app": "tailwindcss -c tailwind.app.config.js -i tailwind.input.css -o ../employees/static/app/app.css --minify",
+    "build:login": "tailwindcss -c tailwind.login.config.js -i tailwind.input.css -o ../employees/static/app/login.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}

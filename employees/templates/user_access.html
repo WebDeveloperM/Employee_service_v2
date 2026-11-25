@@ -223,7 +223,7 @@
                         <div class="flex items-center">
                             <div class="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden mr-3">
                                 ${emp.base_image_url 
-                                    ? `<img src="${escapeHtml(emp.base_image_url)}" class="h-8 w-8 object-cover">` 
+                                    ? `<img src="${escapeHtml(emp.base_image_thumb_url || emp.base_image_url)}" alt="" loading="lazy" decoding="async" class="h-8 w-8 object-cover">` 
                                     : `<i class="fas fa-user text-gray-400 text-xs"></i>`}
                             </div>
                             <span class="text-sm font-medium text-gray-900">${safeFullName}</span>

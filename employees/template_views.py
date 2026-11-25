@@ -33,6 +33,7 @@ from .serializers import (
     WorkScheduleSerializer,
 )
 from .staff import StaffTreeOrder
+from .thumbnails import thumbnail_url
 
 
 class StandardResultsSetPagination(PageNumberPagination):
@@ -404,7 +405,11 @@ class EmployeeListCreateTemplateView(generics.ListCreateAPIView):
 
     def employees_in_tree_order(self, ids):
         """Сотрудники по списку id — ровно в этом порядке (одним запросом)."""
-        by_id = Employee.objects.select_related('department', 'section', 'section__department', 'position_category', 'employee_category', 'work_schedule').in_bulk(ids)
+        # user и user__profile: сериализатор табелчи на каждой строке проверяет, не администратор/HR ли это (было N+1).
+        by_id = Employee.objects.select_related(
+            'department', 'section', 'section__department', 'position_category', 'employee_category', 'work_schedule',
+            'user', 'user__profile',
+        ).in_bulk(ids)
         return [by_id[employee_id] for employee_id in ids if employee_id in by_id]
 
     def list(self, request, *args, **kwargs):
@@ -563,6 +568,7 @@ class EmployeeReplacementCandidatesTemplateView(APIView):
                 'position': person.position,
                 'section_name': person.section.name if person.section_id else '',
                 'base_image_url': person.base_image.url if person.base_image else None,
+                'base_image_thumb_url': thumbnail_url(person.base_image),
             } for person in found[:CANDIDATE_LIMIT]],
             'truncated': len(found) > CANDIDATE_LIMIT,
             'current': record.substitute_id if record is not None else None,
@@ -1357,7 +1363,8 @@ class UserListCreateTemplateView(UserManagementAccessMixin, generics.ListCreateA
 
     def get_queryset(self):
         self.ensure_user_management_access()
-        return UserProfile.objects.select_related('user').order_by('user__username')
+        # user__employee: аватар профиля — фото карточки сотрудника (UserProfile.avatar_image), иначе запрос на строку.
+        return UserProfile.objects.select_related('user', 'user__employee').order_by('user__username')
 
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
@@ -1471,6 +1478,7 @@ class UserAccessListTemplateView(UserManagementAccessMixin, generics.GenericAPIV
                 'section_name': employee.section.name if employee.section else '',
                 'position': employee.position,
                 'base_image_url': employee.base_image.url if employee.base_image else None,
+                'base_image_thumb_url': thumbnail_url(employee.base_image),
                 'role': visible_role,
                 'profile_id': profile.id if profile else None,
                 'has_access': bool(profile),
