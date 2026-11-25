@@ -12,6 +12,14 @@ from .template_views import (
     UserDetailTemplateView,
     UserListCreateTemplateView,
 )
+from .timekeeper_api import (
+    TimekeeperEmployeeDetailView,
+    TimekeeperEmployeeListView,
+    TimekeeperLogoutView,
+    TimekeeperMeView,
+    TimekeeperReferenceView,
+    TimekeeperTokenView,
+)
 from .views import (
     BnpzIdExchangeApiView,
     EmployeeBaseImageChangeLogDetailApiView,
@@ -34,6 +42,13 @@ from .views import (
 
 
 urlpatterns = [
+    # Табелчи API си (бошқа тизим учун): токен билан, фақат ўз цехи. Ҳужжат: API_TIMEKEEPER.md.
+    path('timekeeper/token/', TimekeeperTokenView.as_view()),
+    path('timekeeper/logout/', TimekeeperLogoutView.as_view()),
+    path('timekeeper/me/', TimekeeperMeView.as_view()),
+    path('timekeeper/reference/', TimekeeperReferenceView.as_view()),
+    path('timekeeper/employees/', TimekeeperEmployeeListView.as_view()),
+    path('timekeeper/employees/<str:tabel_number>/', TimekeeperEmployeeDetailView.as_view()),
     path('departments/', DepartmentListApiView.as_view()),
     path('departments/<int:pk>/', DepartmentDetailApiView.as_view()),
     path('sections/', SectionListApiView.as_view()),

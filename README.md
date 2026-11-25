@@ -13,6 +13,7 @@
 - Swagger UI по адресу `/api/docs/`
 - ReDoc по адресу `/api/redoc/`
 - Подробная интеграционная документация в файле `API_INTEGRATION.md`
+- API для другой системы от имени табельщика (обновление сотрудников своего цеха): `API_TIMEKEEPER.md`
 
 Внешняя интеграция через `X-Employee-Service-Key` или `Authorization: Bearer <key>` работает только в режиме чтения. Для такого доступа разрешены только `GET`, `HEAD` и `OPTIONS`.
 

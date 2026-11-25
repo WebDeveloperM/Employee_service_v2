@@ -4,6 +4,10 @@ This document is intended for other backends and frontends that need to reuse `e
 
 External integration is read-only. When a request is authenticated with `X-Employee-Service-Key` or `Authorization: Bearer <key>`, the service only allows `GET`, `HEAD`, and `OPTIONS` methods.
 
+## Timekeeper API (updating employees on behalf of a timekeeper)
+
+A separate API lets another system read and update the employees of **one department** on behalf of its timekeeper (login + password -> short-lived token; the service key is **not** used there). It is documented in [`API_TIMEKEEPER.md`](API_TIMEKEEPER.md) (Uzbek) and appears in Swagger under the `timekeeper` tag.
+
 ## Documentation URLs
 
 - Swagger UI: `/api/docs/`

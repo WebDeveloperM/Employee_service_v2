@@ -418,3 +418,27 @@ class EmployeeReplacement(models.Model):
 
     def __str__(self):
         return f'{self.employee} → {self.substitute}'
+
+
+class TimekeeperApiToken(models.Model):
+    """Табелчининг API токени (бошқа тизимдан кириш: employees/timekeeper_api.py).
+
+    Токеннинг ўзи базада сақланмайди — фақат SHA-256 хэши: база нусхаси чиқиб кетса ҳам токенни тиклаб бўлмайди.
+    Токен муддатли (expires_at) ва фойдаланувчи паролини ўзгартирса ёки ҳисоби ўчса, ишлашдан тўхтайди.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='timekeeper_api_tokens', verbose_name='Фойдаланувчи')
+    key_hash = models.CharField(max_length=64, unique=True, verbose_name='Токен хэши (SHA-256)')
+    auth_stamp = models.CharField(max_length=128, verbose_name='Парол белгиси', help_text='Парол ўзгарса, токен ўз-ўзидан ярамай қолади')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Яратилган')
+    expires_at = models.DateTimeField(db_index=True, verbose_name='Амал қилиш муддати')
+    last_used_at = models.DateTimeField(null=True, blank=True, verbose_name='Охирги марта ишлатилган')
+    created_ip = models.CharField(max_length=45, blank=True, default='', verbose_name='Олинган IP')
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'API токен (табелчи)'
+        verbose_name_plural = 'API токенлар (табелчи)'
+
+    def __str__(self):
+        return f'{self.user} · {self.expires_at:%d.%m.%Y %H:%M}'
