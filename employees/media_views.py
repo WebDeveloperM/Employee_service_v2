@@ -11,7 +11,7 @@
 ключа — с проверкой у TB пропадают фото. Без проверки view всё равно не отдаёт «../» и пути вне MEDIA_ROOT,
 а не-картинки отдаёт как вложение (не как страницу).
 
-Превью для списков (thumbs/256/<имя>.jpg, см. employees/thumbnails.py) проверяются по правам исходного фото.
+Превью для списков (thumbs/256v2/<имя>.jpg, см. employees/thumbnails.py) проверяются по правам исходного фото.
 С MEDIA_X_ACCEL_REDIRECT=true (docker-compose: за nginx) Django только проверяет доступ, а файл отдаёт nginx
 (X-Accel-Redirect на internal-location): поток gunicorn не занят передачей мегабайтов фото.
 """
@@ -93,12 +93,15 @@ def media_file_response(name, full_path):
         response['X-Accel-Redirect'] = settings.MEDIA_X_ACCEL_PREFIX + quote(name)
         if not is_image:   # как FileResponse(as_attachment=True): кириллица — через filename*=utf-8''
             response['Content-Disposition'] = content_disposition_header(True, os.path.basename(name))
+        # Cache-Control здесь не ставим: nginx сохраняет его и на своём ответе об ошибке (403/404 при чтении файла),
+        # и Chrome держал такую «битую» картинку час даже после F5. nginx добавляет его сам, только при успехе
+        # (nginx.standalone.conf, /protected-media/).
     else:
         response = FileResponse(
             open(full_path, 'rb'),
             content_type=content_type if is_image else 'application/octet-stream',
             as_attachment=not is_image,   # не-картинку браузер не откроет как страницу (HTML/SVG -> XSS)
         )
+        response['Cache-Control'] = 'private, max-age=3600'
     response['X-Content-Type-Options'] = 'nosniff'
-    response['Cache-Control'] = 'private, max-age=3600'
     return response

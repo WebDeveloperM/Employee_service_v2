@@ -3,7 +3,7 @@
 Рўйхатда ходим фотоси 64×80 px кўринади, лекин аслида телефон камерасидан тушган асл файл (бир неча МБ) юкланарди:
 100 қаторли саҳифа ўнлаб-юзлаб МБ тортар ва gunicorn оқимларини фото узатиш билан банд қилиб, бутун сайтни «қотирарди».
 
-Превью асл файлдан биринчи сўровда ясалади ва MEDIA_ROOT/thumbs/<ўлчам>/<асл ном>.jpg да сақланади. Асл файл
+Превью асл файлдан биринчи сўровда ясалади ва MEDIA_ROOT/thumbs/<ўлчам>v<версия>/<асл ном>.jpg да сақланади. Асл файл
 алмашса (mtime янгироқ), превью қайта ясалади; асл файл ўчса, превью ҳам берилмайди. Асл фото (base_image_url,
 Face ID эталони, TB интеграцияси) ўзгармайди — превью алоҳида майдон (base_image_thumb_url).
 """
@@ -26,15 +26,20 @@ THUMB_QUALITY = 82
 # tempfile.mkstemp creates files as 0600 (owner only). nginx runs as another user and sends the thumbnail itself
 # (X-Accel-Redirect, media_views.py): with 0600 it answers 403 and every list photo is a broken image.
 THUMB_FILE_MODE = 0o644
+# Part of the thumbnail path and URL. Bump it when browsers must not reuse what they cached for the old URLs:
+# v2 — the first thumbnails were 0600, nginx answered 403 with "Cache-Control: private, max-age=3600",
+# and Chrome kept showing those broken images on F5 even after the files were fixed.
+THUMB_VERSION = 2
+THUMB_DIR = f'{THUMB_PREFIX}/{THUMB_SIZE}v{THUMB_VERSION}'
 
 
 def thumbnail_name(original_name):
-    return f'{THUMB_PREFIX}/{THUMB_SIZE}/{original_name}.jpg'
+    return f'{THUMB_DIR}/{original_name}.jpg'
 
 
 def original_name_for_thumbnail(name):
-    """«thumbs/256/<асл ном>.jpg» -> «<асл ном>»; превью йўли бўлмаса — None."""
-    prefix = f'{THUMB_PREFIX}/{THUMB_SIZE}/'
+    """«thumbs/256v2/<асл ном>.jpg» -> «<асл ном>»; превью йўли бўлмаса — None."""
+    prefix = f'{THUMB_DIR}/'
     if not name.startswith(prefix) or not name.endswith('.jpg'):
         return None
     original = name[len(prefix):-len('.jpg')]

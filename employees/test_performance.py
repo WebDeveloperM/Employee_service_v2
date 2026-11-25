@@ -1,6 +1,6 @@
 """Тезлик тузатишлари: ҳар бири учун тест (қайта секинлашмасин).
 
-- рўйхатларда асл фото эмас, кичик превью (thumbs/256/...), асл фото манзили (TB, Face ID) ўзгармайди;
+- рўйхатларда асл фото эмас, кичик превью (thumbs/256v2/...), асл фото манзили (TB, Face ID) ўзгармайди;
 - nginx орқали (MEDIA_X_ACCEL_REDIRECT) файлни gunicorn эмас, nginx юборади;
 - Face ID эталони ҳар бир кадр учун эмас, бир марта (ва файл ўзгармагунча кешдан) ҳисобланади;
 - рўйхат API лари саҳифа ҳажмига боғлиқ бўлмаган сондаги SQL сўров билан ишлайди (N+1 йўқ);
@@ -28,7 +28,7 @@ from django.test.utils import CaptureQueriesContext
 
 from . import face
 from .models import Department, Employee, ROLE_ADMIN, ROLE_TIMEKEEPER, ROLE_USER, Timekeeper, UserProfile
-from .thumbnails import THUMB_SIZE, ensure_thumbnail, original_name_for_thumbnail, thumbnail_name
+from .thumbnails import THUMB_DIR, THUMB_SIZE, ensure_thumbnail, original_name_for_thumbnail, thumbnail_name
 
 TEMPLATES_DIR = settings.BASE_DIR / 'employees' / 'templates'
 
@@ -77,7 +77,13 @@ class ThumbnailTests(TempMediaMixin, TestCase):
     def test_name_round_trip(self):
         self.assertEqual(original_name_for_thumbnail(thumbnail_name('employee_base_images/a b.jpg')), 'employee_base_images/a b.jpg')
         self.assertIsNone(original_name_for_thumbnail('employee_base_images/a.jpg'))
-        self.assertIsNone(original_name_for_thumbnail(f'thumbs/{THUMB_SIZE}/a.png'))
+        self.assertIsNone(original_name_for_thumbnail(f'{THUMB_DIR}/a.png'))
+
+    def test_old_thumbnail_urls_are_not_reused(self):
+        """Биринчи версиядаги превьюлар (thumbs/256/...) 0600 эди ва браузер улар учун nginx 403 ини бир соат кешлаган.
+        Янги манзил браузерни уларни қайта сўрашга мажбур қилади."""
+        self.assertTrue(thumbnail_name('employee_base_images/a.jpg').startswith(f'thumbs/{THUMB_SIZE}v'))
+        self.assertIsNone(original_name_for_thumbnail(f'thumbs/{THUMB_SIZE}/employee_base_images/a.jpg.jpg'))
 
     def test_list_api_gives_a_thumbnail_and_keeps_the_original_url(self):
         admin = self.make_admin()
@@ -150,7 +156,7 @@ class ThumbnailTests(TempMediaMixin, TestCase):
         self.assertEqual(b''.join(response.streaming_content), b'not an image')
 
     def test_traversal_through_the_thumbnail_path_is_refused(self):
-        for path in (f'/media/thumbs/{THUMB_SIZE}/../../config/settings.py.jpg', f'/media/thumbs/{THUMB_SIZE}/%2e%2e/x.jpg.jpg'):
+        for path in (f'/media/{THUMB_DIR}/../../config/settings.py.jpg', f'/media/{THUMB_DIR}/%2e%2e/x.jpg.jpg'):
             with self.subTest(path=path):
                 self.assertEqual(Client().get(path).status_code, 404)
 
@@ -175,7 +181,8 @@ class XAccelRedirectTests(TempMediaMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['X-Accel-Redirect'], '/protected-media/' + employee.base_image.name)
         self.assertEqual(response['Content-Type'], 'image/jpeg')
-        self.assertEqual(response['Cache-Control'], 'private, max-age=3600')
+        # Кеш сарлавҳасини nginx фақат муваффақиятли жавобга қўяди: Django қўйса, nginx уни 403/404 ида ҳам сақларди.
+        self.assertNotIn('Cache-Control', response)
         self.assertEqual(response.content, b'')
 
     def test_thumbnail_is_built_then_handed_to_nginx(self):
@@ -399,6 +406,8 @@ class InfrastructureSettingsTests(TestCase):
                 self.assertIn('add_header Cache-Control $static_cache_control;', static_block)   # «always» йўқ
                 self.assertNotIn('Cache-Control $static_cache_control always', conf)
                 self.assertIn('error_page 403 404 = @django;', static_block)   # nginx кўрмаса — Django (whitenoise) беради
+                media_block = conf[conf.index('location /protected-media/ {'):conf.index('location @django {')]
+                self.assertIn('add_header Cache-Control "private, max-age=3600";', media_block)   # «always» йўқ: хатога эмас
                 # @django ва «location /» бир хил прокси созламаларига эга (бири ўзгарса, иккинчиси ҳам).
                 named = re.search(r'location @django \{(.*?)\n    \}', conf, re.S).group(1)
                 main = re.search(r'location / \{(.*?)\n    \}', conf, re.S).group(1)
