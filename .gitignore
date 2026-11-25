@@ -16,7 +16,7 @@ certs/*.key
 __pycache__/
 *.pyc
 media/
-staticfiles/
+
 
 # Audit report with vulnerability details: keep it out of the (shared) repository.
 SECURITY_AUDIT.md
