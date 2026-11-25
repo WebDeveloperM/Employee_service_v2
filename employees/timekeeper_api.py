@@ -1,148 +1,67 @@
-"""Табелчи API си: бошқа тизим табелчи номидан ўз цехи ходимларининг маълумотларини ўқийди ва янгилайди.
+"""Табелчи API лари (бошқа тизим учун). Ҳужжат: API_TIMEKEEPER.md. Манзиллар — /api/v1/ (api_urls.py).
 
-Ҳужжат: API_TIMEKEEPER.md. Манзиллар — /api/v1/timekeeper/ (api_urls.py).
+Тизимлар ўртасида иш тақсимоти
+  * Табелчини БОШҚА ТИЗИМ тайинлайди ва олиб ташлайди (timekeeper-assignments/). ES да тайинлаш саҳифаси йўқ.
+  * Табелчи бошқа тизимда ишлайди (ўз логини билан ўша тизимга киради); бошқа тизим ES га унинг НОМИДАН мурожаат қилади
+    (timekeeper/<табелчининг табель рақами>/...): ўз цехи ходимларини ўқийди ва янгилайди.
 
-Қандай ишлайди
-  1. Табелчи ўз логини ва пароли билан токен олади (POST token/). Токен муддатли, базада фақат хэши сақланади.
-  2. Бошқа тизим сўровларга «Authorization: Token <токен>» қўшади.
-  3. Ҳар бир сўровда сервер табелчининг цехини қайта аниқлайди (permissions.timekeeper_department): табелчи
-     олиб ташланса ёки ходими фаол бўлмай қолса, токен ишламай қолади. Бошқа цех ходимлари «топилмади» (404).
-  4. Ёзиш — веб-саҳифадаги «Цех ходимлари» билан бир хил қоидалар (TimekeeperManagedEmployeeSerializer): ҳисоб,
-     рол ва цех ўзгармайди, администратор/HR ходимига тегилмайди. Бу ерда яна: фото ва табель рақами ўзгармайди.
-
-Сервис калити (X-Employee-Service-Key) ва веб-сессия бу API да ишламайди: фақат табелчи токени.
+Хавфсизлик
+  * Иккала гуруҳ ҳам ФАҚАТ сервис калити билан (X-Employee-Service-Key ёки Bearer). Табелчининг ES парол/токени йўқ:
+    логин ва парол тизимлар ўртасида юрмайди. Калит — бошқа тизимнинг сири (у ходим маълумотини бошқа йўллар билан ҳам ўзгартира олади).
+  * «Табелчи номидан» дегани ES да ЧЕКЛОВ: ES шу табель рақамли ходим ҳозир ишлаб турган табелчими (тайинланган, фаол,
+    ўчирилмаган) — текширади ва ундан кейин фақат унинг цехи ходимлари, фақат рухсат этилган майдонлар билан ишлайди.
+    Цех ва майдонлар чеки калит бор-йўқлигига боғлиқ эмас, ҳар сўровда текширилади.
+  * Ёзув қоидалари веб-саҳифадаги «Цех ходимлари» билан бир хил (TimekeeperManagedEmployeeSerializer): ҳисоб, рол ва цех
+    ўзгармайди, администратор/HR ходимига тегилмайди. Бу ерда яна: фото ва табель рақами ўзгармайди.
 """
-import hashlib
-import secrets
-from datetime import timedelta
-
-from django.conf import settings
-from django.contrib.auth import authenticate
 from django.db import models, transaction
-from django.utils import timezone
-from django.utils.crypto import constant_time_compare
-from django.utils.dateparse import parse_datetime
 from django.http import Http404
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import exceptions, serializers, status
-from rest_framework.authentication import BaseAuthentication, get_authorization_header
 from rest_framework.generics import ListAPIView, RetrieveUpdateAPIView
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
-from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from .authentication import ServiceApiKeyAuthentication
 from .models import (
-    EMPLOYEE_STATUS_CHOICES, Employee, EmployeeCategory, PositionCategory, Section, TimekeeperApiToken, WorkSchedule,
+    Department, EMPLOYEE_STATUS_CHOICES, Employee, EmployeeCategory, PositionCategory, Section, Timekeeper, WorkSchedule,
     STATUS_INACTIVE, STATUS_WORKING,
 )
 from .ordering import order_sections_by_code
-from .permissions import timekeeper_department
+from .permissions import is_service_api_request
 from .sections_tree import SectionIndex, annotate_path_labels, order_depth_first
-from .security import client_ip, is_login_locked, register_login_failure, reset_login_failures, security_log
+from .security import client_ip, security_log
 from .serializers import (
     EMPLOYEE_DATE_INPUT_FORMATS, EmployeeCategorySerializer, PositionCategorySerializer, TimekeeperManagedEmployeeSerializer,
     WorkScheduleSerializer,
 )
 from .staff import StaffTreeOrder
+from .timekeepers import (
+    TimekeeperError, active_assignment, assign_timekeeper, assignments_payload, department_assignment, remove_timekeeper,
+)
 
-TOKEN_PREFIX = 'tk_'
-TOUCH_INTERVAL = timedelta(minutes=1)   # «охирги ишлатилган» вақти ҳар сўровда эмас, дақиқада бир марта ёзилади
 STATUS_LABELS = dict(EMPLOYEE_STATUS_CHOICES)
 
 
-# ---------------------------------------------------------------------------------------------------------------- токен
+# ------------------------------------------------------------------------------------------------------------ умумий қисм
 
-def hash_token(raw_token):
-    return hashlib.sha256(str(raw_token).encode('utf-8')).hexdigest()
-
-
-def token_lifetime():
-    return timedelta(hours=float(getattr(settings, 'TIMEKEEPER_API_TOKEN_TTL_HOURS', 24)))
-
-
-def issue_token(user, ip=''):
-    """Янги токен. Қайтади: (токен матни — фақат шу ерда кўринади, TimekeeperApiToken)."""
-    now = timezone.now()
-    tokens = TimekeeperApiToken.objects.filter(user=user)
-    tokens.filter(expires_at__lte=now).delete()
-    # Бир фойдаланувчида фаол токенлар сони чекланган: энг эскилари алмашади (токен чиқиб кетса, ўз-ўзидан тўхтайди).
-    keep = max(int(getattr(settings, 'TIMEKEEPER_API_MAX_TOKENS', 5)) - 1, 0)
-    stale = list(tokens.order_by('-created_at').values_list('pk', flat=True)[keep:])
-    if stale:
-        TimekeeperApiToken.objects.filter(pk__in=stale).delete()
-
-    raw_token = TOKEN_PREFIX + secrets.token_urlsafe(32)
-    token = TimekeeperApiToken.objects.create(
-        user=user,
-        key_hash=hash_token(raw_token),
-        auth_stamp=user.get_session_auth_hash(),
-        expires_at=now + token_lifetime(),
-        created_ip=str(ip or '')[:45],
-    )
-    return raw_token, token
-
-
-class TimekeeperTokenAuthentication(BaseAuthentication):
-    """«Authorization: Token <токен>». Токен: муддати ўтмаган, ҳисоб фаол, парол токен олингандан бери ўзгармаган."""
-
-    keyword = 'Token'
-
-    def authenticate(self, request):
-        parts = get_authorization_header(request).split()
-        if not parts or parts[0].lower() != self.keyword.lower().encode():
-            return None
-        if len(parts) != 2:
-            raise exceptions.AuthenticationFailed('Authorization сарлавҳаси «Token <токен>» кўринишида бўлиши керак.', code='bad_header')
-        try:
-            raw_token = parts[1].decode('utf-8')
-        except UnicodeError:
-            raise exceptions.AuthenticationFailed('Токенда рухсат этилмаган белгилар бор.', code='token_invalid')
-        return self.authenticate_credentials(raw_token)
-
-    def authenticate_credentials(self, raw_token):
-        token = TimekeeperApiToken.objects.select_related('user').filter(key_hash=hash_token(raw_token)).first()
-        if token is None:
-            raise exceptions.AuthenticationFailed('Токен нотўғри ёки бекор қилинган.', code='token_invalid')
-        now = timezone.now()
-        if token.expires_at <= now:
-            raise exceptions.AuthenticationFailed('Токен муддати тугаган. Логин ва парол билан янги токен олинг.', code='token_expired')
-        user = token.user
-        if not user.is_active:
-            raise exceptions.AuthenticationFailed('Фойдаланувчи ҳисоби ўчирилган.', code='account_disabled')
-        if not constant_time_compare(token.auth_stamp, user.get_session_auth_hash()):
-            raise exceptions.AuthenticationFailed('Парол ўзгартирилган. Логин ва парол билан янги токен олинг.', code='password_changed')
-        if token.last_used_at is None or now - token.last_used_at > TOUCH_INTERVAL:
-            TimekeeperApiToken.objects.filter(pk=token.pk).update(last_used_at=now)
-        return user, token
-
-    def authenticate_header(self, request):
-        return self.keyword   # жавобда «WWW-Authenticate: Token» билан 401 (403 эмас)
-
-
-class IsWorkingTimekeeper(BasePermission):
-    """Ишлаб турган табелчи: «Табелчилар» саҳифасида цехга тайинланган, ходими фаол, ҳисоби ёқиқ."""
-
-    message = 'Сиз ишлайдиган табелчи эмассиз: ходим «Табелчилар» саҳифасида цехга тайинланмаган ёки ҳисоби/ходими фаол эмас.'
-    code = 'not_a_timekeeper'
+class IsServiceKey(BasePermission):
+    message = 'Бу API фақат бошқа тизимнинг сервис калити билан ишлайди.'
 
     def has_permission(self, request, view):
-        department = timekeeper_department(request.user)
-        if department is None:
-            return False
-        request.timekeeper_department = department
-        return True
+        return is_service_api_request(request)
 
-
-# ------------------------------------------------------------------------------------------------------------ умумий қисм
 
 class ErrorCodeMixin:
     """Хато жавобига машина ўқийдиган «code» қўшади (APIView дан олдин келиши керак)."""
 
     def handle_exception(self, exc):
         response = super().handle_exception(exc)
-        # {"detail": "...", "code": "token_expired"}: интеграция матнга эмас, code га таяниши мумкин.
+        # {"detail": "...", "code": "not_a_timekeeper"}: интеграция матнга эмас, code га таяниши мумкин.
         # Майдон хатолари (400) — {майдон: [хабарлар]} — ўзгармайди.
         if isinstance(exc, exceptions.APIException) and not isinstance(exc, exceptions.ValidationError) \
                 and isinstance(response.data, dict) and 'detail' in response.data:
@@ -150,113 +69,153 @@ class ErrorCodeMixin:
         return response
 
 
-class TimekeeperApiMixin(ErrorCodeMixin):
-    """Барча табелчи API view лари учун: фақат токен, чегара, ишлаб турган табелчи."""
+class ServiceKeyApiMixin(ErrorCodeMixin):
+    """Фақат сервис калити. Чегара (throttle) йўқ: калитни сир сақлаш — бошқа тизимнинг иши (веб-кириш чегаралари парол учун)."""
 
-    authentication_classes = [TimekeeperTokenAuthentication]
-    permission_classes = [IsWorkingTimekeeper]
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = 'timekeeper_api'
+    authentication_classes = [ServiceApiKeyAuthentication]
+    permission_classes = [IsServiceKey]
 
-
-def timekeeper_info(user, department):
-    employee = getattr(user, 'employee', None)
-    return {
-        'employee_id': employee.pk if employee else None,
-        'tabel_number': employee.tabel_number if employee else None,
-        'full_name': str(employee) if employee else user.get_username(),
-        'login': user.get_username(),
-        'department': {'id': department.pk, 'name': department.name},
-    }
+    def get_authenticate_header(self, request):
+        # Калит йўқ ёки нотўғри бўлса 401 ва «WWW-Authenticate» (ServiceApiKeyAuthentication ўзи сарлавҳа бермайди — DRF 403 қайтарарди).
+        return 'Bearer realm="employee-service"'
 
 
-def isoformat(value):
-    return timezone.localtime(value).isoformat() if value else None
+class TimekeeperActingMixin(ServiceKeyApiMixin):
+    """«Табелчи номидан»: URL даги табель рақами ишлаб турган табелчига тегишли бўлиши шарт, цех шундан олинади."""
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)     # калит текширилади (401/403 биринчи)
+        assignment = active_assignment(kwargs.get('timekeeper_tabel'))
+        if assignment is None:
+            security_log.warning('timekeeper api refused (not a working timekeeper): tabel=%r ip=%s',
+                                 str(kwargs.get('timekeeper_tabel'))[:60], client_ip(request))
+            raise exceptions.PermissionDenied(
+                'Бу табель рақамли ходим ишлаб турган табелчи эмас: цехга тайинланмаган, ёки фаол эмас/ўчирилган.',
+                code='not_a_timekeeper',
+            )
+        request.timekeeper = assignment
+        request.timekeeper_department = assignment.department
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['timekeeper_department'] = self.request.timekeeper_department      # serializer цехни шундан олади
+        context['acting_user'] = self.request.timekeeper.employee.user             # ўринбосарни «ким тайинлаган» (ҳисоби бўлса)
+        return context
 
 
-# --------------------------------------------------------------------------------------------------------- токен олиш/қайтариш
+# -------------------------------------------------------------------------------------- табелчи тайинлаш (бошқа тизим)
 
-class TokenRequestSerializer(serializers.Serializer):
-    login = serializers.CharField(max_length=150, error_messages={'required': 'Логинни юборинг.', 'blank': 'Логинни киритинг.'})
-    password = serializers.CharField(
-        trim_whitespace=False, max_length=256, error_messages={'required': 'Паролни юборинг.', 'blank': 'Паролни киритинг.'},
+class AssignmentRequestSerializer(serializers.Serializer):
+    tabel_number = serializers.CharField(
+        max_length=255, error_messages={'required': 'Табелчи ходимнинг табель рақамини юборинг.', 'blank': 'Табель рақамини киритинг.'},
     )
 
 
-class TokenResponseSerializer(serializers.Serializer):
-    token = serializers.CharField()
-    token_type = serializers.CharField()
-    expires_at = serializers.DateTimeField()
-    expires_in = serializers.IntegerField()
+class AssignmentResponseSerializer(serializers.Serializer):
+    department = serializers.DictField()
+    timekeeper = serializers.DictField(allow_null=True)
+    employee_count = serializers.IntegerField(required=False)
+
+
+class AssignmentPutResponseSerializer(serializers.Serializer):
+    department = serializers.DictField()
     timekeeper = serializers.DictField()
+    replaced = serializers.DictField(allow_null=True)
+    changed = serializers.BooleanField()
+
+
+class AssignmentListResponseSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    results = AssignmentResponseSerializer(many=True)
+
+
+def parse_bool_param(request, name):
+    raw = request.query_params.get(name, '').strip().lower()
+    if not raw:
+        return None
+    if raw in ('true', '1'):
+        return True
+    if raw in ('false', '0'):
+        return False
+    raise serializers.ValidationError({name: ['true ёки false юборинг.']})
 
 
 @extend_schema(
-    request=TokenRequestSerializer, responses={200: TokenResponseSerializer}, auth=[],
-    summary='Табелчи токенини олиш', tags=['timekeeper'],
-    description='Табелчининг логини ва пароли билан муддатли токен. Администратор, HR ва оддий ходимга токен берилмайди.',
+    summary='Цехлар ва уларнинг табелчилари', tags=['timekeeper-assignments'], responses={200: AssignmentListResponseSerializer},
+    parameters=[
+        OpenApiParameter('assigned', bool, description='true — фақат табелчиси борлар, false — табелчиси йўқлар'),
+        OpenApiParameter('tabel_number', str, description='Шу табель рақамли ходим табелчи бўлган цех'),
+    ],
 )
-class TimekeeperTokenView(ErrorCodeMixin, APIView):
-    authentication_classes = []        # кириш сўрови: ҳали токен йўқ (нотўғри сарлавҳа уни бузмасин)
-    permission_classes = []
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = 'timekeeper_token'
+class TimekeeperAssignmentListView(ServiceKeyApiMixin, APIView):
+    """Барча цехлар (штат дарахтидаги тартибда). Солиштириш (reconcile) учун: ES да ким табелчи."""
 
-    def post(self, request):
-        serializer = TokenRequestSerializer(data=request.data)
+    def get(self, request):
+        results = assignments_payload(
+            assigned=parse_bool_param(request, 'assigned'), tabel_number=request.query_params.get('tabel_number', '').strip(),
+        )
+        return Response({'count': len(results), 'results': results})
+
+
+def get_department_or_404(department_id):
+    department = Department.objects.filter(pk=department_id).first()
+    if department is None:
+        raise exceptions.NotFound('Бундай цех топилмади.', code='department_not_found')
+    return department
+
+
+@extend_schema_view(
+    get=extend_schema(summary='Цехнинг табелчиси', tags=['timekeeper-assignments'], responses={200: AssignmentResponseSerializer}),
+    put=extend_schema(
+        summary='Цехга табелчи тайинлаш (олдингиси алмашади)', tags=['timekeeper-assignments'],
+        request=AssignmentRequestSerializer, responses={200: AssignmentPutResponseSerializer},
+        description='Идемпотент: ўша ходимни қайта тайинлаш зарарсиз (changed=false).',
+    ),
+    delete=extend_schema(summary='Цехнинг табелчисини олиб ташлаш', tags=['timekeeper-assignments'], responses={204: None},
+                         description='Идемпотент: табелчи бўлмаса ҳам 204.'),
+)
+class TimekeeperAssignmentDetailView(ServiceKeyApiMixin, APIView):
+    def get(self, request, department_id):
+        department = get_department_or_404(department_id)
+        assignment = Timekeeper.objects.select_related('employee', 'employee__user').filter(department=department).first()
+        return Response(department_assignment(department, assignment))
+
+    def put(self, request, department_id):
+        department = get_department_or_404(department_id)
+        serializer = AssignmentRequestSerializer(data=request.data if hasattr(request.data, 'keys') else {})
         serializer.is_valid(raise_exception=True)
-        login = serializer.validated_data['login'].strip()
-        password = serializer.validated_data['password']
-        ip = client_ip(request)
+        tabel_number = serializer.validated_data['tabel_number'].strip()
+        employee = Employee.objects.select_related('user', 'department').filter(tabel_number=tabel_number, is_deleted=False).first()
+        if employee is None:
+            raise exceptions.NotFound('Бундай табель рақамли ходим топилмади.', code='employee_not_found')
+        try:
+            result = assign_timekeeper(department, employee)
+        except TimekeeperError as error:
+            return Response({'detail': error.message, 'code': error.code, **error.extra}, status=status.HTTP_409_CONFLICT)
 
-        # Паролни танлаб топишдан ҳимоя: веб-кириш билан бир хил ҳисоблагичлар (security.py).
-        if is_login_locked(login, ip):
-            response = Response(
-                {'detail': 'Жуда кўп нотўғри уриниш. Бир оздан сўнг қайта уриниб кўринг.', 'code': 'login_locked'},
-                status=status.HTTP_429_TOO_MANY_REQUESTS,
-            )
-            response['Retry-After'] = str(int(getattr(settings, 'LOGIN_LOCKOUT_SECONDS', 900)))
-            return response
-
-        user = authenticate(request=request._request, username=login, password=password)   # ўчирилган ҳисоб ҳам None
-        if user is None:
-            register_login_failure(login, ip)
-            # Логин йўқми, парол нотўғрими — бир хил жавоб: логинларни саралаб бўлмасин.
-            return Response({'detail': 'Логин ёки парол нотўғри.', 'code': 'invalid_credentials'}, status=status.HTTP_401_UNAUTHORIZED)
-        reset_login_failures(login, ip)
-
-        department = timekeeper_department(user)
-        if department is None:
-            security_log.warning('timekeeper api token refused (not a working timekeeper): user=%r ip=%s', user.get_username(), ip)
-            raise exceptions.PermissionDenied(IsWorkingTimekeeper.message, code='not_a_timekeeper')
-
-        raw_token, token = issue_token(user, ip)
-        security_log.info('timekeeper api token issued: user=%r department=%r ip=%s', user.get_username(), department.name, ip)
+        replaced = result.replaced
+        security_log.info(
+            'timekeeper assigned via api: department=%r timekeeper=%r replaced=%r changed=%s ip=%s',
+            department.name, employee.tabel_number, replaced.tabel_number if replaced else None, result.changed, client_ip(request),
+        )
+        payload = department_assignment(department, result.assignment)
         return Response({
-            'token': raw_token,
-            'token_type': TimekeeperTokenAuthentication.keyword,
-            'expires_at': isoformat(token.expires_at),
-            'expires_in': int((token.expires_at - timezone.now()).total_seconds()),
-            'timekeeper': timekeeper_info(user, department),
+            'department': payload['department'],
+            'timekeeper': payload['timekeeper'],
+            'replaced': {'tabel_number': replaced.tabel_number, 'full_name': str(replaced)} if replaced is not None else None,
+            'changed': result.changed,
         })
 
-
-@extend_schema(
-    request=None, responses={204: None}, summary='Жорий токенни бекор қилиш (чиқиш)', tags=['timekeeper'],
-)
-class TimekeeperLogoutView(TimekeeperApiMixin, APIView):
-    def post(self, request):
-        token = request.auth
-        if isinstance(token, TimekeeperApiToken):
-            token.delete()
-            security_log.info('timekeeper api token revoked: user=%r', request.user.get_username())
+    def delete(self, request, department_id):
+        department = get_department_or_404(department_id)
+        removed = remove_timekeeper(department)
+        if removed is not None:
+            security_log.info('timekeeper removed via api: department=%r timekeeper=%r ip=%s',
+                              department.name, removed.tabel_number, client_ip(request))
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class MeResponseSerializer(serializers.Serializer):
-    timekeeper = serializers.DictField()
-    token = serializers.DictField(allow_null=True)
-
+# ------------------------------------------------------------------------------------------ табелчи номидан: маълумотнома
 
 class ReferenceResponseSerializer(serializers.Serializer):
     department = serializers.DictField()
@@ -268,25 +227,18 @@ class ReferenceResponseSerializer(serializers.Serializer):
     genders = serializers.ListField(child=serializers.DictField())
 
 
-@extend_schema(responses={200: MeResponseSerializer}, summary='Мен кимман: табелчи, цех ва токен муддати', tags=['timekeeper'])
-class TimekeeperMeView(TimekeeperApiMixin, APIView):
-    def get(self, request):
-        token = request.auth
-        return Response({
-            'timekeeper': timekeeper_info(request.user, request.timekeeper_department),
-            'token': {
-                'created_at': isoformat(token.created_at),
-                'expires_at': isoformat(token.expires_at),
-            } if isinstance(token, TimekeeperApiToken) else None,
-        })
+@extend_schema(summary='Табелчи ва унинг цехи (ишлаб турганини текшириш)', tags=['timekeeper'], responses={200: AssignmentResponseSerializer})
+class TimekeeperInfoView(TimekeeperActingMixin, APIView):
+    def get(self, request, timekeeper_tabel):
+        return Response(department_assignment(request.timekeeper.department, request.timekeeper))
 
 
 @extend_schema(
     responses={200: ReferenceResponseSerializer}, tags=['timekeeper'],
     summary='Рўйхатлар: бўлимлар, тоифалар, иш тартиблари, ҳолатлар (PATCH да id ва қийматлар учун)',
 )
-class TimekeeperReferenceView(TimekeeperApiMixin, APIView):
-    def get(self, request):
+class TimekeeperReferenceView(TimekeeperActingMixin, APIView):
+    def get(self, request, timekeeper_tabel):
         department = request.timekeeper_department
         sections = Section.objects.filter(department=department).select_related('department')
         ordered = annotate_path_labels(order_depth_first(order_sections_by_code(sections)))
@@ -314,6 +266,11 @@ class TimekeeperApiEmployeeSerializer(TimekeeperManagedEmployeeSerializer):
     """
 
     tabel_number = serializers.CharField(read_only=True)
+    # EmployeeSerializer бу майдонларни max_length сиз эълон қилган: база эса varchar(20)/(255) — узун қиймат PostgreSQL да 500 берарди.
+    surname = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    phone_number_1 = serializers.CharField(required=False, allow_blank=True, max_length=20)
+    phone_number_2 = serializers.CharField(required=False, allow_blank=True, max_length=20)
+    clothe_size = serializers.CharField(required=False, allow_blank=True, max_length=255)
     department = serializers.SerializerMethodField()
     section = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
@@ -470,7 +427,7 @@ class TimekeeperEmployeeUpdateSerializer(serializers.Serializer):
         ],
     ),
 )
-class TimekeeperEmployeeListView(TimekeeperApiMixin, ListAPIView):
+class TimekeeperEmployeeListView(TimekeeperActingMixin, ListAPIView):
     """Фақат табелчининг ўз цехи ходимлари (ўчирилганлари йўқ). Тартиб — «Штат бирлиги ва лавозим» саҳифасидагидек."""
 
     serializer_class = TimekeeperApiEmployeeSerializer
@@ -526,7 +483,7 @@ class TimekeeperEmployeeListView(TimekeeperApiMixin, ListAPIView):
         description='Фақат юборилган майдонлар ўзгаради. Рўйхатда йўқ майдон юборилса — 400 (сабаби билан).',
     ),
 )
-class TimekeeperEmployeeDetailView(TimekeeperApiMixin, RetrieveUpdateAPIView):
+class TimekeeperEmployeeDetailView(TimekeeperActingMixin, RetrieveUpdateAPIView):
     serializer_class = TimekeeperApiEmployeeSerializer
     lookup_field = 'tabel_number'
     http_method_names = ['get', 'patch', 'head', 'options']   # PUT йўқ: фақат қисман янгилаш
@@ -564,6 +521,7 @@ class TimekeeperEmployeeDetailView(TimekeeperApiMixin, RetrieveUpdateAPIView):
         with transaction.atomic():
             serializer.save()
         security_log.info(
-            'timekeeper api update: user=%r employee=%r fields=%s', request.user.get_username(), employee.tabel_number, sorted(payload.keys()),
+            'timekeeper api update: timekeeper=%r employee=%r fields=%s ip=%s',
+            request.timekeeper.employee.tabel_number, employee.tabel_number, sorted(payload.keys()), client_ip(request),
         )
         return Response(self.get_serializer(self.get_queryset().get(pk=employee.pk)).data)

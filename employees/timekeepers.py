@@ -1,52 +1,89 @@
-"""«Табелчилар»: ҳар бир цех учун битта ходим ва унинг «Табелчи» роли.
+"""Табелчилар: ҳар бир цех учун битта ходим.
 
-Тайинлаш ва олиб ташлаш фақат шу ерда: Timekeeper ёзуви ва ходимнинг роли (UserProfile.role) ҳар доим бирга ўзгаради.
-Табелчи қайси цехнинг ходими эканидан қатъи назар (масалан, 20-Цех Завод бошқармаси) тайинланган цехнинг ходимларини кўради:
-цех Timekeeper.department дан олинади. «Раҳбарият» цехи ходимлари табелчи бўла олмайди.
-Ходимда ҳисоб (логин) бўлмаса, тайинлашда логин ва парол сўралади ва ҳисоб ходим формасидаги каби яратилади.
-Администратор, HR ва суперфойдаланувчи табелчи бўла олмайди: тайинлаш уларнинг ролини пасайтириб қўймаслиги керак.
+Табелчини ES да эмас, БОШҚА ТИЗИМ тайинлайди (API: timekeeper_api.py, ҳужжат: API_TIMEKEEPER.md); ES да тайинлаш саҳифаси йўқ.
+Тайинлаш ва олиб ташлаш фақат шу ерда: Timekeeper ёзуви ва (ходимда ES ҳисоби бўлса) унинг роли — UserProfile.role —
+ҳар доим бирга ўзгаради.
+
+Қоидалар
+  * Табелчи — тайинланган цехнинг ўз фаол ходими. «Раҳбарият» цехи ходими табелчи бўла олмайди.
+  * Ходим фақат битта цехнинг табелчиси бўла олади; цехнинг табелчиси битта (янги тайинлаш эскисини алмаштиради).
+  * Администратор, HR ва суперфойдаланувчи табелчи бўла олмайди: тайинлаш уларнинг ролини пасайтириб қўймаслиги керак.
+  * ES ҳисоби МАЖБУРИЙ ЭМАС: ҳисоби йўқ табелчи бошқа тизим орқали ишлайди. ES ҳисоби бор бўлса, унга «Табелчи» роли
+    берилади ва у ES веб-саҳифасидаги «Цех ходимлари»дан ҳам фойдалана олади. ES да ҳисоб ЯРАТИЛМАЙДИ (логин/парол
+    тизимлар ўртасида юрмасин).
 """
-from django.contrib.auth.models import User as AuthUser
+from typing import NamedTuple
+
 from django.db import models, transaction
+from django.utils import timezone
 
 from .models import Department, Employee, ROLE_TIMEKEEPER, ROLE_USER, Timekeeper, UserProfile
-from .serializers import create_login_user, is_privileged_account, login_problem, password_problems
-from .staff import StaffTreeOrder, is_leadership_department, staff_tree_order
-from .thumbnails import thumbnail_url
+from .serializers import is_privileged_account
+from .staff import is_leadership_department, staff_tree_order
+
+
+class AssignmentResult(NamedTuple):
+    assignment: Timekeeper
+    replaced: Employee | None   # алмашган эски табелчи (ходим)
+    changed: bool               # False — шу ходим аллақачон шу цехнинг табелчиси эди
+
+
+# Тайинлаш хатоларининг кодлари (HTTP 409). Ҳар бири API_TIMEKEEPER.md да тавсифланган (тест текширади).
+ASSIGNMENT_ERROR_CODES = (
+    'employee_inactive', 'leadership_department', 'already_timekeeper_elsewhere', 'employee_not_in_department', 'privileged_account',
+)
 
 
 class TimekeeperError(Exception):
-    """Тайинлаш мумкин эмас: матн фойдаланувчига кўрсатилади, field — хато қайси майдонга тегишли (ихтиёрий)."""
+    """Тайинлаш мумкин эмас. code — интеграция учун барқарор белги, message — одам учун матн (ўзгариши мумкин)."""
 
-    def __init__(self, message, field=None):
+    def __init__(self, message, code, extra=None):
+        if code not in ASSIGNMENT_ERROR_CODES:
+            raise ValueError(f'Номаълум тайинлаш хато коди: {code!r} (ASSIGNMENT_ERROR_CODES ва API_TIMEKEEPER.md га қўшинг)')
         super().__init__(message)
         self.message = message
-        self.field = field
+        self.code = code
+        self.extra = extra or {}
 
 
-def employee_brief(employee):
-    """Ходим ҳақида жадвал ва қидирув учун қисқа маълумот."""
+def active_assignment(tabel_number):
+    """Шу табель рақамли ходимнинг ишлаб турган табелчилик тайинлови (Timekeeper) ёки None.
+
+    «Ишлаб турган»: ходим ўчирилмаган ва фаол. Бошқа тизим табелчи номидан иш қилганда ES шуни текширади.
+    """
+    tabel_number = str(tabel_number or '').strip()
+    if not tabel_number:
+        return None
+    return (
+        Timekeeper.objects.select_related('department', 'employee', 'employee__user', 'employee__user__profile')
+        .filter(employee__tabel_number=tabel_number, employee__is_deleted=False, employee__is_active=True)
+        .first()
+    )
+
+
+def timekeeper_brief(assignment):
+    """Тайинлов ҳақида маълумот (API жавоби учун)."""
+    employee = assignment.employee
     user = employee.user
     return {
-        'id': employee.id,
-        'slug': employee.slug,
-        'full_name': str(employee),
+        'employee_id': employee.id,
         'tabel_number': employee.tabel_number,
+        'full_name': str(employee),
         'position': employee.position,
-        'department_name': employee.department.name if employee.department else '',
-        'section_name': employee.section.name if employee.section else '',
-        'base_image_url': employee.base_image.url if employee.base_image else None,
-        'base_image_thumb_url': thumbnail_url(employee.base_image),
-        'login': (user.username if user is not None else '') or employee.login,
-        'has_account': user is not None,
+        'is_active': bool(employee.is_active and not employee.is_deleted),   # False бўлса, у номидан иш қилиб бўлмайди
+        'has_es_account': user is not None,
+        'assigned_at': timezone.localtime(assignment.created_at).isoformat(),
     }
 
 
-def timekeepers_payload():
-    """Барча цехлар (штат дарахтидаги тартибда: Раҳбарият, 20-Цех, кейин қолганлари) ва уларнинг табелчиси (йўқ бўлса — None)."""
+def assignments_payload(*, assigned=None, tabel_number=''):
+    """Барча цехлар (штат дарахтидаги тартибда) ва уларнинг табелчиси (йўқ бўлса — None).
+
+    assigned: True — фақат табелчиси борлари, False — фақат йўқлари; tabel_number — шу ходимнинг цехи.
+    """
     assignments = {
         item.department_id: item
-        for item in Timekeeper.objects.select_related('employee', 'employee__user', 'employee__section', 'employee__department')
+        for item in Timekeeper.objects.select_related('employee', 'employee__user')
     }
     counts = dict(
         Employee.objects.filter(is_deleted=False, is_active=True, department__isnull=False)
@@ -55,43 +92,22 @@ def timekeepers_payload():
     payload = []
     for department in sorted(Department.objects.all(), key=staff_tree_order):
         assignment = assignments.get(department.id)
-        payload.append({
-            'department': {'id': department.id, 'name': department.name},
-            'employee_count': counts.get(department.id, 0),
-            'timekeeper': employee_brief(assignment.employee) if assignment is not None else None,
-        })
+        if assigned is not None and bool(assignment) != assigned:
+            continue
+        if tabel_number and (assignment is None or assignment.employee.tabel_number != tabel_number):
+            continue
+        payload.append(department_assignment(department, assignment, employee_count=counts.get(department.id, 0)))
     return payload
 
 
-def candidates_for(department, search=''):
-    """Цехга табелчи бўла оладиган ходимлар: фақат шу цехнинг фаол ходимлари («Раҳбарият» цехига — ҳеч ким).
-
-    Тартиб «Ходимлар рўйхати» саҳифасидагидек (штат дарахти): бўлимлар ва лавозимлар тартибида.
-    Қидирув (ихтиёрий): ҳар бир сўз исм, табель ёки лавозимда.
-    """
-    if is_leadership_department(department):
-        return []
-    queryset = Employee.objects.filter(is_deleted=False, is_active=True, department=department)
-    for word in (search or '').split():
-        queryset = queryset.filter(
-            models.Q(first_name__icontains=word) | models.Q(last_name__icontains=word) | models.Q(surname__icontains=word)
-            | models.Q(tabel_number__icontains=word) | models.Q(position__icontains=word)
-        )
-    queryset = queryset.order_by('last_name', 'first_name', 'surname', 'tabel_number')
-    ordered_ids = StaffTreeOrder().sorted_ids(queryset)
-    by_id = {
-        employee.id: employee
-        for employee in queryset.select_related('user', 'user__profile', 'department', 'section', 'timekeeper_assignment__department')
+def department_assignment(department, assignment, *, employee_count=None):
+    item = {
+        'department': {'id': department.id, 'name': department.name},
+        'timekeeper': timekeeper_brief(assignment) if assignment is not None else None,
     }
-    result = []
-    for employee_id in ordered_ids:
-        employee = by_id[employee_id]
-        item = employee_brief(employee)
-        assignment = getattr(employee, 'timekeeper_assignment', None)
-        item['is_privileged'] = is_privileged_account(employee.user)
-        item['timekeeper_of'] = assignment.department.name if assignment is not None else None
-        result.append(item)
-    return result
+    if employee_count is not None:
+        item['employee_count'] = employee_count
+    return item
 
 
 def demote(employee):
@@ -102,79 +118,54 @@ def demote(employee):
         profile.save(update_fields=['role'])
 
 
-def create_account(employee, login, password, password_confirm):
-    """Ҳисоби йўқ ходимга логин ва парол билан ҳисоб (ходим формасидаги қоидалар билан бир хил)."""
-    login = (login or '').strip()
-    password = (password or '').strip()
-    if not login:
-        raise TimekeeperError('Ходимда ҳисоб йўқ: логинни киритинг.', 'login')
-    problem = login_problem(login)
-    if problem:
-        raise TimekeeperError(problem, 'login')
-    if Employee.objects.filter(login=login).exclude(pk=employee.pk).exists():
-        raise TimekeeperError('Бундай логинли ходим аллақачон мавжуд.', 'login')
-    if AuthUser.objects.filter(username=login).exists():
-        raise TimekeeperError('Бундай логинли фойдаланувчи аллақачон мавжуд.', 'login')
-    if not password:
-        raise TimekeeperError('Парол киритинг.', 'password')
-    if password != (password_confirm or '').strip():
-        raise TimekeeperError('Пароллар мос келмайди.', 'password_confirm')
-    problems = password_problems(password)
-    if problems:
-        raise TimekeeperError(problems if isinstance(problems, str) else ' '.join(problems), 'password')
-
-    user = create_login_user(
-        username=login, first_name=employee.first_name, last_name=employee.last_name, password=password, is_active=True,
-    )
-    UserProfile.objects.create(user=user, role=ROLE_TIMEKEEPER)
-    employee.user = user
-    employee.login = login
-    employee.password_hash = user.password
-    employee.save(update_fields=['user', 'login', 'password_hash', 'updated_at'])
-    return user
-
-
 @transaction.atomic
-def assign_timekeeper(department, employee, *, login='', password='', password_confirm=''):
-    """Цехга табелчи тайинлаш (олдингиси бўлса — алмашади). Қайтади: Timekeeper."""
+def assign_timekeeper(department, employee):
+    """Цехга табелчи тайинлаш (олдингиси бўлса — алмашади). Қайтади: AssignmentResult.
+
+    Хато бўлса TimekeeperError ва ҳеч нарса ўзгармайди (транзакция).
+    """
     if employee.is_deleted or not employee.is_active:
-        raise TimekeeperError('Фаол бўлмаган ходимни табелчи қилиб бўлмайди.', 'employee_id')
+        raise TimekeeperError('Фаол бўлмаган ходимни табелчи қилиб бўлмайди.', 'employee_inactive')
     if is_leadership_department(employee.department):
-        raise TimekeeperError('«Раҳбарият» цехи ходимини табелчи қилиб бўлмайди.', 'employee_id')
+        raise TimekeeperError('«Раҳбарият» цехи ходимини табелчи қилиб бўлмайди.', 'leadership_department')
+    if is_leadership_department(department):
+        raise TimekeeperError('«Раҳбарият» цехига табелчи тайинланмайди.', 'leadership_department')
     other = Timekeeper.objects.select_related('department').filter(employee=employee).exclude(department=department).first()
     if other is not None:
-        raise TimekeeperError(f'Бу ходим аллақачон «{other.department.name}» цехининг табелчиси.', 'employee_id')
+        raise TimekeeperError(
+            f'Бу ходим аллақачон «{other.department.name}» цехининг табелчиси.', 'already_timekeeper_elsewhere',
+            {'department': {'id': other.department_id, 'name': other.department.name}},
+        )
     if employee.department_id != department.id:
-        raise TimekeeperError('Табелчи шу цехнинг ўз ходими бўлиши керак.', 'employee_id')
+        raise TimekeeperError('Табелчи шу цехнинг ўз ходими бўлиши керак.', 'employee_not_in_department')
 
     user = employee.user
     if user is not None:
         if is_privileged_account(user):
-            raise TimekeeperError('Администратор ёки HR менежерни табелчи қилиб бўлмайди.', 'employee_id')
-        if not user.is_active:
-            raise TimekeeperError('Ходимнинг ҳисоби ўчирилган: аввал уни «Фойдаланувчилар рухсатлари»да ёқинг.', 'employee_id')
+            raise TimekeeperError('Администратор ёки HR менежерни табелчи қилиб бўлмайди.', 'privileged_account')
         profile, created = UserProfile.objects.get_or_create(user=user, defaults={'role': ROLE_TIMEKEEPER})
         if not created and profile.role != ROLE_TIMEKEEPER:
             profile.role = ROLE_TIMEKEEPER
             profile.save(update_fields=['role'])
-    else:
-        create_account(employee, login, password, password_confirm)
 
     current = Timekeeper.objects.select_related('employee', 'employee__user').filter(department=department).first()
     if current is not None and current.employee_id == employee.id:
-        return current
+        return AssignmentResult(current, None, False)
+    replaced = None
     if current is not None:
-        demote(current.employee)
+        replaced = current.employee
+        demote(replaced)
         current.delete()
-    return Timekeeper.objects.create(department=department, employee=employee)
+    return AssignmentResult(Timekeeper.objects.create(department=department, employee=employee), replaced, True)
 
 
 @transaction.atomic
 def remove_timekeeper(department):
-    """Цехнинг табелчисини олиб ташлаш (ҳисоб қолади, рол — оддий «Фойдаланувчи»). Қайтади: олиб ташланганми."""
+    """Цехнинг табелчисини олиб ташлаш (ҳисоб қолади, рол — оддий «Фойдаланувчи»). Қайтади: олиб ташланган ходим ёки None."""
     current = Timekeeper.objects.select_related('employee', 'employee__user').filter(department=department).first()
     if current is None:
-        return False
-    demote(current.employee)
+        return None
+    employee = current.employee
+    demote(employee)
     current.delete()
-    return True
+    return employee

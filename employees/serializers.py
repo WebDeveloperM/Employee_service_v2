@@ -189,8 +189,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
         if value != current and not is_admin(request_user(self)):
             raise PermissionDenied('Ролни фақат администратор ўзгартира олади.')
         if value == ROLE_TIMEKEEPER and value != current:
-            # Табелчи цехга боғланади: рол фақат «Табелчилар» саҳифасидан (цех танлаб) берилади.
-            raise serializers.ValidationError('«Табелчи» ролини «Табелчилар» саҳифасидан тайинланг.')
+            # Табелчи цехга боғланади: рол фақат бошқа тизимдан (API: timekeeper-assignments) цех танлаб берилади.
+            raise serializers.ValidationError('«Табелчи» ролини бу ердан бериб бўлмайди: табелчи бошқа тизим орқали цехга тайинланади.')
         return value
 
     def _validate_unique_profile_field(self, field_name, value):
@@ -300,7 +300,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
                 employee.save(update_fields=update_fields)
 
         if instance.role == ROLE_TIMEKEEPER and next_role != ROLE_TIMEKEEPER:
-            # Рол олинса, цехнинг табелчи ёзуви ҳам ўчади: «Табелчилар» саҳифасида ролсиз табелчи қолмайди.
+            # Рол олинса, цехнинг табелчи ёзуви ҳам ўчади: ролсиз табелчи (тайинлов) қолмайди.
             Timekeeper.objects.filter(employee__user_id=instance.user_id).delete()
         instance.role = next_role
         if 'face_id_login_enabled' in validated_data:
@@ -643,7 +643,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
     base_image = SanitizedImageField(required=False, allow_null=True)
     password = serializers.CharField(write_only=True, required=False, allow_blank=True)
     password_confirm = serializers.CharField(write_only=True, required=False, allow_blank=True)
-    # «Табелчи» бу ерда йўқ: у цехга боғланади ва «Табелчилар» саҳифасидан тайинланади.
+    # «Табелчи» бу ерда йўқ: у цехга боғланади ва бошқа тизимдан (API: timekeeper-assignments) тайинланади.
     role = serializers.ChoiceField(choices=[choice for choice in ROLE_CHOICES if choice[0] != ROLE_TIMEKEEPER], default=ROLE_USER, write_only=True, required=False)
     # Иш ҳолати: бўш/null — оддий «Фаол» (ишда); қолганлари — таътил, хизмат сафари, касаллик, бола парвариши.
     work_status = serializers.ChoiceField(
@@ -812,7 +812,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             clear_replacement(employee)
         elif change is not None:
             request = self.context.get('request')
-            assigned_by = getattr(request, 'user', None)
+            assigned_by = self.context.get('acting_user') or getattr(request, 'user', None)   # табелчи API си: табелчининг ҳисоби
             set_replacement(employee, change[1], assigned_by if getattr(assigned_by, 'pk', None) else None)
 
     def _clone_uploaded_image(self, uploaded_file, fallback_name):
@@ -1001,7 +1001,9 @@ class TimekeeperManagedEmployeeSerializer(EmployeeSerializer):
 
     def validate(self, attrs):
         request = self.context.get('request')
-        department = timekeeper_department(getattr(request, 'user', None))
+        # Табелчи API си (бошқа тизим табелчи номидан, сервис калити билан): цехни view аниқлаб беради (context);
+        # веб-саҳифада — киргган табелчининг цехи.
+        department = self.context.get('timekeeper_department') or timekeeper_department(getattr(request, 'user', None))
         if department is None:
             raise PermissionDenied('Сизда ходимларни бошқариш ҳуқуқи йўқ.')
         for name in self.IGNORED_FIELDS:

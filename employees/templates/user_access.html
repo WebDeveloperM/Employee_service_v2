@@ -76,7 +76,7 @@
                 </label>
                 <select id="accessRole" onchange="syncAccessFaceIdField()"
                     class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-transparent focus:ring-2 focus:ring-blue-500">
-                    {# «Табелчи» бу ерда танланмайди (цехга боғланади): у «Табелчилар» саҳифасидан тайинланади, лекин мавжуд табелчининг роли кўринади. #}
+                    {# «Табелчи» бу ерда танланмайди (цехга боғланади): у бошқа тизимдан (API) тайинланади, лекин мавжуд табелчининг роли кўринади. #}
                     {% for value, label in role_choices %}
                     <option value="{{ value }}"{% if value == 'timekeeper' %} disabled{% endif %}>{{ label }}</option>
                     {% endfor %}

@@ -273,8 +273,6 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'face': os.environ.get('FACE_THROTTLE_RATE', '30/min'),      # Face ID / face detection (heavy CPU work)
         'bnpzid': os.environ.get('BNPZID_THROTTLE_RATE', '60/min'),  # bnpzID code exchange
-        'timekeeper_token': os.environ.get('TIMEKEEPER_TOKEN_THROTTLE_RATE', '10/min'),   # login + password -> token (per client IP)
-        'timekeeper_api': os.environ.get('TIMEKEEPER_API_THROTTLE_RATE', '120/min'),      # timekeeper API calls (per user)
     },
 }
 
@@ -311,10 +309,6 @@ if not DEBUG and any(looks_insecure(key, 32) for key in EMPLOYEE_SERVICE_API_KEY
         'EMPLOYEE_SERVICE_API_KEYS contains a short or placeholder key. '
         'Generate one: python -c "import secrets; print(secrets.token_urlsafe(48))"'
     )
-
-# Timekeeper API (employees/timekeeper_api.py, API_TIMEKEEPER.md): token lifetime and how many tokens one user may hold.
-TIMEKEEPER_API_TOKEN_TTL_HOURS = float(os.environ.get('TIMEKEEPER_API_TOKEN_TTL_HOURS', '24'))
-TIMEKEEPER_API_MAX_TOKENS = int(os.environ.get('TIMEKEEPER_API_MAX_TOKENS', '5'))
 
 PKI_DIR = BASE_DIR / 'pki'
 EMPLOYEE_CERT_VALIDITY_DAYS = int(os.environ.get('EMPLOYEE_CERT_VALIDITY_DAYS', '730'))

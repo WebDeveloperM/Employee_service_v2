@@ -1,4 +1,5 @@
-"""«Табелчи» роли ва «Табелчилар» саҳифаси: цех учун битта табелчи, у фақат ўз цехи ходимлари рўйхатини кўради."""
+"""«Табелчи» роли (ES веб-саҳифаси): табелчи фақат ўз цехи ходимлари билан ишлайди. Табелчини бошқа тизим тайинлайди
+(API — test_timekeeper_assignments.py); бу ерда тайинлов тўғридан-тўғри timekeepers.assign_timekeeper билан қилинади."""
 import json
 import re
 
@@ -11,6 +12,7 @@ from .models import (
     Department, Employee, ROLE_ADMIN, ROLE_HR, ROLE_TIMEKEEPER, ROLE_USER, Timekeeper, UserProfile,
 )
 from .permissions import is_timekeeper, timekeeper_department
+from .timekeepers import assign_timekeeper
 
 PASSWORD = 'Zhr29Kqp71'
 
@@ -70,256 +72,13 @@ class TimekeeperTestBase(TestCase):
         self.sardor = make_employee(201, self.dept_b, first_name='Сардор', last_name='Каримов')
         make_user('ali_login', ROLE_USER, employee=self.ali)
 
-    def assign(self, department, employee, client=None, **extra):
-        return put_json(client or self.admin_client, f'/api/template/timekeepers/{department.id}/', {'employee_id': employee.id, **extra})
+    def assign(self, department, employee):
+        return assign_timekeeper(department, employee)
 
     def make_timekeeper(self):
         """Али — 1-цех табелчиси (ҳисоби бор), у учун клиент."""
-        self.assertEqual(self.assign(self.dept_a, self.ali).status_code, 200)
+        self.assign(self.dept_a, self.ali)
         return client_for(User.objects.get(username='ali_login'))
-
-
-class AssignTimekeeperTests(TimekeeperTestBase):
-    def test_assign_employee_with_account_sets_the_role(self):
-        response = self.assign(self.dept_a, self.ali)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['data']['timekeeper']['full_name'], str(self.ali))
-        self.assertEqual(Timekeeper.objects.get(department=self.dept_a).employee, self.ali)
-        self.assertEqual(User.objects.get(username='ali_login').profile.role, ROLE_TIMEKEEPER)
-
-    def test_employee_without_account_needs_login_and_password_and_gets_an_account(self):
-        refused = self.assign(self.dept_a, self.bobur)
-        self.assertEqual(refused.status_code, 400)
-        self.assertEqual(refused.json()['field'], 'login')
-        self.assertFalse(Timekeeper.objects.exists())
-
-        created = self.assign(self.dept_a, self.bobur, login='bobur.tabel', password=PASSWORD, password_confirm=PASSWORD)
-
-        self.assertEqual(created.status_code, 200)
-        self.bobur.refresh_from_db()
-        self.assertEqual(self.bobur.user.username, 'bobur.tabel')
-        self.assertEqual(self.bobur.login, 'bobur.tabel')
-        self.assertEqual(self.bobur.user.profile.role, ROLE_TIMEKEEPER)
-        self.assertTrue(Client(HTTP_HOST='localhost').login(username='bobur.tabel', password=PASSWORD))
-
-    def test_new_account_rules_are_the_same_as_in_the_employee_form(self):
-        cases = [
-            ({'login': 'bad login', 'password': PASSWORD, 'password_confirm': PASSWORD}, 'login'),
-            ({'login': 'ali_login', 'password': PASSWORD, 'password_confirm': PASSWORD}, 'login'),     # бошқа ходимнинг логини
-            ({'login': 'bobur.tabel', 'password': '', 'password_confirm': ''}, 'password'),
-            ({'login': 'bobur.tabel', 'password': PASSWORD, 'password_confirm': PASSWORD + '1'}, 'password_confirm'),
-            ({'login': 'bobur.tabel', 'password': 'short1', 'password_confirm': 'short1'}, 'password'),
-            ({'login': 'bobur.tabel', 'password': 'onlyletters', 'password_confirm': 'onlyletters'}, 'password'),
-        ]
-        for data, field in cases:
-            with self.subTest(data=data):
-                response = self.assign(self.dept_a, self.bobur, **data)
-                self.assertEqual(response.status_code, 400)
-                self.assertEqual(response.json()['field'], field)
-        self.assertFalse(Timekeeper.objects.exists())
-        self.assertFalse(User.objects.filter(username='bobur.tabel').exists())
-
-    def test_an_employee_of_another_department_cannot_be_assigned(self):
-        response = self.assign(self.dept_a, self.sardor, login='sardor.t', password=PASSWORD, password_confirm=PASSWORD)
-
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()['message'], 'Табелчи шу цехнинг ўз ходими бўлиши керак.')
-        self.assertFalse(Timekeeper.objects.exists())
-        self.assertFalse(User.objects.filter(username='sardor.t').exists())   # ҳисоб ҳам очилмайди
-
-    def test_leadership_employees_cannot_be_timekeepers(self):
-        leadership = Department.objects.create(name='Раҳбарият', sort_order=42)
-        boss = make_employee(900, leadership, first_name='Раҳбар')
-        make_user('boss_login', ROLE_USER, employee=boss)
-
-        response = self.assign(self.dept_a, boss)
-
-        self.assertEqual(response.status_code, 400)
-        self.assertIn('Раҳбарият', response.json()['message'])
-        self.assertFalse(Timekeeper.objects.exists())
-        self.assertEqual(User.objects.get(username='boss_login').profile.role, ROLE_USER)
-
-    def test_inactive_or_deleted_employee_cannot_be_assigned(self):
-        self.ali.is_active = False
-        self.ali.save(update_fields=['is_active'])
-        self.assertEqual(self.assign(self.dept_a, self.ali).status_code, 400)
-
-        self.ali.is_active = True
-        self.ali.is_deleted = True
-        self.ali.save(update_fields=['is_active', 'is_deleted'])
-        self.assertEqual(self.assign(self.dept_a, self.ali).status_code, 404)
-        self.assertFalse(Timekeeper.objects.exists())
-
-    def test_admin_and_hr_accounts_cannot_become_timekeepers_and_keep_their_role(self):
-        admin_employee = make_employee(103, self.dept_a, first_name='Админ')
-        hr_employee = make_employee(104, self.dept_a, first_name='Ҳр')
-        admin_user = make_user('emp_admin', ROLE_ADMIN, employee=admin_employee)
-        hr_user = make_user('emp_hr', ROLE_HR, employee=hr_employee)
-        superuser = User.objects.create_superuser(username='emp_super', password=PASSWORD)
-        super_employee = make_employee(105, self.dept_a, first_name='Супер')
-        super_employee.user = superuser
-        super_employee.save(update_fields=['user'])
-
-        for employee in (admin_employee, hr_employee, super_employee):
-            with self.subTest(employee=employee.tabel_number):
-                self.assertEqual(self.assign(self.dept_a, employee).status_code, 400)
-
-        self.assertEqual(admin_user.profile.role, ROLE_ADMIN)
-        admin_user.profile.refresh_from_db()
-        hr_user.profile.refresh_from_db()
-        self.assertEqual((admin_user.profile.role, hr_user.profile.role), (ROLE_ADMIN, ROLE_HR))
-        self.assertFalse(Timekeeper.objects.exists())
-
-    def test_employee_cannot_be_timekeeper_of_two_departments(self):
-        self.assertEqual(self.assign(self.dept_a, self.ali).status_code, 200)
-
-        response = self.assign(self.dept_b, self.ali)
-
-        self.assertEqual(response.status_code, 400)
-        self.assertIn('1-Цех Биринчи', response.json()['message'])
-        self.assertEqual(Timekeeper.objects.count(), 1)
-
-    def test_replacing_the_timekeeper_returns_the_old_one_to_a_plain_user(self):
-        make_user('bobur_login', ROLE_USER, employee=self.bobur)
-        self.assign(self.dept_a, self.ali)
-
-        response = self.assign(self.dept_a, self.bobur)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(Timekeeper.objects.get(department=self.dept_a).employee, self.bobur)
-        self.assertEqual(User.objects.get(username='ali_login').profile.role, ROLE_USER)
-        self.assertEqual(User.objects.get(username='bobur_login').profile.role, ROLE_TIMEKEEPER)
-
-    def test_assigning_the_same_employee_again_is_harmless(self):
-        self.assign(self.dept_a, self.ali)
-        self.assertEqual(self.assign(self.dept_a, self.ali).status_code, 200)
-        self.assertEqual(Timekeeper.objects.count(), 1)
-
-    def test_remove_takes_the_role_back_but_keeps_the_account(self):
-        self.assign(self.dept_a, self.ali)
-
-        response = self.admin_client.delete(f'/api/template/timekeepers/{self.dept_a.id}/')
-
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(Timekeeper.objects.exists())
-        self.assertEqual(User.objects.get(username='ali_login').profile.role, ROLE_USER)
-        self.assertEqual(self.admin_client.delete(f'/api/template/timekeepers/{self.dept_a.id}/').status_code, 404)
-
-    def test_missing_employee_id_and_unknown_department(self):
-        self.assertEqual(put_json(self.admin_client, f'/api/template/timekeepers/{self.dept_a.id}/', {}).status_code, 400)
-        self.assertEqual(put_json(self.admin_client, '/api/template/timekeepers/9999/', {'employee_id': self.ali.id}).status_code, 404)
-
-
-class TimekeeperManagementAccessTests(TimekeeperTestBase):
-    def test_hr_can_manage_timekeepers(self):
-        hr_client = client_for(self.hr)
-
-        self.assertEqual(hr_client.get('/timekeepers/').status_code, 200)
-        self.assertEqual(self.assign(self.dept_a, self.ali, client=hr_client).status_code, 200)
-        self.assertEqual(hr_client.delete(f'/api/template/timekeepers/{self.dept_a.id}/').status_code, 200)
-
-    def test_plain_user_and_timekeeper_cannot(self):
-        plain = client_for(make_user('plain_user', ROLE_USER, employee=self.bobur))
-        timekeeper = self.make_timekeeper()
-
-        for client in (plain, timekeeper):
-            self.assertEqual(client.get('/api/template/timekeepers/').status_code, 403)
-            self.assertEqual(client.get(f'/api/template/timekeepers/candidates/?department_id={self.dept_a.id}').status_code, 403)
-            self.assertEqual(self.assign(self.dept_a, self.bobur, client=client).status_code, 403)
-            self.assertEqual(client.delete(f'/api/template/timekeepers/{self.dept_a.id}/').status_code, 403)
-            self.assertEqual(client.get('/timekeepers/').status_code, 302)
-        self.assertEqual(Timekeeper.objects.get().employee, self.ali)
-
-    def test_anonymous_is_refused(self):
-        anonymous = Client(HTTP_HOST='localhost')
-        self.assertIn(anonymous.get('/api/template/timekeepers/').status_code, (401, 403))
-        self.assertEqual(anonymous.get('/timekeepers/').status_code, 302)
-
-    def test_list_has_every_department_in_order_with_its_timekeeper(self):
-        self.assign(self.dept_a, self.ali)
-
-        data = self.admin_client.get('/api/template/timekeepers/').json()['data']
-
-        self.assertEqual([row['department']['name'] for row in data], ['1-Цех Биринчи', '2-Цех Иккинчи'])
-        self.assertEqual(data[0]['employee_count'], 2)
-        self.assertEqual(data[0]['timekeeper']['tabel_number'], '101')
-        self.assertEqual(data[0]['timekeeper']['login'], 'ali_login')
-        self.assertTrue(data[0]['timekeeper']['has_account'])
-        self.assertIsNone(data[1]['timekeeper'])
-
-    def test_table_departments_follow_the_staff_tree_order(self):
-        Department.objects.create(name='20-Цех Завод бошқармаси')
-        Department.objects.create(name='Раҳбарият')
-
-        names = [row['department']['name'] for row in self.admin_client.get('/api/template/timekeepers/').json()['data']]
-
-        self.assertEqual(names, ['Раҳбарият', '20-Цех Завод бошқармаси', '1-Цех Биринчи', '2-Цех Иккинчи'])
-
-    def test_candidates_list_every_employee_without_a_limit_in_a_few_queries(self):
-        for number in range(300, 350):
-            make_employee(number, self.dept_a)
-
-        with CaptureQueriesContext(connection) as queries:
-            payload = self.admin_client.get(f'/api/template/timekeepers/candidates/?department_id={self.dept_a.id}').json()
-
-        self.assertEqual(len(payload['data']), 52)           # цехнинг 2 та эски ходими + 50 та янги: чекловсиз
-        self.assertLess(len(queries), 15)                    # ҳар бир ходим учун алоҳида сўров йўқ
-
-    def test_assign_dialog_searches_in_the_page_and_selects_by_tabel_number(self):
-        html = self.admin_client.get('/timekeepers/').content.decode()
-
-        self.assertIn('placeholder="Табель рақами, исм ёки лавозим бўйича қидириш..."', html)
-        self.assertIn('id="candidatesCount"', html)
-        self.assertIn('function filteredCandidates()', html)
-        self.assertIn('tabel === word', html)                # табели сўзга тўлиқ мос келганлар тепада
-        self.assertIn("event.key === 'Enter'", html)         # Enter — биринчи топилганни танлайди
-        self.assertIn("apiRequest(`/template/timekeepers/candidates/?department_id=${encodeURIComponent(departmentId)}`)", html)   # фақат шу цех
-        self.assertIn('Бўлим кўрсатилмаган', html)           # шу цех бўлимлари бўйича гуруҳ сарлавҳалари
-        self.assertIn('Фақат шу цехнинг фаол ходимлари', html)
-        self.assertNotIn('Барча цехларнинг ходимлари', html)
-
-    def test_candidates_are_only_the_employees_of_the_chosen_department(self):
-        self.assign(self.dept_a, self.ali)
-        plant = Department.objects.create(name='20-Цех Завод бошқармаси')
-        make_employee(2001, plant, first_name='Заводчи')
-        make_user('boss_admin', ROLE_ADMIN, employee=make_employee(103, self.dept_a, first_name='Бошлиқ'))
-        make_employee(104, self.dept_a, first_name='Чиққан', is_active=False)
-        make_employee(105, self.dept_a, first_name='Ўчган', is_deleted=True)
-        url = f'/api/template/timekeepers/candidates/?department_id={self.dept_a.id}'
-
-        payload = self.admin_client.get(url).json()
-        by_tabel = {item['tabel_number']: item for item in payload['data']}
-
-        # Фақат 1-Цех: 20-Цех ва 2-Цех ходимлари йўқ; фаол эмас ва ўчирилган ходим ҳам йўқ.
-        self.assertEqual(sorted(by_tabel), ['101', '102', '103'])
-        self.assertEqual(payload['department'], {'id': self.dept_a.id, 'name': '1-Цех Биринчи'})
-        self.assertEqual(payload['empty_reason'], '')
-        self.assertEqual(by_tabel['101']['timekeeper_of'], '1-Цех Биринчи')
-        self.assertTrue(by_tabel['101']['has_account'])
-        self.assertFalse(by_tabel['102']['has_account'])
-        self.assertTrue(by_tabel['103']['is_privileged'])
-        self.assertEqual([item['tabel_number'] for item in self.admin_client.get(url + '&search=Бобур').json()['data']], ['102'])
-        self.assertEqual(self.admin_client.get(url + '&search=201').json()['data'], [])          # бошқа цех ходими қидирувда ҳам чиқмайди
-        plant_data = self.admin_client.get(f'/api/template/timekeepers/candidates/?department_id={plant.id}').json()['data']
-        self.assertEqual([item['tabel_number'] for item in plant_data], ['2001'])
-
-    def test_leadership_and_empty_departments_explain_why_the_list_is_empty(self):
-        leadership = Department.objects.create(name='Раҳбарият')
-        make_employee(900, leadership, first_name='Раҳбар')
-        empty = Department.objects.create(name='9-Цех Бўш')
-
-        boss_list = self.admin_client.get(f'/api/template/timekeepers/candidates/?department_id={leadership.id}').json()
-        empty_list = self.admin_client.get(f'/api/template/timekeepers/candidates/?department_id={empty.id}').json()
-
-        self.assertEqual(boss_list['data'], [])
-        self.assertIn('«Раҳбарият» цехига табелчи тайинланмайди', boss_list['empty_reason'])
-        self.assertEqual((empty_list['data'], empty_list['empty_reason']), ([], 'Бу цехда фаол ходим йўқ.'))
-
-    def test_candidates_need_a_known_department(self):
-        self.assertEqual(self.admin_client.get('/api/template/timekeepers/candidates/').status_code, 400)
-        self.assertEqual(self.admin_client.get('/api/template/timekeepers/candidates/?department_id=abc').status_code, 400)
-        self.assertEqual(self.admin_client.get('/api/template/timekeepers/candidates/?department_id=99999').status_code, 404)
 
 
 class TimekeeperAccessScopeTests(TimekeeperTestBase):
@@ -344,7 +103,7 @@ class TimekeeperAccessScopeTests(TimekeeperTestBase):
 
         self.assertEqual(menu_links(html), [('/employees/', True), ('/department-employees/', False)])
         self.assertLess(nav.index('Ходимлар рўйхати'), nav.index('Цех ходимлари'))
-        for hidden in ('href="/"', 'Созламалар', '/staff/', '/timekeepers/', '/departments/', '/sections/', '/settings/access/'):
+        for hidden in ('href="/"', 'Созламалар', '/staff/', '/timekeepers/', '/departments/', '/sections/', '/settings/access/'):   # '/timekeepers/' — саҳифа умуман йўқ
             self.assertNotIn(hidden, nav)
 
     def test_menu_highlights_the_department_page_and_the_card_pages_under_it(self):
@@ -353,20 +112,24 @@ class TimekeeperAccessScopeTests(TimekeeperTestBase):
                 html = self.timekeeper_client.get(path).content.decode()
                 self.assertEqual(menu_links(html), [('/employees/', False), ('/department-employees/', True)])
 
-    def test_admin_menu_has_the_new_page_right_after_staff_and_the_home_page(self):
+    def test_the_assignment_page_and_its_api_are_gone_from_es(self):
+        """Табелчини бошқа тизим тайинлайди: ES да тайинлаш саҳифаси, меню банди ва ички API лари йўқ."""
+        for client in (self.admin_client, client_for(self.hr), self.timekeeper_client):
+            for url in ('/timekeepers/', '/api/template/timekeepers/', '/api/template/timekeepers/candidates/',
+                        f'/api/template/timekeepers/{self.dept_a.id}/'):
+                with self.subTest(url=url):
+                    self.assertEqual(client.get(url).status_code, 404)
+        self.assertEqual(self.admin_client.delete(f'/api/template/timekeepers/{self.dept_a.id}/').status_code, 404)
         html = self.admin_client.get('/').content.decode()
         sidebar = html[html.index('<nav'):html.index('</nav>')]
-
-        self.assertIn('href="/"', sidebar)
-        self.assertLess(sidebar.index('href="/staff/"'), sidebar.index('href="/timekeepers/"'))
-        self.assertLess(sidebar.index('href="/timekeepers/"'), sidebar.index('href="/departments/"'))
-        self.assertIn('<span>Табелчилар</span>', sidebar)
+        self.assertNotIn('/timekeepers/', sidebar)
+        self.assertNotIn('<span>Табелчилар</span>', sidebar)
+        for kept in ('href="/"', 'href="/staff/"', 'href="/departments/"', 'href="/sections/"'):
+            self.assertIn(kept, sidebar)
         self.assertNotIn('Цех ходимлари', sidebar)           # администратор ва HR менюсида йўқ
-        self.assertEqual(client_for(self.hr).get('/').status_code, 200)
-        self.assertIn('href="/timekeepers/"', client_for(self.hr).get('/').content.decode())
 
     def test_pages_a_timekeeper_may_not_use_lead_back_to_the_employee_list(self):
-        for page in ('/', '/staff/', '/departments/', '/sections/', '/timekeepers/', '/settings/users/', '/settings/access/'):
+        for page in ('/', '/staff/', '/departments/', '/sections/', '/settings/users/', '/settings/access/'):
             with self.subTest(page=page):
                 response = self.timekeeper_client.get(page, follow=True)
                 self.assertEqual(response.redirect_chain[-1][0], '/employees/')
@@ -454,7 +217,6 @@ class TimekeeperAccessScopeTests(TimekeeperTestBase):
         self.assertEqual(self.timekeeper_client.get('/api/template/staff/tree/').status_code, 403)
         self.assertEqual(self.timekeeper_client.get('/api/template/user-access/').status_code, 403)
         self.assertEqual(self.timekeeper_client.get('/api/template/users/').status_code, 403)
-        self.assertEqual(self.timekeeper_client.get('/api/template/timekeepers/').status_code, 403)
         self.assertEqual(self.timekeeper_client.post('/api/template/departments/', data={'name': 'Янги'}).status_code, 403)
         self.assertEqual(self.timekeeper_client.post('/api/template/sections/', data={'name': 'Янги', 'department_id': self.dept_a.id}).status_code, 403)
         self.assertEqual(self.timekeeper_client.post('/api/template/employees/import-excel/').status_code, 403)
@@ -674,12 +436,13 @@ class TimekeeperRoleConsistencyTests(TimekeeperTestBase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Timekeeper.objects.count(), 1)
 
-    def test_the_role_cannot_be_given_outside_the_timekeepers_page(self):
+    def test_the_role_cannot_be_given_from_the_users_pages_only_through_the_assignment(self):
         bobur_user = make_user('bobur_login', ROLE_USER, employee=self.bobur)
 
         response = self.patch_role(ROLE_TIMEKEEPER, bobur_user.profile)
 
         self.assertEqual(response.status_code, 400)
+        self.assertIn('бошқа тизим', json.dumps(response.json(), ensure_ascii=False))
         bobur_user.profile.refresh_from_db()
         self.assertEqual(bobur_user.profile.role, ROLE_USER)
         created = self.admin_client.post('/api/template/users/', data={'username': 'new_tk', 'password': PASSWORD, 'role': ROLE_TIMEKEEPER})

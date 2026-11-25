@@ -47,11 +47,6 @@ from .staff_views import (
     StaffSectionEmployeesTemplateView,
     StaffTreeTemplateView,
 )
-from .timekeeper_views import (
-    TimekeeperCandidatesTemplateView,
-    TimekeeperDetailTemplateView,
-    TimekeeperListTemplateView,
-)
 from .web_views import (
     DashboardView,
     DepartmentEmployeesWebView,
@@ -66,7 +61,6 @@ from .web_views import (
     ProfileEditWebView,
     SectionsWebView,
     StaffWebView,
-    TimekeepersWebView,
     UserAccessWebView,
     UsersWebView,
 )
@@ -79,7 +73,6 @@ urlpatterns = [
     path('', DashboardView.as_view(), name='dashboard'),
     path('employees/', EmployeesListView.as_view(), name='employees-web'),
     path('staff/', StaffWebView.as_view(), name='staff-web'),
-    path('timekeepers/', TimekeepersWebView.as_view(), name='timekeepers-web'),
     path('department-employees/', DepartmentEmployeesWebView.as_view(), name='department-employees-web'),
     path('departments/', DepartmentsWebView.as_view(), name='departments-web'),
     path('sections/', SectionsWebView.as_view(), name='sections-web'),
@@ -123,9 +116,6 @@ urlpatterns = [
     path('api/template/staff/sections/<int:pk>/employees/bulk/', StaffSectionEmployeesBulkTemplateView.as_view()),
     path('api/template/staff/sections/<int:pk>/employees/<int:employee_id>/', StaffSectionEmployeeDetailTemplateView.as_view()),
     path('api/template/staff/employee-lookup/', StaffEmployeeLookupTemplateView.as_view()),
-    path('api/template/timekeepers/', TimekeeperListTemplateView.as_view()),
-    path('api/template/timekeepers/candidates/', TimekeeperCandidatesTemplateView.as_view()),
-    path('api/template/timekeepers/<int:department_id>/', TimekeeperDetailTemplateView.as_view()),
     path('api/template/employees/', EmployeeListCreateTemplateView.as_view()),
     path('api/template/directory/', EmployeeDirectoryTemplateView.as_view()),
     path('api/template/employees/import-excel/', EmployeeImportExcelTemplateView.as_view()),

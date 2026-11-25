@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BnpzIdClient, Department, Employee, EmployeeCategory, EmployeeCertificate, PositionCategory, Section, StaffPosition, TimekeeperApiToken, UserProfile, WorkSchedule
+from .models import BnpzIdClient, Department, Employee, EmployeeCategory, EmployeeCertificate, PositionCategory, Section, StaffPosition, UserProfile, WorkSchedule
 
 
 @admin.register(UserProfile)
@@ -118,20 +118,3 @@ class EmployeeAdmin(admin.ModelAdmin):
     search_fields = ('external_id', 'tabel_number', 'first_name', 'last_name', 'surname', 'slug')
     list_filter = ('tabel_number',)
     readonly_fields = ('slug', 'created_at', 'updated_at') 
-
-
-@admin.register(TimekeeperApiToken)
-class TimekeeperApiTokenAdmin(admin.ModelAdmin):
-    """Табелчи API токенлари: токеннинг ўзи сақланмайди (фақат хэши), шу сабабли бу ерда уни кўриб бўлмайди.
-    Ўчириш — токенни дарҳол бекор қилади."""
-
-    list_display = ('id', 'user', 'created_at', 'expires_at', 'last_used_at', 'created_ip')
-    list_filter = ('expires_at',)
-    search_fields = ('user__username', 'created_ip')
-    readonly_fields = ('user', 'key_hash', 'auth_stamp', 'created_at', 'expires_at', 'last_used_at', 'created_ip')
-
-    def has_add_permission(self, request):
-        return False
-
-    def has_change_permission(self, request, obj=None):
-        return False

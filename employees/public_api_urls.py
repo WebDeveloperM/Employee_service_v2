@@ -1,12 +1,12 @@
 from django.urls import path
 
 from .timekeeper_api import (
+    TimekeeperAssignmentDetailView,
+    TimekeeperAssignmentListView,
     TimekeeperEmployeeDetailView,
     TimekeeperEmployeeListView,
-    TimekeeperLogoutView,
-    TimekeeperMeView,
+    TimekeeperInfoView,
     TimekeeperReferenceView,
-    TimekeeperTokenView,
 )
 from .views import (
     DepartmentReadOnlyDetailApiView,
@@ -19,13 +19,13 @@ from .views import (
 
 
 urlpatterns = [
-    # Табелчи API си (бошқа тизим учун): токен билан, фақат ўз цехи. Ҳужжат: API_TIMEKEEPER.md.
-    path('timekeeper/token/', TimekeeperTokenView.as_view()),
-    path('timekeeper/logout/', TimekeeperLogoutView.as_view()),
-    path('timekeeper/me/', TimekeeperMeView.as_view()),
-    path('timekeeper/reference/', TimekeeperReferenceView.as_view()),
-    path('timekeeper/employees/', TimekeeperEmployeeListView.as_view()),
-    path('timekeeper/employees/<str:tabel_number>/', TimekeeperEmployeeDetailView.as_view()),
+    # Табелчилар (бошқа тизим учун, фақат сервис калити). Ҳужжат: API_TIMEKEEPER.md.
+    path('timekeeper-assignments/', TimekeeperAssignmentListView.as_view()),
+    path('timekeeper-assignments/<int:department_id>/', TimekeeperAssignmentDetailView.as_view()),
+    path('timekeeper/<str:timekeeper_tabel>/', TimekeeperInfoView.as_view()),
+    path('timekeeper/<str:timekeeper_tabel>/reference/', TimekeeperReferenceView.as_view()),
+    path('timekeeper/<str:timekeeper_tabel>/employees/', TimekeeperEmployeeListView.as_view()),
+    path('timekeeper/<str:timekeeper_tabel>/employees/<str:tabel_number>/', TimekeeperEmployeeDetailView.as_view()),
     path('departments/', DepartmentReadOnlyListApiView.as_view()),
     path('departments/<int:pk>/', DepartmentReadOnlyDetailApiView.as_view()),
     path('sections/', SectionReadOnlyListApiView.as_view()),

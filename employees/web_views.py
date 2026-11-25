@@ -478,16 +478,6 @@ class StaffWebView(AuthenticatedTemplateView):
         return render(request, self.template_name)
 
 
-class TimekeepersWebView(AuthenticatedTemplateView):
-    """«Табелчилар»: ҳар бир цех учун битта табелчи (фақат администратор ва HR)."""
-    template_name = 'timekeepers.html'
-
-    def get(self, request, *args, **kwargs):
-        if not is_admin_or_hr(request.user):
-            return HttpResponseRedirect('/')
-        return render(request, self.template_name)
-
-
 class EmployeeCreateWebView(AuthenticatedTemplateView):
     template_name = 'employee_create.html'
 
