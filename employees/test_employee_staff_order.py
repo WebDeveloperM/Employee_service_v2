@@ -183,7 +183,7 @@ class EmployeeTableFollowsStaffTreeOrderTests(TestCase):
         header = html[html.index('<thead>'):html.index('</thead>')]
         columns = re.findall(r'<th[^>]*>(.*?)</th>', header)
         self.assertEqual(columns, ['№', 'Ходим', 'Бўлим', 'Лавозим', 'Амаллар'])   # «Цех» устуни йўқ
-        self.assertIn('const COLUMN_COUNT = READ_ONLY_LIST ? 4 : 5;', html)     # сарлавҳа полосалари 5 устунга чўзилади (табелчининг фақат-ўқиш рўйхатида «Амаллар» йўқ — 4)
+        self.assertIn('const COLUMN_COUNT = 5;', html)                          # сарлавҳа полосалари 5 устунга чўзилади
         self.assertNotIn("${employee.department?.name || '—'}", html)            # қатордаги цех катаги йўқ
 
     def test_deleted_employees_are_still_hidden(self):

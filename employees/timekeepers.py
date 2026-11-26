@@ -1,24 +1,20 @@
 """Табелчилар: ҳар бир цех учун битта ходим.
 
 Табелчини ES да эмас, БОШҚА ТИЗИМ тайинлайди (API: timekeeper_api.py, ҳужжат: API_TIMEKEEPER.md); ES да тайинлаш саҳифаси йўқ.
-Тайинлаш ва олиб ташлаш фақат шу ерда: Timekeeper ёзуви ва (ходимда ES ҳисоби бўлса) унинг роли — UserProfile.role —
-ҳар доим бирга ўзгаради.
+Тайинлаш ва олиб ташлаш фақат шу ерда (Timekeeper ёзуви).
 
 Қоидалар
   * Табелчи — тайинланган цехнинг ўз фаол ходими. «Раҳбарият» цехи ходими табелчи бўла олмайди.
   * Ходим фақат битта цехнинг табелчиси бўла олади; цехнинг табелчиси битта (янги тайинлаш эскисини алмаштиради).
-  * Администратор, HR ва суперфойдаланувчи табелчи бўла олмайди: тайинлаш уларнинг ролини пасайтириб қўймаслиги керак.
-  * ES ҳисоби МАЖБУРИЙ ЭМАС: ҳисоби йўқ табелчи бошқа тизим орқали ишлайди. ES ҳисоби бор бўлса, унга «Табелчи» роли
-    берилади ва у ES веб-саҳифасидаги «Цех ходимлари»дан ҳам фойдалана олади. ES да ҳисоб ЯРАТИЛМАЙДИ (логин/парол
-    тизимлар ўртасида юрмасин).
+  * ES ҳисоби (логин, парол, рол) билан боғлиқ эмас: тайинлов уни на талаб қилади, на ўзгартиради. Табелчи ES га кирмайди,
+    фақат бошқа тизимда ишлайди (у ерда E-IMZO билан текширилади); ES ҳисоб яратмайди.
 """
 from typing import NamedTuple
 
 from django.db import models, transaction
 from django.utils import timezone
 
-from .models import Department, Employee, ROLE_TIMEKEEPER, ROLE_USER, Timekeeper, UserProfile
-from .serializers import is_privileged_account
+from .models import Department, Employee, Timekeeper
 from .staff import is_leadership_department, staff_tree_order
 
 
@@ -29,8 +25,9 @@ class AssignmentResult(NamedTuple):
 
 
 # Тайинлаш хатоларининг кодлари (HTTP 409). Ҳар бири API_TIMEKEEPER.md да тавсифланган (тест текширади).
+# «privileged_account» (2026-11-26 гача) олиб ташланди: тайинлов ҳисоб ролига тегмайди, администратор/HR ходими ҳам табелчи бўла олади.
 ASSIGNMENT_ERROR_CODES = (
-    'employee_inactive', 'leadership_department', 'already_timekeeper_elsewhere', 'employee_not_in_department', 'privileged_account',
+    'employee_inactive', 'leadership_department', 'already_timekeeper_elsewhere', 'employee_not_in_department',
 )
 
 
@@ -55,7 +52,7 @@ def active_assignment(tabel_number):
     if not tabel_number:
         return None
     return (
-        Timekeeper.objects.select_related('department', 'employee', 'employee__user', 'employee__user__profile')
+        Timekeeper.objects.select_related('department', 'employee')
         .filter(employee__tabel_number=tabel_number, employee__is_deleted=False, employee__is_active=True)
         .first()
     )
@@ -64,14 +61,12 @@ def active_assignment(tabel_number):
 def timekeeper_brief(assignment):
     """Тайинлов ҳақида маълумот (API жавоби учун)."""
     employee = assignment.employee
-    user = employee.user
     return {
         'employee_id': employee.id,
         'tabel_number': employee.tabel_number,
         'full_name': str(employee),
         'position': employee.position,
         'is_active': bool(employee.is_active and not employee.is_deleted),   # False бўлса, у номидан иш қилиб бўлмайди
-        'has_es_account': user is not None,
         'assigned_at': timezone.localtime(assignment.created_at).isoformat(),
     }
 
@@ -83,7 +78,7 @@ def assignments_payload(*, assigned=None, tabel_number=''):
     """
     assignments = {
         item.department_id: item
-        for item in Timekeeper.objects.select_related('employee', 'employee__user')
+        for item in Timekeeper.objects.select_related('employee')
     }
     counts = dict(
         Employee.objects.filter(is_deleted=False, is_active=True, department__isnull=False)
@@ -110,14 +105,6 @@ def department_assignment(department, assignment, *, employee_count=None):
     return item
 
 
-def demote(employee):
-    """Табелчи ролини олиш: оддий «Фойдаланувчи»га қайтади (бошқа рол — администратор ва ҳ.к. — тегилмайди)."""
-    profile = getattr(employee.user, 'profile', None) if employee.user_id else None
-    if profile is not None and profile.role == ROLE_TIMEKEEPER:
-        profile.role = ROLE_USER
-        profile.save(update_fields=['role'])
-
-
 @transaction.atomic
 def assign_timekeeper(department, employee):
     """Цехга табелчи тайинлаш (олдингиси бўлса — алмашади). Қайтади: AssignmentResult.
@@ -139,33 +126,22 @@ def assign_timekeeper(department, employee):
     if employee.department_id != department.id:
         raise TimekeeperError('Табелчи шу цехнинг ўз ходими бўлиши керак.', 'employee_not_in_department')
 
-    user = employee.user
-    if user is not None:
-        if is_privileged_account(user):
-            raise TimekeeperError('Администратор ёки HR менежерни табелчи қилиб бўлмайди.', 'privileged_account')
-        profile, created = UserProfile.objects.get_or_create(user=user, defaults={'role': ROLE_TIMEKEEPER})
-        if not created and profile.role != ROLE_TIMEKEEPER:
-            profile.role = ROLE_TIMEKEEPER
-            profile.save(update_fields=['role'])
-
-    current = Timekeeper.objects.select_related('employee', 'employee__user').filter(department=department).first()
+    current = Timekeeper.objects.select_related('employee').filter(department=department).first()
     if current is not None and current.employee_id == employee.id:
         return AssignmentResult(current, None, False)
     replaced = None
     if current is not None:
         replaced = current.employee
-        demote(replaced)
         current.delete()
     return AssignmentResult(Timekeeper.objects.create(department=department, employee=employee), replaced, True)
 
 
 @transaction.atomic
 def remove_timekeeper(department):
-    """Цехнинг табелчисини олиб ташлаш (ҳисоб қолади, рол — оддий «Фойдаланувчи»). Қайтади: олиб ташланган ходим ёки None."""
-    current = Timekeeper.objects.select_related('employee', 'employee__user').filter(department=department).first()
+    """Цехнинг табелчисини олиб ташлаш. Қайтади: олиб ташланган ходим ёки None."""
+    current = Timekeeper.objects.select_related('employee').filter(department=department).first()
     if current is None:
         return None
     employee = current.employee
-    demote(employee)
     current.delete()
     return employee

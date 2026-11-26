@@ -15,7 +15,7 @@
                 <h2 class="font-display text-3xl font-bold text-slate-900">Ходим қўшиш</h2>
             </div>
             <div class="flex flex-wrap gap-3">
-                <a href="{% if timekeeper_scope %}/department-employees/{% else %}/employees/{% endif %}"
+                <a href="/employees/"
                     class="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700">
                     <i class="fas fa-arrow-left"></i>
                     Рўйхатга
@@ -130,31 +130,31 @@
                         <div class="mb-2 flex items-center justify-between gap-3">
                             <label class="block text-sm font-bold text-slate-700">Цех <span
                                     class="text-red-500">*</span></label>
-                            {% if not timekeeper_scope %}<button type="button" id="openDepartmentInlineModalButton"
+                            <button type="button" id="openDepartmentInlineModalButton"
                                 onclick="openInlineOrgModal('department')"
                                 class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-[var(--info)] transition hover:border-blue-300 hover:bg-blue-100"
                                 title="Цех қўшиш" aria-label="Цех қўшиш">
                                 <i class="fas fa-plus"></i>
-                            </button>{% endif %}
+                            </button>
                         </div>
-                        <select id="department_id" required class="table-filter" onchange="refreshSectionOptions(); syncClotheSizeVisibility()"{% if timekeeper_scope %} disabled title="Ходим сизнинг цехингизга қўшилади"{% endif %}>
+                        <select id="department_id" required class="table-filter" onchange="refreshSectionOptions(); syncClotheSizeVisibility()">
                             <option value="">Цехни танланг</option>
                             {% for department in departments %}
                             <option value="{{ department.id }}"
                                 data-boss-full-name="{{ department.boss_full_name|default_if_none:'' }}"
-                                data-sort-order="{{ department.sort_order }}"{% if timekeeper_scope %} selected{% endif %}>{{ department.name }}</option>
+                                data-sort-order="{{ department.sort_order }}">{{ department.name }}</option>
                             {% endfor %}
                         </select>
                     </div>
                     <div>
                         <div class="mb-2 flex items-center justify-between gap-3">
                             <label class="block text-sm font-bold text-slate-700">Бўлим</label>
-                            {% if not timekeeper_scope %}<button type="button" id="openSectionInlineModalButton"
+                            <button type="button" id="openSectionInlineModalButton"
                                 onclick="openInlineOrgModal('section')"
                                 class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
                                 title="Бўлим қўшиш" aria-label="Бўлим қўшиш">
                                 <i class="fas fa-plus"></i>
-                            </button>{% endif %}
+                            </button>
                         </div>
                         <select id="section_id" class="table-filter">
                             <option value="">Бўлимни танланг</option>
@@ -165,7 +165,7 @@
                     </div>
                     <div>
                         <label class="mb-2 block text-sm font-bold text-slate-700">Цех раҳбари</label>
-                        <input type="text" id="boss_full_name" class="table-filter" placeholder="Раҳбарнинг Ф.И.Ш."{% if timekeeper_scope %} disabled{% endif %}>
+                        <input type="text" id="boss_full_name" class="table-filter" placeholder="Раҳбарнинг Ф.И.Ш.">
                     </div>
                     <div>
                         <label class="mb-2 block text-sm font-bold text-slate-700">Ишга қабул қилинган сана</label>
@@ -174,11 +174,11 @@
                     <div>
                         <div class="mb-2 flex h-8 items-center justify-between gap-3">
                             <label class="block text-sm font-bold text-slate-700">Лавозим тоифаси</label>
-                            {% if not timekeeper_scope %}<button type="button" id="openPositionCategoryModalButton" onclick="openCategoryModal('position')"
+                            <button type="button" id="openPositionCategoryModalButton" onclick="openCategoryModal('position')"
                                 class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-[var(--info)] transition hover:border-blue-300 hover:bg-blue-100"
                                 title="Тоифа қўшиш" aria-label="Тоифа қўшиш">
                                 <i class="fas fa-plus"></i>
-                            </button>{% endif %}
+                            </button>
                         </div>
                         <select id="position_category_id" class="table-filter">
                             <option value="">Тоифани танланг</option>
@@ -190,11 +190,11 @@
                     <div>
                         <div class="mb-2 flex h-8 items-center justify-between gap-3">
                             <label class="block text-sm font-bold text-slate-700">Иш тартиби</label>
-                            {% if not timekeeper_scope %}<button type="button" id="openWorkScheduleModalButton" onclick="openCategoryModal('schedule')"
+                            <button type="button" id="openWorkScheduleModalButton" onclick="openCategoryModal('schedule')"
                                 class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-[var(--info)] transition hover:border-blue-300 hover:bg-blue-100"
                                 title="Иш тартибини қўшиш" aria-label="Иш тартибини қўшиш">
                                 <i class="fas fa-plus"></i>
-                            </button>{% endif %}
+                            </button>
                         </div>
                         <select id="work_schedule_id" class="table-filter">
                             <option value="">Танланмаган</option>
@@ -206,11 +206,11 @@
                     <div>
                         <div class="mb-2 flex h-8 items-center justify-between gap-3">
                             <label class="block text-sm font-bold text-slate-700">Ходимлар тоифаси</label>
-                            {% if not timekeeper_scope %}<button type="button" id="openEmployeeCategoryModalButton" onclick="openCategoryModal('employee')"
+                            <button type="button" id="openEmployeeCategoryModalButton" onclick="openCategoryModal('employee')"
                                 class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-[var(--info)] transition hover:border-blue-300 hover:bg-blue-100"
                                 title="Тоифа қўшиш" aria-label="Тоифа қўшиш">
                                 <i class="fas fa-plus"></i>
-                            </button>{% endif %}
+                            </button>
                         </div>
                         <select id="employee_category_id" class="table-filter">
                             <option value="">Тоифани танланг</option>
@@ -260,7 +260,7 @@
         </div>
 
         <div class="flex flex-wrap justify-end gap-3">
-            <a href="{% if timekeeper_scope %}/department-employees/{% else %}/employees/{% endif %}"
+            <a href="/employees/"
                 class="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700">Бекор қилиш</a>
             <button type="submit" id="saveButton"
                 class="rounded-2xl bg-[var(--info)] px-5 py-3 text-sm font-bold text-white">Сақлаш</button>
@@ -349,7 +349,6 @@
     document.addEventListener('DOMContentLoaded', function () {
         refreshSectionOptions();
         syncInlineDepartmentSelect();
-        {% if timekeeper_scope %}syncClotheSizeVisibility();{% endif %}
 
         IMask(document.getElementById('phone_number_1'), { mask: '+{998} 00 000 00 00' });
         IMask(document.getElementById('phone_number_2'), { mask: '+{998} 00 000 00 00' });

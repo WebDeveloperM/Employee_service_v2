@@ -12,14 +12,12 @@ GRADE_RE = re.compile(r'(\d{1,2})(\*?)')
 ROLE_ADMIN = 'admin'
 ROLE_HR = 'hr'
 ROLE_USER = 'user'
-# «Табелчи»: цехнинг битта ходими. Рол бошқа тизимдан API орқали тайинланади (Timekeeper) ва фақат шу цех ходимлари
-# рўйхатини (ўқиш учун) кўради. Бошқа саҳифалар ва маълумотлар унга очиқ эмас.
-ROLE_TIMEKEEPER = 'timekeeper'
+# «Табелчи» роли йўқ (2026-11-26): табелчи ES га логин/парол билан кирмайди, у бошқа тизимда (E-IMZO билан) ишлайди,
+# ES эса уни фақат тайинлов (Timekeeper) орқали билади. Олдинги «Табелчи» ҳисоблари миграция 0042 да «Фойдаланувчи» бўлди.
 ROLE_CHOICES = [
     (ROLE_ADMIN, 'Администратор'),
     (ROLE_HR, 'HR менежер'),
     (ROLE_USER, 'Фойдаланувчи'),
-    (ROLE_TIMEKEEPER, 'Табелчи'),
 ]
 
 # Ходимнинг иш ҳолати (is_active=True бўлган ходим учун): иш жойида ёки вақтинча йўқ.
@@ -379,8 +377,8 @@ class EmployeeBaseImageChangeLog(models.Model):
 class Timekeeper(models.Model):
     """Цехнинг табелчиси: ҳар бир цех учун биттагина ходим, ходим эса фақат битта цехнинг табелчиси бўла олади.
 
-    Рол (UserProfile.role = «Табелчи») шу жадвалдаги ёзув билан бирга тайинланади ва олиб ташланади
-    (employees/timekeepers.py). Табелчи фақат ўз цехининг ходимлари рўйхатини кўради.
+    Бошқа тизим тайинлайди ва олиб ташлайди (employees/timekeepers.py, API_TIMEKEEPER.md) ва табелчи номидан шу цех
+    ходимларини API орқали янгилайди. ES ҳисоби (логин/парол, рол) билан боғлиқ эмас: тайинлов уни ўзгартирмайди.
     """
 
     department = models.OneToOneField(Department, on_delete=models.CASCADE, related_name='timekeeper', verbose_name='Цех')

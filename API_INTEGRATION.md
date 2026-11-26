@@ -6,7 +6,7 @@ External integration is read-only. When a request is authenticated with `X-Emplo
 
 ## Timekeeper API (timekeepers are assigned by another system)
 
-The department timekeeper is assigned and removed by **another system** through `PUT`/`DELETE /api/v1/timekeeper-assignments/{department_id}/` (there is no assignment page in employee_service). The same system then reads and updates the employees of **one department** on behalf of its timekeeper through `/api/v1/timekeeper/{timekeeper_tabel}/…`. Both groups work **only with the service key** (no per-timekeeper login or token). Full description: [`API_TIMEKEEPER.md`](API_TIMEKEEPER.md) (Uzbek); Swagger tags `timekeeper-assignments` and `timekeeper`.
+The department timekeeper is assigned and removed by **another system** through `PUT`/`DELETE /api/v1/timekeeper-assignments/{department_id}/` (there is no assignment page in employee_service). The same system then reads and updates the employees of **one department** on behalf of its timekeeper through `/api/v1/timekeeper/{timekeeper_tabel}/…`. Both groups work **only with the service key** (no per-timekeeper login or token). Timekeepers never sign in to employee_service: there is no «Табелчи» role or timekeeper page here (removed 2026-11-26), the other system authenticates its users itself (E-IMZO), and an assignment does not depend on or change any employee_service account. Full description: [`API_TIMEKEEPER.md`](API_TIMEKEEPER.md) (Uzbek); Swagger tags `timekeeper-assignments` and `timekeeper`.
 
 ## Documentation URLs
 

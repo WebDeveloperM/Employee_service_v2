@@ -19,6 +19,30 @@ Hujjatdagi hamma narsa koddagi holatga mos: har bir manzil, maydon, holat va xat
 - Xato matnlari kirill yoki ingliz tilida bo'lishi va o'zgarishi mumkin. Umumiy xatolarda mashina uchun barqaror
   **`code`** bor — **matnga emas, `code`ga tayaning**. Maydon xatolarida (`{"maydon": ["…"]}`) maydon nomiga tayaning.
 
+## 0. O'zgarishlar (2026-11-26): tabelchi ES'ga login-parol bilan kirmaydi
+
+Tabelchi endi **faqat sizning tizimda** ishlaydi. Uni sizning tizim o'zi tekshiradi (masalan, E-IMZO bilan); ES tabelchining
+login-parolini so'ramaydi, bilmaydi va unga ES'ga kirish bermaydi.
+
+| Nima o'zgardi | Avval | Endi |
+|---|---|---|
+| ES veb-saytida tabelchi | ES hisobi bor tabelchiga «Табелчи» roli berilardi, u login-parol bilan kirib «Цех ходимлари» sahifasida xodimlarni o'zgartirardi | «Табелчи» roli va «Цех ходимлари» sahifasi **yo'q**. Ilgari tabelchi bo'lgan hisoblar oddiy «Фойдаланувчи» bo'ldi (faqat o'z kartochkasi) |
+| Tabelchi obyekti (3.2) | `has_es_account` maydoni bor edi | `has_es_account` **olib tashlandi** |
+| Tayinlash xatolari (3.5) | `409 privileged_account` — administrator/HR hisobiga bog'langan xodim tabelchi bo'la olmasdi | `privileged_account` **olib tashlandi**: tayinlov hisob roliga tegmaydi, shuning uchun bunday xodim ham tabelchi bo'la oladi |
+| Tayinlov va ES hisobi | Tayinlov hisobga rol berardi; ES'da hisob rolini o'zgartirish yoki hisobni o'chirish tayinlovni o'chirardi | Tayinlov ES hisobiga **bog'liq emas**: na rol beradi, na hisob o'zgarishidan o'chadi (faqat xodim ES'da o'chirilsa o'chadi, 7-bo'lim) |
+| O'rinbosarni «kim tayinlagan» (5.2) | Tabelchining ES hisobi yozilardi | ES hisobiga bog'lanmaydi; kim qilgani ES xavfsizlik jurnalida tabelchi tabel raqami bilan yoziladi. API javobi o'zgarmadi |
+
+**O'zgarmadi:** autentifikatsiya (faqat xizmat kaliti, 2-bo'lim), barcha manzillar, so'rov va javob maydonlari (`has_es_account` dan
+tashqari), qolgan xato kodlari, `is_protected` (administrator/HR xodimini tabelchi nomidan o'zgartirib bo'lmaydi).
+
+**Sizning tizimda qilinadigan ishlar:**
+
+1. `has_es_account` ni o'qiyotgan joy bo'lsa — olib tashlang (maydon endi kelmaydi).
+2. `privileged_account` ni qayta ishlash kodi zarar qilmaydi, lekin bu kod endi kelmaydi; foydalanuvchiga «administrator/HR
+   tabelchi bo'la olmaydi» deb ko'rsatadigan matn bo'lsa — olib tashlang.
+3. Tabelchi foydalanuvchini **o'zingiz** tekshiring (E-IMZO) va ES'ga faqat **uning o'z** tabel raqamini yuboring (9-bo'lim):
+   ES kimligini tekshirmaydi, faqat u ishlab turgan tabelchi ekanini va sex chegarasini.
+
 ## 1. Bir qarashda
 
 ```
@@ -37,13 +61,15 @@ Tabelchi ishlayapti (sizning tizimda):
 - **`timekeeper_tabel`** — tabelchining o'z **tabel raqami** (ES'dagi xodim tabel raqami bilan bir xil).
   Sizning tizimdagi har bir tabelchi foydalanuvchi ES'dagi xodimga shu raqam orqali bog'langan bo'lishi kerak.
 - **`tabel_number`** — yangilanayotgan xodimning tabel raqami.
-- Autentifikatsiya: **faqat xizmat kaliti** (2-bo'lim). Tabelchining ES login-paroli kerak emas.
+- Autentifikatsiya: **faqat xizmat kaliti** (2-bo'lim). Tabelchining ES login-paroli kerak emas va so'ralmaydi:
+  tabelchi ES'ga kirmaydi (ES'da tabelchi roli ham, tabelchi sahifalari ham yo'q).
 
 ### Kim nimani hal qiladi
 
 | Savol | Javob beradi |
 |---|---|
 | Qaysi xodim qaysi sexning tabelchisi? | **Sizning tizim** (`PUT`/`DELETE` bilan ES'ga yetkazadi) |
+| Tizimga kirgan foydalanuvchi haqiqatan shu tabelchimi? | **Sizning tizim** (o'z autentifikatsiyasi, masalan E-IMZO) |
 | Bu tabelchi hozir ishlayaptimi (ES'da tayinlangan va faol xodim)? | **ES** tekshiradi, har so'rovda |
 | Tabelchi qaysi xodimlarga tegishi mumkin va qaysi maydonlarni o'zgartiradi? | **ES** cheklaydi (sex va maydonlar ro'yxati), kalit bo'lsa ham |
 
@@ -76,11 +102,9 @@ Authorization: Bearer <KALIT>
 - Xodim faqat **bitta** sexning tabelchisi bo'la oladi.
 - Tabelchi — **o'sha sexning o'z faol xodimi** (`employee.department` = shu sex). Boshqa sex xodimini tayinlab bo'lmaydi.
 - «Раҳбарият» sexiga tabelchi tayinlanmaydi va «Раҳбарият» xodimi tabelchi bo'la olmaydi.
-- Administrator, HR va superfoydalanuvchi hisobiga bog'langan xodim tabelchi bo'la olmaydi.
-- **ES'da hisob yaratilmaydi.** Xodimda ES hisobi bo'lmasa ham tayinlash ishlaydi: u sizning tizim orqali to'liq ishlaydi.
-  ES hisobi bor bo'lsa, unga ES veb-saytida ham «Табелчи» roli beriladi (u saytdagi «Цех ходимлари» sahifasidan foydalanadi);
-  tabelchi olib tashlansa, rol oddiy «Foydalanuvchi»ga qaytadi, hisob qoladi.
-- Operatsiyalar **atomik**: xato bo'lsa hech narsa o'zgarmaydi (rol ham).
+- Tayinlov **ES hisobiga (login, parol, rol) bog'liq emas**: ES hisob yaratmaydi, mavjud hisobning roliga tegmaydi, xodimda
+  hisob bor-yo'qligi ahamiyatsiz. Tabelchi ES veb-saytiga tabelchi sifatida kirmaydi — u faqat sizning tizim orqali ishlaydi.
+- Operatsiyalar **atomik**: xato bo'lsa hech narsa o'zgarmaydi.
 
 ### 3.2 Tabelchi obyekti
 
@@ -91,7 +115,6 @@ Authorization: Bearer <KALIT>
   "full_name": "Валиев Али",
   "position": "Фаррош",
   "is_active": true,
-  "has_es_account": true,
   "assigned_at": "2026-11-25T16:41:08.083103+05:00"
 }
 ```
@@ -100,7 +123,6 @@ Authorization: Bearer <KALIT>
 |---|---|
 | `tabel_number` | Tabelchi xodimning tabel raqami — `timekeeper_tabel` sifatida shuni ishlating |
 | `is_active` | `false` — xodim ES'da faol emas yoki o'chirilgan. U **nomidan ish qilib bo'lmaydi** (`not_a_timekeeper`); yangi tabelchi tayinlang |
-| `has_es_account` | Xodimda ES hisobi bor (shu holda ES veb-saytida ham tabelchi roli bor) |
 
 ### 3.3 `GET /api/v1/timekeeper-assignments/` — barcha sexlar va ularning tabelchilari
 
@@ -119,7 +141,7 @@ Solishtirish (reconcile) uchun ham, **sex `id` larini bilish uchun ham** shu ro'
     {
       "department": {"id": 1, "name": "1-Цех Биринчи"},
       "timekeeper": {"employee_id": 1, "tabel_number": "101", "full_name": "Валиев Али", "position": "Фаррош",
-                     "is_active": true, "has_es_account": true, "assigned_at": "2026-11-25T16:41:08.083103+05:00"},
+                     "is_active": true, "assigned_at": "2026-11-25T16:41:08.083103+05:00"},
       "employee_count": 2
     },
     {"department": {"id": 2, "name": "2-Цех Иккинчи"}, "timekeeper": null, "employee_count": 1}
@@ -153,7 +175,7 @@ Content-Type: application/json
 {
   "department": {"id": 2, "name": "2-Цех Иккинчи"},
   "timekeeper": {"employee_id": 3, "tabel_number": "201", "full_name": "Каримов Сардор", "position": "Фаррош",
-                 "is_active": true, "has_es_account": false, "assigned_at": "2026-11-25T16:41:08.097977+05:00"},
+                 "is_active": true, "assigned_at": "2026-11-25T16:41:08.097977+05:00"},
   "replaced": null,
   "changed": true
 }
@@ -177,7 +199,6 @@ Xatolar:
 | 409 | `leadership_department` | «Раҳбарият» sexi yoki uning xodimi |
 | 409 | `already_timekeeper_elsewhere` | Xodim boshqa sexning tabelchisi. Javobda `department` — qaysi sex |
 | 409 | `employee_not_in_department` | Xodim bu sexga tegishli emas |
-| 409 | `privileged_account` | Xodimning hisobi administrator/HR/superfoydalanuvchi |
 
 `409` javobi:
 
@@ -192,7 +213,7 @@ o'zgarganidan keyin yangi sexda `PUT` qiling. Aks holda `already_timekeeper_else
 ### 3.6 `DELETE /api/v1/timekeeper-assignments/{department_id}/` — tabelchini olib tashlash
 
 `204 No Content`, tanasi yo'q. **Idempotent**: sexda tabelchi bo'lmasa ham `204`. Sex yo'q → `404` (`department_not_found`).
-Xodimning ES hisobi qoladi, roli oddiy «Foydalanuvchi»ga qaytadi.
+Xodimning ES'dagi ma'lumoti va hisobi (bo'lsa) o'zgarmaydi.
 
 ## 4. Tabelchi nomidan ishlash
 
@@ -218,7 +239,7 @@ Tabelchi ishlab turganini tez tekshirish uchun (masalan, tabelchi sahifasini och
 {
   "department": {"id": 1, "name": "1-Цех Биринчи"},
   "timekeeper": {"employee_id": 1, "tabel_number": "101", "full_name": "Валиев Али", "position": "Фаррош",
-                 "is_active": true, "has_es_account": true, "assigned_at": "2026-11-25T16:41:08.083103+05:00"}
+                 "is_active": true, "assigned_at": "2026-11-25T16:41:08.083103+05:00"}
 }
 ```
 
@@ -382,7 +403,7 @@ O'rinbosar (`replacement_tabel_number`) — xodim vaqtincha ishda bo'lmaganda un
   Aks holda `400` va `{"replacement_tabel_number": ["…"]}`.
 - Xodimga **bittadan** o'rinbosar qo'yiladi (yangisi eskisini almashtiradi); bitta xodim bir nechta xodimning o'rniga ishlashi mumkin.
 - Holatni o'zgartirmasdan faqat o'rinbosarni olib tashlash: `{"replacement_tabel_number": null}`.
-- ES o'rinbosarni kim tayinlaganini yozib qo'yadi: tabelchining ES hisobi bo'lsa — shu hisob, bo'lmasa — bo'sh.
+- Kim tayinlagani ES xavfsizlik jurnalida tabelchining tabel raqami bilan yoziladi (ES hisobiga bog'lanmaydi).
 
 ### 5.3 O'zgartirib bo'lmaydigan maydonlar
 
@@ -447,7 +468,7 @@ Maydon xatolaridan (`400`) boshqa hamma xato `{"detail": "…", "code": "…"}` 
 | 404 | `employee_not_found` | `PUT` da ko'rsatilgan tabel raqamli xodim yo'q |
 | 404 | `not_found` | Xodim yo'q, o'chirilgan yoki boshqa sexda; yoki noto'g'ri `page` |
 | 405 | `method_not_allowed` | Ruxsat etilmagan HTTP metod |
-| 409 | `employee_inactive`, `leadership_department`, `already_timekeeper_elsewhere`, `employee_not_in_department`, `privileged_account` | Tayinlash qoidalari (3.5-bo'lim) |
+| 409 | `employee_inactive`, `leadership_department`, `already_timekeeper_elsewhere`, `employee_not_in_department` | Tayinlash qoidalari (3.5-bo'lim) |
 | 415 | `unsupported_media_type` | Qo'llab-quvvatlanmaydigan `Content-Type` |
 | 5xx | — | Server xatosi. Biroz kutib qayta urinib ko'ring; takrorlansa xabar bering |
 
@@ -456,11 +477,12 @@ Maydon xatolaridan (`400`) boshqa hamma xato `{"detail": "…", "code": "…"}` 
 Tabelchi haqidagi ma'lumot ikki joyda turadi (sizda va ES'da), shuning uchun vaqti-vaqti bilan solishtiring:
 ishga tushganda, kuniga bir necha marta yoki `403 not_a_timekeeper` kelganda.
 
-ES o'zi tabelchi tayinlovini **o'chirishi mumkin** (siz bilmagan holda):
+ES'da tayinlovga siz bilmagan holda faqat xodimning o'zi ta'sir qiladi:
 
-- ES administratori xodimning hisobi rolini o'zgartirsa yoki hisobni o'chirsa;
-- xodim ES'da o'chirilsa (tayinlov o'chadi);
+- xodim ES'da o'chirilsa — tayinlov o'chadi;
 - xodim faol bo'lmay qolsa — tayinlov **qoladi**, lekin `is_active: false` bo'ladi va uning nomidan ish qilib bo'lmaydi.
+
+ES hisobini (login, parol, rol) o'zgartirish yoki o'chirish tayinlovga **ta'sir qilmaydi**.
 
 Algoritm:
 
@@ -626,7 +648,8 @@ curl -sk -X PATCH "$BASE/timekeeper/101/employees/102/" -H "X-Employee-Service-K
   tizimingizga kiradi, sizning serveringiz ES'ga murojaat qiladi. Shuning uchun ES'da CORS sozlash ham kerak emas.
 - **Tabelchini o'zingiz aniqlang.** ES `timekeeper_tabel` ga ishonadi (kalit egasi sifatida): ES tabelchi kimligini
   tekshira olmaydi, faqat u ishlab turgan tabelchi ekanini va sexi chegarasini. Foydalanuvchini to'g'ri autentifikatsiya
-  qilib, **uning o'z** tabel raqamini yuborish — sizning mas'uliyatingiz. Foydalanuvchidan kelgan tabel raqamini hech qachon qabul qilmang.
+  qilib (masalan, E-IMZO bilan), **uning o'z** tabel raqamini yuborish — sizning mas'uliyatingiz. Foydalanuvchidan
+  (brauzerdan) kelgan tabel raqamini hech qachon qabul qilmang: uni foydalanuvchining hisobidan oling.
 - **Ruxsatlar ES tomonida ham cheklangan:** kalit bilan ham tabelchi nomidan faqat uning sexi va 5.1-bo'limdagi maydonlar o'zgaradi.
 - **Idempotent** so'rovlarni (`PUT`, `DELETE`, `PATCH`, `GET`) tarmoq xatosida qayta yuborish xavfsiz. «So'nggi yozgan g'olib»:
   bir vaqtda ikki tomon bir xodimni o'zgartirsa, oxirgisi saqlanadi.
@@ -639,6 +662,7 @@ curl -sk -X PATCH "$BASE/timekeeper/101/employees/102/" -H "X-Employee-Service-K
 - Fotosuratni almashtirish (Face ID etaloni) — ES veb-interfeysi orqali.
 - Tabel raqami, sex, login, parol, rolni o'zgartirish.
 - ES'da hisob (login/parol) yaratish: tabelchi uchun hisob kerak emas.
+- Tabelchining ES veb-saytiga tabelchi sifatida kirishi: ES'da tabelchi roli va sahifalari yo'q.
 - Boshqa sex xodimlari, sexlar va bo'limlarning o'zi (qo'shish/o'zgartirish).
 
 Zarur bo'lsa, ularni alohida, xavfsizlik nuqtai nazaridan ko'rib chiqib qo'shish mumkin.
@@ -649,5 +673,6 @@ Zarur bo'lsa, ularni alohida, xavfsizlik nuqtai nazaridan ko'rib chiqib qo'shish
 - Kalit: `.env` → `EMPLOYEE_SERVICE_API_KEYS=<mavjud kalit>,<yangi tizim uchun kalit>`; so'ng konteynerni **qayta yarating** (oddiy `docker restart` yangi `.env` qiymatlarini o'qimaydi): `docker compose up -d --force-recreate employee-service`.
 - Yangi migratsiya (`0041`) ilgari qo'shilgan tabelchi-token jadvalini olib tashlaydi (`manage.py migrate`, docker'da avtomatik).
   Oldingi (token) variantdagi `/api/v1/timekeeper/token/`, `logout/`, `me/` manzillari **yo'q**.
-- Tayinlangan tabelchi ES hisobiga ega bo'lsa, ES veb-saytida ham «Цех ходимлари» sahifasidan foydalanadi. Hisobsiz tabelchi faqat sizning tizim orqali ishlaydi.
-- ES administratori foydalanuvchi rolini o'zgartirsa yoki hisob/xodimni o'chirsa, tayinlov o'chadi (7-bo'lim).
+- «Табелчи» roli va «Цех ходимлари» sahifasi **olib tashlangan**: tabelchi ES'ga login-parol bilan kirmaydi. Migratsiya
+  `0042` ilgari tabelchi bo'lgan hisoblarni oddiy «Фойдаланувчи» qiladi (hisob va tayinlov qoladi; `manage.py migrate`, docker'da avtomatik).
+- Hisob rolini o'zgartirish yoki hisobni o'chirish tayinlovga ta'sir qilmaydi. Xodimni o'chirish — tayinlovni ham o'chiradi (7-bo'lim).

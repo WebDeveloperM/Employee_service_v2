@@ -18,8 +18,7 @@ from .bnpzid import build_bnpzid_redirect, get_bnpzid_authorize_request
 from .dashboard_stats import build_dashboard_charts
 from .models import Department, EMPLOYEE_STATUS_CHOICES, Employee, EmployeeCategory, PositionCategory, Section, ROLE_ADMIN, ROLE_CHOICES, ROLE_HR, UserProfile, WorkSchedule
 from .ordering import order_sections_by_code
-from .permissions import is_admin_or_hr, is_timekeeper, timekeeper_department
-from .serializers import is_privileged_account
+from .permissions import is_admin_or_hr
 from .security import (
     PENDING_FACE_AUTH_ATTEMPTS,
     PENDING_FACE_AUTH_STARTED_AT,
@@ -321,8 +320,6 @@ def redirect_unless_admin_or_hr(request):
     """
     if is_admin_or_hr(request.user):
         return None
-    if is_timekeeper(request.user):
-        return HttpResponseRedirect('/employees/')
     employee = getattr(request.user, 'employee', None)
     if employee is not None and not employee.is_deleted:
         return HttpResponseRedirect(f'/employees/{employee.slug}/')
@@ -339,40 +336,6 @@ def redirect_plain_user_to_own_card(request):
     return None
 
 
-def timekeeper_form_context(department):
-    """Табелчи ходим формалари (қўшиш, кўриш, таҳрирлаш): рўйхатларда фақат ўз цехи ва унинг бўлимлари."""
-    return {
-        'timekeeper_scope': True,
-        'departments': Department.objects.filter(pk=department.pk),
-        'sections': [section for section in get_section_choices() if section.department_id == department.pk],
-        'work_schedules': WorkSchedule.objects.all(),
-        'position_categories': PositionCategory.objects.all(),
-        'employee_categories': EmployeeCategory.objects.all(),
-    }
-
-
-def render_timekeeper_card(request, slug, template_name, page_mode=None):
-    """Табелчи ўз цехи ходимининг карточкасини (кўриш, таҳрирлаш) очади. Бошқа цех ходими, администратор/HR
-    ҳисобидаги ходим ёки цехи бўлмаган табелчи — ўз цех ходимлари рўйхатига қайтарилади."""
-    department = timekeeper_department(request.user)
-    if department is None:
-        return HttpResponseRedirect('/employees/')
-    employee = get_object_or_404(get_employee_web_queryset(), slug=slug)
-    if employee.department_id != department.pk or is_privileged_account(employee.user):
-        return HttpResponseRedirect('/department-employees/')
-    context = {'employee': employee, **timekeeper_form_context(department)}
-    if template_name == 'employee_detail.html':
-        context.update({'page_mode': page_mode, 'status_choices': EMPLOYEE_STATUS_CHOICES, 'can_edit_sizes_only': False})
-    return render(request, template_name, context)
-
-
-def redirect_timekeeper_to_list(request):
-    """Табелчи менюда фақат «Ходимлар рўйхати»ни кўради: бош саҳифа ва бошқа саҳифалар уни шу рўйхатга қайтаради."""
-    if is_timekeeper(request.user):
-        return HttpResponseRedirect('/employees/')
-    return None
-
-
 class EmployeesListView(AuthenticatedTemplateView):
     """«Ходимлар рўйхати» — список сотрудников (раньше он был на главной странице)."""
     template_name = 'employees_list.html'
@@ -381,27 +344,7 @@ class EmployeesListView(AuthenticatedTemplateView):
         own_card_redirect = redirect_plain_user_to_own_card(request)
         if own_card_redirect is not None:
             return own_card_redirect
-        if is_timekeeper(request.user):
-            # Табелчи: барча ходимлар рўйхати, фақат ўқиш (амаллар, қўшиш, импорт/экспорт йўқ). Цехи йўқ (ходим ишдан
-            # чиққан ва ҳ.к.) бўлса — тушунтириш чиқади.
-            department = timekeeper_department(request.user)
-            if department is None:
-                return render(request, 'timekeeper_unassigned.html')
-            return render(request, self.template_name, {'list_mode': 'directory', 'timekeeper_department': department})
-        return render(request, self.template_name, {'list_mode': 'full'})
-
-
-class DepartmentEmployeesWebView(AuthenticatedTemplateView):
-    """«Цех ходимлари» (табелчи): фақат ўз цехи ходимлари, уларни қўшиш, кўриш, таҳрирлаш ва ўчириш."""
-    template_name = 'employees_list.html'
-
-    def get(self, request, *args, **kwargs):
-        if not is_timekeeper(request.user):
-            return HttpResponseRedirect('/')
-        department = timekeeper_department(request.user)
-        if department is None:
-            return render(request, 'timekeeper_unassigned.html')
-        return render(request, self.template_name, {'list_mode': 'department', 'timekeeper_department': department})
+        return render(request, self.template_name)
 
 
 class DashboardView(AuthenticatedTemplateView):
@@ -411,9 +354,6 @@ class DashboardView(AuthenticatedTemplateView):
         own_card_redirect = redirect_plain_user_to_own_card(request)
         if own_card_redirect is not None:
             return own_card_redirect
-        timekeeper_redirect = redirect_timekeeper_to_list(request)
-        if timekeeper_redirect is not None:
-            return timekeeper_redirect
 
         if request.headers.get('Accept') == 'application/json':
             return Response({
@@ -482,11 +422,6 @@ class EmployeeCreateWebView(AuthenticatedTemplateView):
     template_name = 'employee_create.html'
 
     def get(self, request, *args, **kwargs):
-        if is_timekeeper(request.user):
-            department = timekeeper_department(request.user)
-            if department is None:
-                return HttpResponseRedirect('/employees/')
-            return render(request, self.template_name, timekeeper_form_context(department))
         denied = redirect_unless_admin_or_hr(request)
         if denied is not None:
             return denied
@@ -503,8 +438,6 @@ class EmployeeDetailWebView(AuthenticatedTemplateView):
     template_name = 'employee_detail.html'
 
     def get(self, request, slug, *args, **kwargs):
-        if is_timekeeper(request.user):
-            return render_timekeeper_card(request, slug, self.template_name, 'view')
         employee = get_object_or_404(get_employee_web_queryset(), slug=slug)
         profile = getattr(request.user, 'profile', None)
         user_employee = getattr(request.user, 'employee', None)
@@ -539,8 +472,6 @@ class EmployeeEditWebView(AuthenticatedTemplateView):
     template_name = 'employee_detail.html'
 
     def get(self, request, slug, *args, **kwargs):
-        if is_timekeeper(request.user):
-            return render_timekeeper_card(request, slug, self.template_name, 'edit')
         employee = get_object_or_404(get_employee_web_queryset(), slug=slug)
         profile = getattr(request.user, 'profile', None)
         user_employee = getattr(request.user, 'employee', None)
@@ -572,8 +503,6 @@ class EmployeeDeleteWebView(AuthenticatedTemplateView):
     template_name = 'employee_delete.html'
 
     def get(self, request, slug, *args, **kwargs):
-        if is_timekeeper(request.user):   # табелчи ходимларни ўчира олмайди
-            return HttpResponseRedirect('/department-employees/')
         denied = redirect_unless_admin_or_hr(request)
         if denied is not None:
             return denied

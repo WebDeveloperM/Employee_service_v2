@@ -10,8 +10,8 @@ from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.validators import UniqueValidator
 
-from .models import Department, Employee, EmployeeCategory, PositionCategory, Section, StaffPosition, UserProfile, WorkSchedule, GRADE_RE, STATUS_WORKING, ROLE_ADMIN, ROLE_CHOICES, ROLE_HR, ROLE_TIMEKEEPER, ROLE_USER, WORK_STATUS_CHOICES, Timekeeper
-from .permissions import is_admin, is_service_api_request, timekeeper_department
+from .models import Department, Employee, EmployeeCategory, PositionCategory, Section, StaffPosition, UserProfile, WorkSchedule, GRADE_RE, STATUS_WORKING, ROLE_ADMIN, ROLE_CHOICES, ROLE_HR, ROLE_USER, WORK_STATUS_CHOICES
+from .permissions import is_admin, is_service_api_request
 from .replacements import ReplacementError, clear_replacement, resolve_substitute, set_replacement
 from .sections_tree import MAX_SECTION_DEPTH, SectionIndex
 from .staff import collect_staff_stats, is_no_staff_section_name, plain_number, vacant_places
@@ -188,9 +188,6 @@ class UserProfileSerializer(serializers.ModelSerializer):
         current = self.instance.role if self.instance is not None else ROLE_USER
         if value != current and not is_admin(request_user(self)):
             raise PermissionDenied('Ролни фақат администратор ўзгартира олади.')
-        if value == ROLE_TIMEKEEPER and value != current:
-            # Табелчи цехга боғланади: рол фақат бошқа тизимдан (API: timekeeper-assignments) цех танлаб берилади.
-            raise serializers.ValidationError('«Табелчи» ролини бу ердан бериб бўлмайди: табелчи бошқа тизим орқали цехга тайинланади.')
         return value
 
     def _validate_unique_profile_field(self, field_name, value):
@@ -299,9 +296,6 @@ class UserProfileSerializer(serializers.ModelSerializer):
             if update_fields:
                 employee.save(update_fields=update_fields)
 
-        if instance.role == ROLE_TIMEKEEPER and next_role != ROLE_TIMEKEEPER:
-            # Рол олинса, цехнинг табелчи ёзуви ҳам ўчади: ролсиз табелчи (тайинлов) қолмайди.
-            Timekeeper.objects.filter(employee__user_id=instance.user_id).delete()
         instance.role = next_role
         if 'face_id_login_enabled' in validated_data:
             instance.face_id_login_enabled = validated_data['face_id_login_enabled']
@@ -643,8 +637,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
     base_image = SanitizedImageField(required=False, allow_null=True)
     password = serializers.CharField(write_only=True, required=False, allow_blank=True)
     password_confirm = serializers.CharField(write_only=True, required=False, allow_blank=True)
-    # «Табелчи» бу ерда йўқ: у цехга боғланади ва бошқа тизимдан (API: timekeeper-assignments) тайинланади.
-    role = serializers.ChoiceField(choices=[choice for choice in ROLE_CHOICES if choice[0] != ROLE_TIMEKEEPER], default=ROLE_USER, write_only=True, required=False)
+    role = serializers.ChoiceField(choices=ROLE_CHOICES, default=ROLE_USER, write_only=True, required=False)
     # Иш ҳолати: бўш/null — оддий «Фаол» (ишда); қолганлари — таътил, хизмат сафари, касаллик, бола парвариши.
     work_status = serializers.ChoiceField(
         choices=WORK_STATUS_CHOICES, required=False, allow_null=True, allow_blank=True,
@@ -811,8 +804,9 @@ class EmployeeSerializer(serializers.ModelSerializer):
         if employee.status_key == STATUS_WORKING or (change is not None and change[0] == 'clear'):
             clear_replacement(employee)
         elif change is not None:
-            request = self.context.get('request')
-            assigned_by = self.context.get('acting_user') or getattr(request, 'user', None)   # табелчи API си: табелчининг ҳисоби
+            # «Ким тайинлаган» — веб-саҳифада кирган администратор/HR. Сервис калити (бошқа тизим, табелчи номидан ҳам)
+            # ES ҳисоби эмас: бўш қолади (ким қилгани хавфсизлик журналида).
+            assigned_by = getattr(self.context.get('request'), 'user', None)
             set_replacement(employee, change[1], assigned_by if getattr(assigned_by, 'pk', None) else None)
 
     def _clone_uploaded_image(self, uploaded_file, fallback_name):
@@ -969,27 +963,12 @@ class EmployeeUpsertSerializer(EmployeeSerializer):
         read_only_fields = ['slug', 'created_at', 'updated_at']
 
 
-class TimekeeperEmployeeSerializer(EmployeeSerializer):
-    """«Ходимлар рўйхати» (барча ходимлар, фақат ўқиш): рўйхат учун керакли майдонлар, холос
-    (телефон, туғилган сана, ўлчамлар, логин ва бошқалар йўқ)."""
-
-    VISIBLE_FIELDS = (
-        'id', 'slug', 'first_name', 'last_name', 'surname', 'full_name', 'tabel_number', 'base_image_url',
-        'base_image_thumb_url', 'department', 'section', 'position', 'is_active', 'work_status',
-    )
-
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
-        return {key: data[key] for key in self.VISIBLE_FIELDS if key in data}
-
-
 class TimekeeperManagedEmployeeSerializer(EmployeeSerializer):
-    """Табелчи ўз цехи ходимларини бошқарганда (қўшиш, ўзгартириш): унга берилмайдиган нарсалар шу ерда ўчади.
+    """Бошқа тизим табелчи номидан ходимни ўзгартирганда (timekeeper_api.py): табелчига берилмайдиган нарсалар шу ерда ўчади.
 
-    - Цех доим табелчининг цехи: ходим қўшилса шу цехга тушади, бошқа цехга ўтказиб ҳам, бошқа цех ходимини ҳам бўлмайди.
-    - Ҳисоб: янги ходимга логин ва парол берилади (ходим формасидаги каби, рол — оддий «Фойдаланувчи»), лекин мавжуд
-      ходимнинг логини ва пароли ўзгармайди. Рол, Face ID чиқиш белгиси, интеграция майдонлари ва цех/бўлим номи орқали
-      цех яратиш — табелчига эмас.
+    - Цех доим табелчининг цехи (view уни context['timekeeper_department'] да беради): бошқа цехга ўтказиб ҳам, бошқа цех
+      ходимини ҳам ўзгартириб бўлмайди.
+    - Ҳисоб (логин, парол, рол), Face ID чиқиш белгиси, интеграция майдонлари ва цех/бўлим номи орқали цех яратиш ўзгармайди.
     - Администратор ёки HR ҳисобига боғланган ходимга тегилмайди (уни фақат администратор бошқаради).
     """
 
@@ -1000,10 +979,7 @@ class TimekeeperManagedEmployeeSerializer(EmployeeSerializer):
     ACCOUNT_FIELDS = ('login', 'password', 'password_confirm')
 
     def validate(self, attrs):
-        request = self.context.get('request')
-        # Табелчи API си (бошқа тизим табелчи номидан, сервис калити билан): цехни view аниқлаб беради (context);
-        # веб-саҳифада — киргган табелчининг цехи.
-        department = self.context.get('timekeeper_department') or timekeeper_department(getattr(request, 'user', None))
+        department = self.context.get('timekeeper_department')
         if department is None:
             raise PermissionDenied('Сизда ходимларни бошқариш ҳуқуқи йўқ.')
         for name in self.IGNORED_FIELDS:
@@ -1023,5 +999,5 @@ class TimekeeperManagedEmployeeSerializer(EmployeeSerializer):
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        data['is_protected'] = is_privileged_account(instance.user)   # администратор/HR ходими: рўйхатда амаллар чиқмайди
+        data['is_protected'] = is_privileged_account(instance.user)   # администратор/HR ходими: уни ўзгартириб бўлмайди (403)
         return data

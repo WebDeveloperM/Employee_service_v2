@@ -27,7 +27,6 @@ from .template_views import (
     EmployeePhoneImportExcelTemplateView,
     EmployeeListCreateTemplateView,
     EmployeeDetailTemplateView,
-    EmployeeDirectoryTemplateView,
     EmployeeReplacementCandidatesTemplateView,
     EmployeeStatsTemplateView,
     UserListCreateTemplateView,
@@ -49,7 +48,6 @@ from .staff_views import (
 )
 from .web_views import (
     DashboardView,
-    DepartmentEmployeesWebView,
     DepartmentsWebView,
     EmployeeCreateWebView,
     EmployeeDeleteWebView,
@@ -73,7 +71,6 @@ urlpatterns = [
     path('', DashboardView.as_view(), name='dashboard'),
     path('employees/', EmployeesListView.as_view(), name='employees-web'),
     path('staff/', StaffWebView.as_view(), name='staff-web'),
-    path('department-employees/', DepartmentEmployeesWebView.as_view(), name='department-employees-web'),
     path('departments/', DepartmentsWebView.as_view(), name='departments-web'),
     path('sections/', SectionsWebView.as_view(), name='sections-web'),
     path('employees/create/', EmployeeCreateWebView.as_view(), name='employee-create-web'),
@@ -117,7 +114,6 @@ urlpatterns = [
     path('api/template/staff/sections/<int:pk>/employees/<int:employee_id>/', StaffSectionEmployeeDetailTemplateView.as_view()),
     path('api/template/staff/employee-lookup/', StaffEmployeeLookupTemplateView.as_view()),
     path('api/template/employees/', EmployeeListCreateTemplateView.as_view()),
-    path('api/template/directory/', EmployeeDirectoryTemplateView.as_view()),
     path('api/template/employees/import-excel/', EmployeeImportExcelTemplateView.as_view()),
     path('api/template/employees/import-phones/', EmployeePhoneImportExcelTemplateView.as_view()),
     path('api/template/employees/<int:pk>/', EmployeeDetailTemplateView.as_view()),

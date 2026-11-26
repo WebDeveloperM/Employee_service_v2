@@ -3,6 +3,7 @@
 
 Ҳужжат: API_TIMEKEEPER.md (охирги синф ҳужжат кодга мос эканини текширади).
 """
+import json
 import re
 from datetime import timedelta
 
@@ -331,10 +332,13 @@ class EmployeeUpdateTests(ApiTestBase):
         self.assertEqual((back['status'], back['replacement']), ('working', None))
         self.assertFalse(EmployeeReplacement.objects.exists())
 
-    def test_the_substitute_records_who_assigned_him(self):
-        """Ўринбосарни «ким тайинлаган»: ҳисоби бор табелчи — шу ҳисоб, ҳисоби йўқ табелчи — бўш."""
-        self.patch({'status': 'vacation', 'replacement_tabel_number': '101'})
-        self.assertEqual(EmployeeReplacement.objects.get().assigned_by.username, 'ali_login')
+    def test_the_substitute_is_not_tied_to_any_es_account(self):
+        """API орқали тайинланган ўринбосарда «ким тайинлаган» (ES ҳисоби) бўш: табелчининг ES ҳисоби бўлса ҳам
+        (ES ҳисоби билан ишламайди), бўлмаса ҳам. Ким қилгани — хавфсизлик журналида (табелчининг табель рақами)."""
+        with self.assertLogs('employees.security', level='INFO') as logs:
+            self.patch({'status': 'vacation', 'replacement_tabel_number': '101'})
+        self.assertIsNone(EmployeeReplacement.objects.get().assigned_by)
+        self.assertTrue(any("timekeeper='101'" in line for line in logs.output), logs.output)
 
         self.assign(self.dept_b, self.sardor)                                    # ҳисоби йўқ табелчи
         second = make_employee(202, self.dept_b)
@@ -525,6 +529,19 @@ class DocumentationMatchesTheCodeTests(ApiTestBase):
         self.assertGreaterEqual(len(codes), 12)
         for code in sorted(codes):
             self.assertIn(f'`{code}`', docs, code)
+
+    def test_the_documented_timekeeper_object_is_what_the_api_returns(self):
+        """3.2-бўлимдаги табелчи объекти — API жавобининг ўзи; олиб ташланганлар фақат «0. O'zgarishlar» да тилга олинади."""
+        docs = self.docs()
+        section = docs[docs.index('### 3.2'):docs.index('### 3.3')]
+        documented = json.loads(section[section.index('```json') + len('```json'):section.index('```', section.index('```json') + 1)])
+        real = self.api.get(self.url('')).json()['timekeeper']
+
+        self.assertEqual(sorted(documented), sorted(real))
+        current = docs[docs.index('## 1. Bir qarashda'):]
+        for removed in ('has_es_account', 'privileged_account'):
+            self.assertNotIn(removed, current)
+            self.assertIn(f'`{removed}`', docs[:docs.index('## 1. Bir qarashda')])
 
     def test_the_documented_error_examples_are_what_the_api_really_says(self):
         """API_TIMEKEEPER.md: шу матнлар ҳужжатда мисол сифатида келтирилган."""

@@ -2,17 +2,18 @@
 
 Тизимлар ўртасида иш тақсимоти
   * Табелчини БОШҚА ТИЗИМ тайинлайди ва олиб ташлайди (timekeeper-assignments/). ES да тайинлаш саҳифаси йўқ.
-  * Табелчи бошқа тизимда ишлайди (ўз логини билан ўша тизимга киради); бошқа тизим ES га унинг НОМИДАН мурожаат қилади
+  * Табелчи фақат бошқа тизимда ишлайди (уни ўша тизим ўзи текширади, масалан E-IMZO билан); ES га у кирмайди — «Табелчи»
+    роли ва ES даги табелчи саҳифалари йўқ. Бошқа тизим ES га унинг НОМИДАН мурожаат қилади
     (timekeeper/<табелчининг табель рақами>/...): ўз цехи ходимларини ўқийди ва янгилайди.
 
 Хавфсизлик
-  * Иккала гуруҳ ҳам ФАҚАТ сервис калити билан (X-Employee-Service-Key ёки Bearer). Табелчининг ES парол/токени йўқ:
-    логин ва парол тизимлар ўртасида юрмайди. Калит — бошқа тизимнинг сири (у ходим маълумотини бошқа йўллар билан ҳам ўзгартира олади).
+  * Иккала гуруҳ ҳам ФАҚАТ сервис калити билан (X-Employee-Service-Key ёки Bearer). Табелчининг ES логини, пароли ва
+    токени йўқ ва керак эмас: тайинлов ES ҳисобига боғланмайди. Калит — бошқа тизимнинг сири (у ходим маълумотини бошқа йўллар билан ҳам ўзгартира олади).
   * «Табелчи номидан» дегани ES да ЧЕКЛОВ: ES шу табель рақамли ходим ҳозир ишлаб турган табелчими (тайинланган, фаол,
     ўчирилмаган) — текширади ва ундан кейин фақат унинг цехи ходимлари, фақат рухсат этилган майдонлар билан ишлайди.
     Цех ва майдонлар чеки калит бор-йўқлигига боғлиқ эмас, ҳар сўровда текширилади.
-  * Ёзув қоидалари веб-саҳифадаги «Цех ходимлари» билан бир хил (TimekeeperManagedEmployeeSerializer): ҳисоб, рол ва цех
-    ўзгармайди, администратор/HR ходимига тегилмайди. Бу ерда яна: фото ва табель рақами ўзгармайди.
+  * Ёзув қоидалари (TimekeeperManagedEmployeeSerializer): ҳисоб, рол ва цех ўзгармайди, администратор/HR ходимига тегилмайди,
+    фото ва табель рақами ўзгармайди.
 """
 from django.db import models, transaction
 from django.http import Http404
@@ -99,7 +100,6 @@ class TimekeeperActingMixin(ServiceKeyApiMixin):
     def get_serializer_context(self):
         context = super().get_serializer_context()
         context['timekeeper_department'] = self.request.timekeeper_department      # serializer цехни шундан олади
-        context['acting_user'] = self.request.timekeeper.employee.user             # ўринбосарни «ким тайинлаган» (ҳисоби бўлса)
         return context
 
 
@@ -177,7 +177,7 @@ def get_department_or_404(department_id):
 class TimekeeperAssignmentDetailView(ServiceKeyApiMixin, APIView):
     def get(self, request, department_id):
         department = get_department_or_404(department_id)
-        assignment = Timekeeper.objects.select_related('employee', 'employee__user').filter(department=department).first()
+        assignment = Timekeeper.objects.select_related('employee').filter(department=department).first()
         return Response(department_assignment(department, assignment))
 
     def put(self, request, department_id):
@@ -185,7 +185,7 @@ class TimekeeperAssignmentDetailView(ServiceKeyApiMixin, APIView):
         serializer = AssignmentRequestSerializer(data=request.data if hasattr(request.data, 'keys') else {})
         serializer.is_valid(raise_exception=True)
         tabel_number = serializer.validated_data['tabel_number'].strip()
-        employee = Employee.objects.select_related('user', 'department').filter(tabel_number=tabel_number, is_deleted=False).first()
+        employee = Employee.objects.select_related('department').filter(tabel_number=tabel_number, is_deleted=False).first()
         if employee is None:
             raise exceptions.NotFound('Бундай табель рақамли ходим топилмади.', code='employee_not_found')
         try:
@@ -262,7 +262,7 @@ class TimekeeperApiEmployeeSerializer(TimekeeperManagedEmployeeSerializer):
     """Ходим: ўқишда — қисқа ва аниқ майдонлар, ёзишда — фақат рўйхатдаги майдонлар (WRITABLE_FIELDS).
 
     Қоидалар (цех доим табелчиники, ҳисоб/рол ўзгармайди, администратор/HR ходими ёпиқ, бўлим ўз цехидан, ўринбосар
-    шу цехдан бўлиши) — TimekeeperManagedEmployeeSerializer ва EmployeeSerializer да, веб-форма билан бир хил.
+    шу цехдан бўлиши) — TimekeeperManagedEmployeeSerializer ва EmployeeSerializer да (ходим формаси билан бир хил).
     """
 
     tabel_number = serializers.CharField(read_only=True)

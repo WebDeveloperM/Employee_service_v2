@@ -27,7 +27,7 @@ from django.test import Client, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 
 from . import face
-from .models import Department, Employee, ROLE_ADMIN, ROLE_TIMEKEEPER, ROLE_USER, Timekeeper, UserProfile
+from .models import Department, Employee, ROLE_ADMIN, ROLE_USER, Timekeeper, UserProfile
 from .thumbnails import THUMB_DIR, THUMB_SIZE, ensure_thumbnail, original_name_for_thumbnail, thumbnail_name
 
 TEMPLATES_DIR = settings.BASE_DIR / 'employees' / 'templates'
@@ -300,25 +300,26 @@ class QueryCountTests(TempMediaMixin, TestCase):
             self.make_employee(5300 + index, user=user)
         self.assertEqual(self.count(client, '/api/template/users/?page_size=100'), few)
 
-    def test_timekeeper_department_list(self):
+    @override_settings(EMPLOYEE_SERVICE_API_KEYS=['qc-service-key-0123456789abcdefghijklmnop'])
+    def test_timekeeper_api_department_list(self):
+        """Табелчи API си (бошқа тизим табелчи номидан): ES ҳисоби бор ходимлар ҳам (is_protected ҳар қаторда ҳисобни
+        текширади) сўровлар сонини оширмайди."""
         department = Department.objects.create(name='9-Цех')
-        tk_user = User.objects.create_user(username='qc_tk', password='x')
-        UserProfile.objects.create(user=tk_user, role=ROLE_TIMEKEEPER)
-        tk_employee = self.make_employee(5400, department=department, user=tk_user, photo=False)
+        tk_employee = self.make_employee(5400, department=department, photo=False)
         Timekeeper.objects.create(department=department, employee=tk_employee)
-        client = Client()
-        client.force_login(tk_user)
+        client = Client(HTTP_X_EMPLOYEE_SERVICE_KEY='qc-service-key-0123456789abcdefghijklmnop')
+        url = '/api/v1/timekeeper/5400/employees/?page_size=100'
 
         def add_staff(start, stop):
             for index in range(start, stop):
                 user = User.objects.create_user(username=f'qc_staff{index}', password='x')
-                UserProfile.objects.create(user=user, role=ROLE_USER)
+                UserProfile.objects.create(user=user, role=ROLE_ADMIN if index % 5 == 0 else ROLE_USER)
                 self.make_employee(5401 + index, department=department, user=user, photo=False)
 
         add_staff(0, 2)
-        few = self.count(client, '/api/template/employees/?page_size=100')
+        few = self.count(client, url)
         add_staff(2, 14)
-        self.assertEqual(self.count(client, '/api/template/employees/?page_size=100'), few)
+        self.assertEqual(self.count(client, url), few)
 
 
 class StaticAssetsTests(TestCase):

@@ -7,7 +7,7 @@ from django.test import Client, TestCase
 from rest_framework.test import APIClient
 
 from . import template_views
-from .models import Department, Employee, EmployeeReplacement, ROLE_ADMIN, ROLE_TIMEKEEPER, ROLE_USER, Timekeeper, UserProfile
+from .models import Department, Employee, EmployeeReplacement, ROLE_ADMIN, ROLE_USER, UserProfile
 
 CANDIDATES = '/api/template/employees/{}/replacement-candidates/'
 
@@ -280,43 +280,6 @@ class ReplacementCandidatesTests(ReplacementTestBase):
         self.assertIn(APIClient().get(CANDIDATES.format(self.absent.pk)).status_code, (401, 403))
 
 
-class TimekeeperReplacementTests(ReplacementTestBase):
-    def setUp(self):
-        super().setUp()
-        self.keeper_employee = make_employee(110, self.dept_a)
-        self.keeper_user = make_user('rep_keeper', ROLE_TIMEKEEPER, employee=self.keeper_employee)
-        Timekeeper.objects.create(department=self.dept_a, employee=self.keeper_employee)
-        self.keeper = api_for(self.keeper_user)
-
-    def test_a_timekeeper_assigns_a_substitute_inside_his_department(self):
-        response = self.patch(client=self.keeper, is_active='true', work_status='vacation', replacement_employee_id=self.sub.pk)
-
-        self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(self.record().substitute, self.sub)
-        self.assertEqual(self.record().assigned_by, self.keeper_user)
-
-    def test_a_timekeeper_cannot_pick_a_substitute_from_another_department(self):
-        response = self.patch(client=self.keeper, is_active='true', work_status='vacation', replacement_employee_id=self.stranger.pk)
-
-        self.assertEqual(response.status_code, 400, response.content)
-        self.assertIsNone(self.record())
-
-    def test_a_timekeeper_gets_the_candidates_of_his_own_department_only(self):
-        response = self.keeper.get(CANDIDATES.format(self.absent.pk), {'department_id': self.dept_b.pk})
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['department']['id'], self.dept_a.pk)   # ?department_id инобатга олинмайди
-        self.assertNotIn(self.stranger.pk, [item['id'] for item in response.json()['data']])
-        self.assertNotIn(self.absent.pk, [item['id'] for item in response.json()['data']])
-
-    def test_a_timekeeper_cannot_touch_another_department(self):
-        self.assertEqual(self.keeper.get(CANDIDATES.format(self.stranger.pk)).status_code, 404)
-
-        response = self.patch(employee=self.stranger, client=self.keeper, is_active='true', work_status='vacation')
-
-        self.assertEqual(response.status_code, 403)
-
-
 class ReplacementPageTests(ReplacementTestBase):
     def setUp(self):
         super().setUp()
@@ -367,13 +330,3 @@ class ReplacementPageTests(ReplacementTestBase):
         html = client.get(f'/employees/{self.sub.slug}/').content.decode()
 
         self.assertNotIn('id="replacementModal"', html)
-
-    def test_a_timekeeper_gets_the_modal_on_the_card_of_his_department(self):
-        keeper_employee = make_employee(110, self.dept_a)
-        Timekeeper.objects.create(department=self.dept_a, employee=keeper_employee)
-        client = Client(HTTP_HOST='localhost')
-        client.force_login(make_user('rep_keeper_page', ROLE_TIMEKEEPER, employee=keeper_employee))
-
-        html = self.edit_html(client=client)
-
-        self.assertIn('id="replacementModal"', html)

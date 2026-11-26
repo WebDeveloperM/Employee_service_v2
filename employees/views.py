@@ -20,12 +20,10 @@ from .authentication import ServiceApiKeyAuthentication
 from .permissions import (
     AdminOrHrCanWrite,
     AdminOrHrOrServiceKey,
-    AdminOrHrOrTimekeeperCanWrite,
     ServiceApiAuthenticatedPermission,
     is_admin,
     is_admin_or_hr,
     is_service_api_request,
-    timekeeper_department,
 )
 from .face import (
     UnreadableReferenceImage, calculate_face_similarity, decode_image_to_pil, detect_face_boxes, estimate_head_pose_from_frames,
@@ -43,7 +41,7 @@ from .security import (
     security_log,
 )
 from .serializers import (
-    DepartmentSerializer, EmployeeSerializer, EmployeeUpsertSerializer, SectionSerializer, TimekeeperManagedEmployeeSerializer,
+    DepartmentSerializer, EmployeeSerializer, EmployeeUpsertSerializer, SectionSerializer,
 )
 
 
@@ -348,15 +346,8 @@ class SectionDetailApiView(generics.RetrieveUpdateDestroyAPIView):
 
 class EmployeeListCreateApiView(generics.ListCreateAPIView):
     serializer_class = EmployeeSerializer
-    # Қўшишга администратор, HR, сервис калити ва табелчи (фақат ўз цехига) ҳақли.
-    permission_classes = [ServiceApiAuthenticatedPermission, AdminOrHrOrTimekeeperCanWrite]
+    permission_classes = [ServiceApiAuthenticatedPermission, AdminOrHrCanWrite]
     pagination_class = EmployeeResultsSetPagination
-
-    def get_serializer_class(self):
-        request = getattr(self, 'request', None)
-        if request is not None and request.method == 'POST' and not is_service_api_request(request) and not is_admin_or_hr(request.user):
-            return TimekeeperManagedEmployeeSerializer   # табелчи: цех доим ўзиники, ҳисоб/рол чекловлари билан
-        return super().get_serializer_class()
 
     def get_queryset(self):
         queryset = Employee.objects.select_related('department', 'section', 'section__department', 'position_category', 'employee_category', 'work_schedule').filter(is_deleted=False)
@@ -425,34 +416,17 @@ class EmployeeDetailApiView(generics.RetrieveUpdateAPIView):
         # Профили йўқ фойдаланувчи ҳам (суперфойдаланувчидан ташқари) оддий ходим: олдин унга ҳамма нарса очиқ эди.
         return not is_service_api_request(self.request) and not is_admin_or_hr(self.request.user)
 
-    def timekeeper_manages(self, employee):
-        """Табелчи ўз цехи ходимини бошқаради (кўради ва ўзгартиради)."""
-        if not self.is_plain_user():
-            return False
-        department = timekeeper_department(self.request.user)
-        return department is not None and employee.department_id == department.id
-
     def get_object(self):
         employee = super().get_object()
         user_employee = getattr(self.request.user, 'employee', None)
 
-        if self.is_plain_user() and not self.timekeeper_manages(employee):
+        if self.is_plain_user():
             if user_employee is None or user_employee.pk != employee.pk:
                 raise PermissionDenied('Сиз фақат ўз ходим карточкангизни кўра оласиз.')
 
         return employee
 
     def update(self, request, *args, **kwargs):
-        partial = kwargs.get('partial', False)
-        instance = self.get_object()
-        if self.timekeeper_manages(instance):
-            # Табелчи ўз цехи ходимини тўлиқ таҳрирлайди (ҳисоб, рол ва цех ўзгармайди: TimekeeperManagedEmployeeSerializer).
-            serializer = TimekeeperManagedEmployeeSerializer(
-                instance, data=request.data, partial=partial, context=self.get_serializer_context(),
-            )
-            serializer.is_valid(raise_exception=True)
-            self.perform_update(serializer)
-            return Response(serializer.data)
         if self.is_plain_user():
             partial = kwargs.pop('partial', False)
             instance = self.get_object()

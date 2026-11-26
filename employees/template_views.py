@@ -18,19 +18,15 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.pagination import PageNumberPagination
 
-from .models import Department, Employee, EmployeeCategory, EmployeeCertificate, EmployeeReplacement, PositionCategory, Section, Timekeeper, UserProfile, WorkSchedule, ROLE_ADMIN, ROLE_HR, ROLE_TIMEKEEPER, ROLE_USER
+from .models import Department, Employee, EmployeeCategory, EmployeeCertificate, EmployeeReplacement, PositionCategory, Section, UserProfile, WorkSchedule, ROLE_ADMIN, ROLE_HR, ROLE_USER
 from .ordering import order_sections_by_code
-from .permissions import (
-    AdminOrHrCanWrite, AdminOrHrOrTimekeeperManage, AdminOrHrOrTimekeeperRead, IsAdminOrHrRole, is_admin, is_admin_or_hr,
-    timekeeper_department,
-)
+from .permissions import AdminOrHrCanWrite, IsAdminOrHrRole, is_admin, is_admin_or_hr
 from .pki import generate_employee_pfx
 from .replacements import CANDIDATE_LIMIT, substitute_candidates
 from .sections_tree import SectionIndex, delete_section_or_400, order_depth_first
 from .serializers import (
     DepartmentSerializer, EmployeeCategorySerializer, EmployeeSerializer, PositionCategorySerializer,
-    SectionSerializer, TimekeeperEmployeeSerializer, TimekeeperManagedEmployeeSerializer, UserProfileSerializer,
-    WorkScheduleSerializer,
+    SectionSerializer, UserProfileSerializer, WorkScheduleSerializer,
 )
 from .staff import StaffTreeOrder
 from .thumbnails import thumbnail_url
@@ -296,27 +292,11 @@ class SectionDetailTemplateView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class EmployeeListCreateTemplateView(generics.ListCreateAPIView):
-    """Ходимларни бошқариш. Администратор ва HR — барча ходимлар; табелчи — фақат ўз цехи ходимлари (кўриш, қўшиш,
-    ўзгартириш, ўчириш), ҳисоб/рол/цех ўзгартириш чекловлари билан (TimekeeperManagedEmployeeSerializer)."""
+    """Ходимларни бошқариш (веб-саҳифа): фақат администратор ва HR."""
 
     serializer_class = EmployeeSerializer
-    permission_classes = [IsAuthenticated, AdminOrHrOrTimekeeperManage]
+    permission_classes = [IsAuthenticated, IsAdminOrHrRole]
     pagination_class = StandardResultsSetPagination
-    # Телефон ва ишга қабул санаси бўйича филтрлар рўйхатда кўрсатилмайдиган маълумотни «топтириб» қўймаслиги учун
-    # фақат-ўқиш рўйхатида (EmployeeDirectoryTemplateView) ўчирилади.
-    allow_private_filters = True
-
-    def get_serializer_class(self):
-        if not is_admin_or_hr(self.request.user):
-            return TimekeeperManagedEmployeeSerializer
-        return super().get_serializer_class()
-
-    def scope_queryset(self, queryset):
-        """Табелчи фақат ўз цехини кўради (қидирув ва филтрлар шу доирада ишлайди); цехи бўлмаса — ҳеч нимани."""
-        if is_admin_or_hr(self.request.user):
-            return queryset
-        department = timekeeper_department(self.request.user)
-        return queryset.filter(department=department) if department is not None else queryset.none()
 
     def get_queryset(self):
         # Порядок цех → отдел → должность задаёт StaffTreeOrder в list(); здесь — порядок внутри одного места.
@@ -329,7 +309,6 @@ class EmployeeListCreateTemplateView(generics.ListCreateAPIView):
             'surname',
             'tabel_number',
         )
-        queryset = self.scope_queryset(queryset)
 
         # Қидирув сўзларга бўлинади: ҳар бир сўз исм, фамилия, отасининг исми, табель ёки лавозимдан биронтасида
         # учраши керак. Шунинг учун «Фазилов Акбар» ҳам, «Акбар Фазилов Алишерович» ҳам ходимни топади.
@@ -349,7 +328,7 @@ class EmployeeListCreateTemplateView(generics.ListCreateAPIView):
         # Телефон бўйича қидирув: Телефон 1 ёки Телефон 2 дан биронтасида киритилган рақамлар учраши керак.
         # Рақамлар базада турлича сақланган («+998 90 123 45 67», «+998901234567», «901234567»), шунинг учун
         # икки томон ҳам фақат рақамларга келтирилади: «90 123», «+998(90)123» ва «901234567» бир хил ишлайди.
-        phone = self.request.query_params.get('phone', '').strip() if self.allow_private_filters else ''
+        phone = self.request.query_params.get('phone', '').strip()
         if phone:
             digits = re.sub(r'\D', '', phone)
             if not digits:
@@ -379,7 +358,7 @@ class EmployeeListCreateTemplateView(generics.ListCreateAPIView):
         if position:
             queryset = queryset.filter(position__icontains=position)
 
-        employment_date = self.request.query_params.get('employment_date', '').strip() if self.allow_private_filters else ''
+        employment_date = self.request.query_params.get('employment_date', '').strip()
         if employment_date:
             queryset = queryset.filter(date_of_employment=employment_date)
 
@@ -405,7 +384,6 @@ class EmployeeListCreateTemplateView(generics.ListCreateAPIView):
 
     def employees_in_tree_order(self, ids):
         """Сотрудники по списку id — ровно в этом порядке (одним запросом)."""
-        # user и user__profile: сериализатор табелчи на каждой строке проверяет, не администратор/HR ли это (было N+1).
         by_id = Employee.objects.select_related(
             'department', 'section', 'section__department', 'position_category', 'employee_category', 'work_schedule',
             'user', 'user__profile',
@@ -447,40 +425,13 @@ class EmployeeListCreateTemplateView(generics.ListCreateAPIView):
         }, status=status.HTTP_201_CREATED, headers=headers)
 
 
-class EmployeeDirectoryTemplateView(EmployeeListCreateTemplateView):
-    """«Ходимлар рўйхати» табелчи учун: барча цехларнинг ходимлари, фақат ўқиш, фақат рўйхат майдонлари
-    (телефон, туғилган сана ва бошқа шахсий маълумотсиз, телефон бўйича қидирувсиз)."""
-
-    serializer_class = TimekeeperEmployeeSerializer
-    permission_classes = [IsAuthenticated, AdminOrHrOrTimekeeperRead]
-    http_method_names = ['get', 'head', 'options']
-    allow_private_filters = False
-
-    def get_serializer_class(self):
-        return TimekeeperEmployeeSerializer
-
-    def scope_queryset(self, queryset):
-        return queryset   # рухсат синфи фақат администратор/HR ва ишлайдиган табелчини ўтказади
-
-
 class EmployeeDetailTemplateView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Employee.objects.select_related(
+        'department', 'section', 'section__department', 'position_category', 'employee_category', 'work_schedule',
+        'user', 'user__profile',
+    ).filter(is_deleted=False)
     serializer_class = EmployeeSerializer
-    permission_classes = [IsAuthenticated, AdminOrHrOrTimekeeperManage]
-
-    def get_serializer_class(self):
-        if not is_admin_or_hr(self.request.user):
-            return TimekeeperManagedEmployeeSerializer
-        return super().get_serializer_class()
-
-    def get_queryset(self):
-        queryset = Employee.objects.select_related(
-            'department', 'section', 'section__department', 'position_category', 'employee_category', 'work_schedule',
-            'user', 'user__profile',
-        ).filter(is_deleted=False)
-        if not is_admin_or_hr(self.request.user):   # табелчи фақат ўз цехи ходимини кўради, ўзгартиради ва ўчиради
-            department = timekeeper_department(self.request.user)
-            queryset = queryset.filter(department=department) if department is not None else queryset.none()
-        return queryset
+    permission_classes = [IsAuthenticated, IsAdminOrHrRole]
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -508,8 +459,6 @@ class EmployeeDetailTemplateView(generics.RetrieveUpdateDestroyAPIView):
         })
 
     def destroy(self, request, *args, **kwargs):
-        if not is_admin_or_hr(request.user):
-            raise PermissionDenied('Табелчи ходимни ўчира олмайди.')   # табелчи ўз цехи ходимларини қўшади ва таҳрирлайди, лекин ўчирмайди
         instance = self.get_object()
         linked_user = instance.user
         linked_profile = getattr(linked_user, 'profile', None) if linked_user is not None else None
@@ -537,22 +486,16 @@ class EmployeeDetailTemplateView(generics.RetrieveUpdateDestroyAPIView):
 class EmployeeReplacementCandidatesTemplateView(APIView):
     """Ходимнинг «Ҳолати» ўзгартирилганда очиладиган ойна учун: унинг ўрнига ишлай оладиган, шу цехдаги ходимлар.
 
-    `department_id` — формада танланган цех (ходим бошқа цехга ўтказилаётган бўлиши мумкин); берилмаса — ходимнинг цехи.
-    Табелчи учун доим унинг ўз цехи."""
+    `department_id` — формада танланган цех (ходим бошқа цехга ўтказилаётган бўлиши мумкин); берилмаса — ходимнинг цехи."""
 
-    permission_classes = [IsAuthenticated, AdminOrHrOrTimekeeperManage]
+    permission_classes = [IsAuthenticated, IsAdminOrHrRole]
 
     def get(self, request, pk, *args, **kwargs):
-        employees = Employee.objects.select_related('department').filter(is_deleted=False)
-        own_department = None
-        if not is_admin_or_hr(request.user):
-            own_department = timekeeper_department(request.user)
-            employees = employees.filter(department=own_department) if own_department is not None else employees.none()
-        employee = generics.get_object_or_404(employees, pk=pk)
+        employee = generics.get_object_or_404(Employee.objects.select_related('department').filter(is_deleted=False), pk=pk)
 
         department = employee.department
         requested = request.query_params.get('department_id', '').strip()
-        if own_department is None and requested.isdigit():
+        if requested.isdigit():
             department = Department.objects.filter(pk=int(requested)).first()
         if department is None:
             return Response({'department': None, 'data': [], 'truncated': False, 'current': None})
@@ -1464,7 +1407,7 @@ class UserAccessListTemplateView(UserManagementAccessMixin, generics.GenericAPIV
         for employee in employees:
             profile = profile_map.get(employee.user_id)
             profile_role = getattr(profile, 'role', '') or ''
-            visible_role = profile_role if profile_role in {ROLE_ADMIN, ROLE_HR, ROLE_TIMEKEEPER} else None
+            visible_role = profile_role if profile_role in {ROLE_ADMIN, ROLE_HR} else None
             payload.append({
                 'id': employee.id,
                 'slug': employee.slug,
@@ -1553,7 +1496,6 @@ class UserDetailTemplateView(UserManagementAccessMixin, generics.RetrieveUpdateD
             raise PermissionDenied('Ўз ҳисобингизни ўчириб бўлмайди.')
         employee = getattr(user, 'employee', None)
         if employee is not None:
-            Timekeeper.objects.filter(employee=employee).delete()   # ҳисоб ўчса, цех табелчиси ҳам олиб ташланади
             employee.user = None
             employee.login = ''
             employee.password_hash = ''
