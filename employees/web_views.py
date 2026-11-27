@@ -16,6 +16,8 @@ from rest_framework.response import Response
 
 from .bnpzid import build_bnpzid_redirect, get_bnpzid_authorize_request
 from .dashboard_stats import build_dashboard_charts
+from .import_template import IMPORT_COLUMNS
+from .template_views import EmployeeImportExcelTemplateView
 from .models import Department, EMPLOYEE_STATUS_CHOICES, Employee, EmployeeCategory, PositionCategory, Section, ROLE_ADMIN, ROLE_CHOICES, ROLE_HR, UserProfile, WorkSchedule
 from .ordering import order_sections_by_code
 from .permissions import is_admin_or_hr
@@ -344,7 +346,12 @@ class EmployeesListView(AuthenticatedTemplateView):
         own_card_redirect = redirect_plain_user_to_own_card(request)
         if own_card_redirect is not None:
             return own_card_redirect
-        return render(request, self.template_name)
+        # Импорт ойнасидаги устунлар жадвали шаблон файл билан бир манбадан (import_template.IMPORT_COLUMNS);
+        # «Табель рақами» сарлавҳасининг ёзувлари — импортчидан (браузер сарлавҳа қаторини шу бўйича топади).
+        tabel_headers = sorted(
+            key for key, field in EmployeeImportExcelTemplateView.header_aliases.items() if field == 'tabel_number'
+        )
+        return render(request, self.template_name, {'import_columns': IMPORT_COLUMNS, 'import_tabel_headers': tabel_headers})
 
 
 class DashboardView(AuthenticatedTemplateView):

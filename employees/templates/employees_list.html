@@ -193,82 +193,116 @@
                 <p class="text-xs font-bold uppercase tracking-[0.24em] text-blue-600">Excel import</p>
                 <h3 class="mt-2 font-display text-2xl font-bold text-slate-900">Excel орқали ходимларни импорт қилиш</h3>
                 <p class="mt-2 max-w-2xl text-sm text-slate-500">
-                    .xlsx ёки .xls файлини юкланг. Агар камида битта қаторда хато бўлса, импорт тўлиқ
-                    бекор қилинади.
+                    Шаблонни юклаб олинг, ходимларни унга киритинг ва файлни юкланг. Импортдан олдин файл тўлиқ
+                    текширилади: битта қаторда хато бўлса ҳам, ҳеч ким қўшилмайди.
                 </p>
             </div>
             <button onclick="closeImportModal()"
-                class="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 text-slate-500 hover:bg-slate-50">
+                class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200 text-slate-500 hover:bg-slate-50">
                 <i class="fas fa-xmark"></i>
             </button>
         </div>
 
-        <div class="mt-6 w-full">
-            <div class="w-full rounded-[24px] border border-slate-200 bg-slate-50/60 p-5">
-                <h4 class="text-sm font-extrabold uppercase tracking-[0.2em] text-slate-500">Excel файлда нима бўлиши керак
-                </h4>
-                <div class="mt-4 grid gap-4 sm:grid-cols-2 mb-2 ">
-                    <div class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100">
-                        <p class="text-xs font-bold uppercase tracking-[0.2em] text-emerald-600">Мажбурий</p>
-                        <ul class="mt-3 space-y-2 text-sm font-semibold text-slate-700">
-                            <li>Табель рақами</li>
-                            <li>Исм</li>
-                            <li>Фамилия</li>
-                        </ul>
+        <div class="mt-6 space-y-4">
+            <div class="rounded-[24px] border border-slate-200 bg-slate-50/60 p-5">
+                <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">1-қадам</p>
+                        <h4 class="mt-1 text-base font-bold text-slate-900">Шаблонни юклаб олинг</h4>
+                        <p class="mt-1 text-sm text-slate-500">
+                            Шаблонда тайёр устунлар, рўйхатлар (цех, жинси, тоифалар, иш тартиби) ва йўриқнома бор.
+                            Ходимларни «Ходимлар» варағига 2-қатордан бошлаб киритинг.
+                        </p>
                     </div>
-                    <div class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100">
-                        <p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-600">Тавсия этилади</p>
-                        <ul class="mt-3 space-y-2 text-sm font-semibold text-slate-700">
-                            <li>Цех</li>
-                            <li>Бўлим</li>
-                            <li>Лавозим</li>
-                            <li>Ишга қабул қилинган сана</li>
-                        </ul>
-                    </div>
+                    <a id="importTemplateLink" href="/api/template/employees/import-template/"
+                        class="inline-flex shrink-0 items-center gap-2 rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-700">
+                        <i class="fas fa-file-excel"></i>
+                        Шаблонни юклаб олиш
+                    </a>
                 </div>
 
-                <div class="rounded-[24px] border border-slate-200 bg-white p-5">
-                    <h4 class="text-sm font-extrabold uppercase tracking-[0.2em] text-slate-500">Файл юклаш</h4>
-                    <input id="importExcelInput" type="file" accept=".xlsx,.xls"
-                        class="mt-4 block w-full rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-600 file:mr-3 file:rounded-xl file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:file:bg-blue-700">
-                    <div class="mt-4 rounded-[20px] border border-slate-200 bg-white p-4">
-                        <p class="text-sm font-bold text-slate-900">Ходимлар фотосуратлари</p>
-                        <p class="mt-1 text-sm text-slate-500">Мажбурий эмас. Бир нечта тасвир ёки ZIP-архивни танланг. Файл номи табель рақами билан бир хил бўлиши керак, масалан EMP-901.jpg.</p>
-                        <input id="importEmployeeImagesInput" type="file" accept="image/*,.zip" multiple
-                            class="mt-4 block w-full rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-600 file:mr-3 file:rounded-xl file:border-0 file:bg-emerald-600 file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:file:bg-emerald-700">
+                <details class="mt-4 rounded-2xl bg-white ring-1 ring-slate-100">
+                    <summary class="cursor-pointer select-none px-4 py-3 text-sm font-bold text-slate-700">
+                        Устунлар ва форматлар
+                        <span class="font-semibold text-slate-400">— қизиллари мажбурий</span>
+                    </summary>
+                    <div class="overflow-x-auto px-4 pb-4">
+                        <table class="min-w-full text-sm">
+                            <thead class="text-left text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                                <tr>
+                                    <th class="py-2 pr-4">Устун</th>
+                                    <th class="py-2 pr-4">Нима ёзилади</th>
+                                    <th class="py-2">Мисол</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                {% for column in import_columns %}
+                                <tr>
+                                    <td class="whitespace-nowrap py-2 pr-4 font-semibold {% if column.required %}text-red-700{% else %}text-slate-800{% endif %}">
+                                        {{ column.header }}{% if column.required %} *{% endif %}
+                                    </td>
+                                    <td class="py-2 pr-4 text-slate-600">{{ column.hint|default:"—" }}</td>
+                                    <td class="whitespace-nowrap py-2 font-mono text-xs text-slate-500">{{ column.example }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
                     </div>
-                    <div class="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                        Табель рақами ноёб бўлиши керак. Агар у файлда такрорланса ёки базада аллақачон мавжуд бўлса,
-                        импорт хато билан тугайди.
-                    </div>
-                    <div class="mt-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                        Бошида нол бўлган рақамли табель рақамлари учун Excel да устунни матн сифатида сақланг.
-                    </div>
-                    <div class="mt-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                        Агар фотосурат файл номи бўйича топилса, у ходимнинг асосий тасвири сифатида автоматик сақланади.
-                    </div>
-                    <div class="mt-5 flex flex-wrap gap-3">
-                        <button id="importExcelSubmitButton" onclick="submitExcelImport()"
-                            class="inline-flex items-center gap-2 rounded-2xl bg-[var(--info)] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-500/20">
-                            <i class="fas fa-cloud-arrow-up"></i>
-                            Файлни юклаш
-                        </button>
-                        <button onclick="closeImportModal()"
-                            class="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600">
-                            Бекор қилиш
-                        </button>
-                    </div>
-                    <div id="importResult" class="mt-5 hidden rounded-[24px] border border-slate-200 bg-slate-50 p-4">
-                    </div>
-                </div>
-
-
+                </details>
             </div>
 
+            <div class="rounded-[24px] border border-slate-200 bg-white p-5">
+                <p class="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">2-қадам</p>
+                <h4 class="mt-1 text-base font-bold text-slate-900">Тўлдирилган файлни танланг</h4>
+                <input id="importExcelInput" type="file" accept=".xlsx,.xls" onchange="resetImportCheck()"
+                    class="mt-4 block w-full rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-600 file:mr-3 file:rounded-xl file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:file:bg-blue-700">
+                <div class="mt-4 rounded-[20px] border border-slate-200 bg-white p-4">
+                    <p class="text-sm font-bold text-slate-900">Ходимлар фотосуратлари</p>
+                    <p class="mt-1 text-sm text-slate-500">Мажбурий эмас. Бир нечта тасвир ёки ZIP-архивни танланг. Файл номи табель рақами билан бир хил бўлиши керак, масалан 005400.jpg.</p>
+                    <input id="importEmployeeImagesInput" type="file" accept="image/*,.zip" multiple onchange="resetImportCheck()"
+                        class="mt-4 block w-full rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-600 file:mr-3 file:rounded-xl file:border-0 file:bg-emerald-600 file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:file:bg-emerald-700">
+                </div>
+                <ul class="mt-4 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
+                    <li class="rounded-2xl bg-slate-50 px-4 py-3">
+                        Табель рақами ноёб бўлсин: файлда ҳам, базада ҳам такрорланмасин.
+                    </li>
+                    <li class="rounded-2xl bg-slate-50 px-4 py-3">
+                        Саналар <span class="font-mono">КК.ОО.ЙЙЙЙ</span> кўринишида: <span class="font-mono">05.03.1990</span>.
+                    </li>
+                    <li class="rounded-2xl bg-slate-50 px-4 py-3">
+                        Табель ва телефон устунлари шаблонда матн форматида: бошидаги 0 ва узун рақам сақланади.
+                    </li>
+                    <li class="rounded-2xl bg-slate-50 px-4 py-3">
+                        Логин ва парол автоматик яратилади — импортдан кейин уларни Excel га юклаб олинг.
+                    </li>
+                </ul>
+            </div>
 
+            <div class="rounded-[24px] border border-slate-200 bg-white p-5">
+                <p class="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">3-қадам</p>
+                <h4 class="mt-1 text-base font-bold text-slate-900">Текширинг ва импорт қилинг</h4>
+                <p class="mt-1 text-sm text-slate-500">
+                    Аввал файл текширилади: хатолар қатор ва устун номи билан чиқади, янги яратиладиган цех ва бўлимлар
+                    кўрсатилади. Сўнг «Импортни бошлаш» тугмасини босинг.
+                </p>
+                <div class="mt-4 flex flex-wrap gap-3">
+                    <button id="importExcelSubmitButton" onclick="submitExcelImport()"
+                        class="inline-flex items-center gap-2 rounded-2xl bg-[var(--info)] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-500/20">
+                        <i class="fas fa-list-check"></i>
+                        Файлни текшириш
+                    </button>
+                    <button onclick="closeImportModal()"
+                        class="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600">
+                        Бекор қилиш
+                    </button>
+                </div>
+                <div id="importResult" class="mt-5 hidden rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                </div>
+            </div>
         </div>
     </div>
 </div>
+{{ import_tabel_headers|json_script:"import-tabel-headers" }}
 
 
 <div id="phoneImportModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm"
@@ -613,6 +647,21 @@
             + (rootExpanded ? nodes.map(node => renderNode(node, 1)).join('') : '');
     }
 
+    // ── Excel импорти ────────────────────────────────────────────────────────────────────────────────────
+    // 1) файл браузерда ўқилади (readExcelFile), 2) бутун файл серверда текширилади (dry_run, ҳеч нарса сақланмайди),
+    // 3) «Импортни бошлаш» — қаторлар IMPORT_BATCH_SIZE тадан юборилади: ҳар бир ходимга парол хешланади (~0,3 с),
+    // бутун файл битта сўровда юборилса, 150 тадан ортиқ қатор сервер вақт чегарасига (120 с) тушарди.
+    const IMPORT_BATCH_SIZE = 50;
+    const IMPORT_SHEET_NAME = 'Ходимлар';
+    // «Табель рақами» устунининг барча танилган ёзувлари — сервер импортчисидан (header_aliases), ягона манба.
+    const IMPORT_TABEL_HEADERS = new Set(JSON.parse(document.getElementById('import-tabel-headers').textContent));
+    const IMPORT_IMAGE_RE = /\.(jpe?g|png|webp|bmp|gif)$/i;
+    const IMPORT_SHOWN_ERRORS = 200;
+
+    let importCheck = null;          // текширувдан ўтган файл: { rows, tabelHeader, images, payload }
+    let importInProgress = false;
+    let importReport = { employees: [], errors: [] };   // юклаб олиш тугмалари учун
+
     function openImportModal() {
         const modal = document.getElementById('importModal');
         modal.classList.remove('hidden');
@@ -621,10 +670,15 @@
     }
 
     function closeImportModal() {
+        if (importInProgress) {
+            showToast('Импорт тугашини кутинг.', 'info');
+            return;
+        }
         const modal = document.getElementById('importModal');
         modal.classList.add('hidden');
         modal.classList.remove('flex');
         hideImportResult();
+        importCheck = null;
     }
 
     function hideImportResult() {
@@ -633,117 +687,178 @@
         container.innerHTML = '';
     }
 
-    function getImportErrorMessage(item) {
-        if (item?.message) {
-            return item.message;
+    // Файл ёки фото алмаштирилса, олдинги текширув эскиради.
+    function resetImportCheck() {
+        if (importInProgress) {
+            return;
+        }
+        importCheck = null;
+        hideImportResult();
+    }
+
+    // Сервер ва браузер сарлавҳани бир хил тушунсин (EmployeeImportExcelTemplateView._normalize_header).
+    function importHeaderKey(value) {
+        return String(value ?? '').trim().toLowerCase().replace(/ё/g, 'е')
+            .replace(/[^a-z0-9а-яўқғҳ]+/g, '_').replace(/^_+|_+$/g, '');
+    }
+
+    function padTwo(number) {
+        return String(number).padStart(2, '0');
+    }
+
+    // Катакнинг қиймати матн бўлиб. SheetJS нинг тайёр матни (cell.w) ишлатилмайди: у санани «1/2/90» (ой/кун)
+    // кўринишида берарди — сервер уни 1-февраль деб ўқирди, узун рақамни эса «9.98901E+11» қилиб қисқартирарди.
+    function importCellValue(cell) {
+        if (!cell || cell.v === undefined || cell.v === null || cell.t === 'z' || cell.t === 'e') {
+            return '';
+        }
+        if (cell.t === 'n') {
+            const format = String(cell.z || '');
+            if (format && XLSX.SSF.is_date(format)) {
+                const parts = XLSX.SSF.parse_date_code(cell.v);
+                if (parts && parts.y) {
+                    return `${parts.y}-${padTwo(parts.m)}-${padTwo(parts.d)}`;
+                }
+            }
+            // «00000» форматли сон: Excel бошидаги нолларни кўрсатади — табель рақами шу кўринишда олинади.
+            if (/^0+$/.test(format) && cell.w) {
+                return cell.w;
+            }
+            return Number.isInteger(cell.v) ? cell.v.toFixed(0) : String(cell.v);
+        }
+        if (cell.t === 'b') {
+            return cell.v ? 'true' : 'false';
+        }
+        if (cell.v instanceof Date) {
+            return `${cell.v.getUTCFullYear()}-${padTwo(cell.v.getUTCMonth() + 1)}-${padTwo(cell.v.getUTCDate())}`;
+        }
+        return String(cell.v);
+    }
+
+    // «Ходимлар» варағи (бўлмаса — биринчи варақ). Сарлавҳа — «Табель рақами» бор биринчи қатор: тепасида файл
+    // номи ёки изоҳ қаторлари бўлиши мумкин. Ҳар бир қаторга Excel даги рақами (__row) қўшилади — хатолар шу рақам билан.
+    async function readExcelFile(file) {
+        await loadXlsx();
+        let workbook;
+        try {
+            workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: false, cellNF: true });
+        } catch (readError) {
+            throw new Error('Excel файлни ўқиб бўлмади. Файл .xlsx ёки .xls эканини текширинг.');
+        }
+        const sheetName = workbook.SheetNames.find(name => name.trim() === IMPORT_SHEET_NAME) || workbook.SheetNames[0];
+        if (!sheetName) {
+            throw new Error('Файлда варақ йўқ.');
+        }
+        const sheet = workbook.Sheets[sheetName];
+        if (!sheet || !sheet['!ref']) {
+            return { rows: [], tabelHeader: null, sheetName };
         }
 
-        if (item?.errors && typeof item.errors === 'object') {
-            const firstFieldErrors = Object.values(item.errors).find(value => Array.isArray(value) && value.length);
-            if (firstFieldErrors) {
-                return firstFieldErrors[0];
+        const range = XLSX.utils.decode_range(sheet['!ref']);
+        const cellAt = sheet['!data']
+            ? (r, c) => (sheet['!data'][r] || [])[c]
+            : (r, c) => sheet[XLSX.utils.encode_cell({ r, c })];
+
+        let headerRow = range.s.r;
+        search:
+        for (let r = range.s.r; r <= Math.min(range.e.r, range.s.r + 19); r++) {
+            for (let c = range.s.c; c <= range.e.c; c++) {
+                if (IMPORT_TABEL_HEADERS.has(importHeaderKey(importCellValue(cellAt(r, c))))) {
+                    headerRow = r;
+                    break search;
+                }
             }
         }
 
-        return item?.tabel_number || 'Текширув хатоси';
+        const headers = [];
+        const usedHeaders = new Set();
+        for (let c = range.s.c; c <= range.e.c; c++) {
+            let header = importCellValue(cellAt(headerRow, c)).trim();
+            if (header && usedHeaders.has(header)) {
+                let suffix = 2;
+                while (usedHeaders.has(`${header}_${suffix}`)) suffix++;
+                header = `${header}_${suffix}`;
+            }
+            if (header) usedHeaders.add(header);
+            headers.push(header || null);
+        }
+        const tabelHeader = headers.find(header => header && IMPORT_TABEL_HEADERS.has(importHeaderKey(header))) || null;
+
+        const rows = [];
+        for (let r = headerRow + 1; r <= range.e.r; r++) {
+            const row = {};
+            let hasValue = false;
+            headers.forEach((header, index) => {
+                if (!header) return;
+                const value = importCellValue(cellAt(r, range.s.c + index));
+                row[header] = value;
+                if (value.trim()) hasValue = true;
+            });
+            if (hasValue) {
+                row.__row = r + 1;
+                rows.push(row);
+            }
+        }
+        return { rows, tabelHeader, sheetName };
     }
 
-    function renderImportResult(payload, type = 'success') {
-        const container = document.getElementById('importResult');
-        const errors = Array.isArray(payload?.errors) ? payload.errors : [];
-        const employees = Array.isArray(payload?.employees) ? payload.employees : [];
-        const rows = errors.slice(0, 8).map(item => {
-            const fields = Array.isArray(item?.fields) && item.fields.length
-                ? `<div class="mt-2 text-xs font-semibold text-red-600">Майдонлар: ${escapeHtml(item.fields.join(', '))}</div>`
-                : '';
-            const rowsInfo = Array.isArray(item?.rows) && item.rows.length
-                ? `<div class="mt-2 text-xs font-semibold text-red-600">Қаторлар: ${escapeHtml(item.rows.join(', '))}</div>`
-                : '';
-            return `
-                <div class="rounded-2xl border border-slate-200 bg-white p-3">
-                    <div class="text-sm font-bold text-slate-900">Қатор ${escapeHtml(item.row || '—')}</div>
-                    <div class="mt-1 text-sm text-slate-600">${escapeHtml(getImportErrorMessage(item))}</div>
-                    ${fields}
-                    ${rowsInfo}
-                </div>
-            `;
-        }).join('');
-
-        const palette = type === 'success'
-            ? 'border-emerald-200 bg-emerald-50'
-            : 'border-red-200 bg-red-50';
-
-        const generatedCredentials = type === 'success' && employees.length
-            ? `
-                <div class="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                    <div class="border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Яратилган рухсатлар</div>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full text-sm">
-                            <thead class="bg-white text-left text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
-                                <tr>
-                                    <th class="px-4 py-3">Табель</th>
-                                    <th class="px-4 py-3">Ходим</th>
-                                    <th class="px-4 py-3">Логин</th>
-                                    <th class="px-4 py-3">Парол</th>
-                                    <th class="px-4 py-3">Рол</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-100 bg-white">
-                                ${employees.map(item => `
-                                    <tr>
-                                        <td class="px-4 py-3 font-semibold text-slate-700">${escapeHtml(item.tabel_number || '—')}</td>
-                                        <td class="px-4 py-3 text-slate-600">${escapeHtml(item.full_name || '—')}</td>
-                                        <td class="px-4 py-3 font-mono text-slate-900">${escapeHtml(item.login || '—')}</td>
-                                        <td class="px-4 py-3 font-mono text-slate-900">${escapeHtml(item.generated_password || '—')}</td>
-                                        <td class="px-4 py-3 text-slate-600">${escapeHtml(item.role || 'user')}</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            `
-            : '';
-
-        container.className = `mt-5 rounded-[24px] border p-4 ${palette}`;
-        container.innerHTML = `
-            <div class="flex items-start gap-3">
-                <div class="mt-0.5 text-lg ${type === 'success' ? 'text-emerald-600' : 'text-red-600'}">
-                    <i class="fas ${type === 'success' ? 'fa-circle-check' : 'fa-circle-exclamation'}"></i>
-                </div>
-                <div class="min-w-0 flex-1">
-                    <div class="text-sm font-bold text-slate-900">${escapeHtml(payload?.message || '')}</div>
-                    ${payload?.created_count ? `<div class="mt-1 text-sm text-slate-600">Қўшилган ходимлар: ${escapeHtml(payload.created_count)}</div>` : ''}
-                    ${payload?.imported_with_images ? `<div class="mt-1 text-sm text-slate-600">Бириктирилган фотосуратлар: ${escapeHtml(payload.imported_with_images)}</div>` : ''}
-                    ${generatedCredentials}
-                    ${errors.length ? `<div class="mt-4 grid gap-3">${rows}</div>` : ''}
-                    ${errors.length > 8 ? `<div class="mt-3 text-xs font-semibold text-slate-500">Дастлабки 8 та хато кўрсатилган, жами: ${escapeHtml(errors.length)}.</div>` : ''}
-                </div>
-            </div>
-        `;
-        container.classList.remove('hidden');
+    // ZIP ичидаги ном UTF-8 бўлса-ю, latin1 деб ўқилган бўлса («ÐÑ…»), асл кўринишига қайтарилади.
+    function fixArchiveName(name) {
+        try {
+            return decodeURIComponent(escape(name));
+        } catch (error) {
+            return name;
+        }
     }
 
-    function showImportErrorToasts(payload) {
-        const errors = Array.isArray(payload?.errors) ? payload.errors : [];
-        const messages = [];
+    function isArchiveJunk(path) {
+        const normalized = String(path).replace(/\\/g, '/');
+        const baseName = normalized.split('/').pop();
+        return !baseName || baseName.startsWith('\u0001') || baseName.startsWith('.')
+            || normalized.includes('__MACOSX/') || ['thumbs.db', 'desktop.ini'].includes(baseName.toLowerCase());
+    }
 
-        if (payload?.message) {
-            messages.push(payload.message);
+    // Фотосуратлар (алоҳида файллар ва ZIP ичидагилари): табель рақами -> файл. ZIP браузерда очилади, шунда ҳар
+    // бир импорт сўрови фақат ўз қаторларининг фотосини юборади (илгари ҳамма фото битта сўровда — 30 МБ чегара).
+    async function collectImportImages(fileList) {
+        const images = new Map();
+        const names = [];
+        const add = (fileName, blob) => {
+            const baseName = String(fileName).replace(/\\/g, '/').split('/').pop().trim();
+            if (!baseName || isArchiveJunk(fileName)) return;
+            names.push(baseName);
+            const match = baseName.match(/^(.*)(\.[^.]+)$/);
+            if (!match || !IMPORT_IMAGE_RE.test(baseName)) return;
+            const key = match[1].trim();
+            if (key && !images.has(key)) {
+                images.set(key, { blob, name: `${key}${match[2].toLowerCase()}` });
+            }
+        };
+
+        for (const file of Array.from(fileList || [])) {
+            if (!/\.zip$/i.test(file.name)) {
+                add(file.name, file);
+                continue;
+            }
+            await loadXlsx();
+            let archive;
+            try {
+                archive = XLSX.CFB.read(new Uint8Array(await file.arrayBuffer()), { type: 'array' });
+            } catch (zipError) {
+                throw new Error(`${file.name} файли тўғри ZIP-архив эмас.`);
+            }
+            archive.FileIndex.forEach((entry, index) => {
+                if (entry.type !== 2 || !entry.content || !entry.content.length) return;
+                const path = fixArchiveName(archive.FullPaths[index] || entry.name);
+                const content = entry.content instanceof Uint8Array ? entry.content : Uint8Array.from(entry.content);
+                add(path, new Blob([content]));
+            });
         }
+        return { images, names };
+    }
 
-        errors.slice(0, 3).forEach(item => {
-            const rowLabel = item?.row ? `Қатор ${item.row}: ` : '';
-            messages.push(`${rowLabel}${getImportErrorMessage(item)}`);
-        });
-
-        if (!messages.length) {
-            messages.push('Импорт бажарилмади. Маълумотларни текшириб, қайта уриниб кўринг.');
-        }
-
-        messages.forEach((message, index) => {
-            window.setTimeout(() => showToast(message, 'error'), index * 3400);
-        });
+    function importRowTabel(row, tabelHeader) {
+        return tabelHeader ? String(row[tabelHeader] ?? '').replace(/\s+/g, ' ').trim() : '';
     }
 
     async function submitExcelImport() {
@@ -756,70 +871,289 @@
             showToast('Импорт учун Excel файлни танланг.', 'info');
             return;
         }
+        if (importInProgress) {
+            return;
+        }
 
+        importCheck = null;
+        hideImportResult();
         try {
-            setLoading(button, true, 'Импорт қилинмоқда...');
-            const rows = await readExcelFile(file);
+            setLoading(button, true, 'Текширилмоқда...');
+            const { rows, tabelHeader } = await readExcelFile(file);
             if (!rows.length) {
-                throw new Error('Файл бўш. Камида битта қаторни тўлдиринг.');
+                throw new Error('Файл бўш. «Ходимлар» варағида сарлавҳадан кейин камида битта қаторни тўлдиринг.');
             }
-
-            const formData = new FormData();
-            formData.append('file_name', file.name);
-            formData.append('rows', JSON.stringify(rows));
-            Array.from(imageInput?.files || []).forEach(imageFile => {
-                formData.append('images', imageFile);
-            });
+            const { images, names } = await collectImportImages(imageInput?.files);
 
             const payload = await apiRequest('/template/employees/import-excel/', {
                 method: 'POST',
-                body: formData,
+                body: JSON.stringify({ dry_run: true, rows, image_names: names }),
             });
-
-            renderImportResult(payload, 'success');
-            showToast(payload.message || 'Импорт якунланди');
-            input.value = '';
-            if (imageInput) {
-                imageInput.value = '';
-            }
-            await Promise.all([loadStats(), loadDirectoryData(), loadEmployees(1)]);
+            importCheck = { rows, tabelHeader, images, payload };
+            renderImportCheck(payload);
         } catch (error) {
             const responsePayload = error.responseData || { message: error.message };
-            hideImportResult();
-            showImportErrorToasts(responsePayload);
+            if (!error.responseData) {
+                showToast(error.message, 'error');   // apiRequest хатони ўзи кўрсатган; бу — браузердаги хато
+            }
+            renderImportErrors(responsePayload);
         } finally {
             setLoading(button, false);
         }
     }
 
-    async function readExcelFile(file) {
-        await loadXlsx();
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onerror = () => reject(new Error('Excel файлни ўқиб бўлмади.'));
-            reader.onload = event => {
-                try {
-                    const workbook = XLSX.read(event.target.result, { type: 'array', cellDates: true });
-                    const firstSheetName = workbook.SheetNames[0];
-                    if (!firstSheetName) {
-                        reject(new Error('Файлда мавжуд варақлар йўқ.'));
-                        return;
-                    }
+    function importListHtml(title, items, tone) {
+        if (!items.length) return '';
+        const shown = items.slice(0, 30).map(item => `<li>${escapeHtml(item)}</li>`).join('');
+        const more = items.length > 30 ? `<li class="font-semibold">ва яна ${escapeHtml(items.length - 30)} та</li>` : '';
+        const palette = tone === 'amber' ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-700';
+        return `
+            <div class="mt-3 rounded-2xl px-4 py-3 text-sm ${palette}">
+                <div class="font-bold">${escapeHtml(title)}</div>
+                <ul class="mt-1 list-disc space-y-0.5 pl-5">${shown}${more}</ul>
+            </div>`;
+    }
 
-                    const sheet = workbook.Sheets[firstSheetName];
-                    const rows = XLSX.utils.sheet_to_json(sheet, {
-                        defval: '',
-                        raw: false,
-                        dateNF: 'yyyy-mm-dd',
-                        blankrows: false,
-                    });
-                    resolve(rows);
-                } catch (readError) {
-                    reject(new Error('Excel файлни қайта ишлаб бўлмади. Жадвал тузилмасини текширинг.'));
+    function renderImportCheck(payload) {
+        const container = document.getElementById('importResult');
+        const departments = payload.new_departments || [];
+        const sections = (payload.new_sections || []).map(item => `${item.department} / ${item.section}`);
+        const warnings = payload.warnings || [];
+        container.className = 'mt-5 rounded-[24px] border border-emerald-200 bg-emerald-50 p-4';
+        container.innerHTML = `
+            <div class="flex items-start gap-3">
+                <div class="mt-0.5 text-lg text-emerald-600"><i class="fas fa-circle-check"></i></div>
+                <div class="min-w-0 flex-1">
+                    <div class="text-sm font-bold text-slate-900">${escapeHtml(payload.message || '')}</div>
+                    ${payload.images_matched ? `<div class="mt-1 text-sm text-slate-600">Бириктириладиган фотосуратлар: ${escapeHtml(payload.images_matched)}</div>` : ''}
+                    ${importListHtml('Бу цехлар базада йўқ — импортда янги цех яратилади. Ном хато ёзилган бўлса, файлни тузатинг:', departments, 'amber')}
+                    ${importListHtml('Бу бўлимлар базада йўқ — импортда яратилади:', sections, 'amber')}
+                    ${importListHtml('Эътибор беринг:', warnings, 'slate')}
+                    <div class="mt-4 flex flex-wrap gap-3">
+                        <button id="importStartButton" onclick="startExcelImport()"
+                            class="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-700">
+                            <i class="fas fa-cloud-arrow-up"></i>
+                            Импортни бошлаш (${escapeHtml(payload.total_rows)} та ходим)
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+        container.classList.remove('hidden');
+    }
+
+    function renderImportProgress(done, total) {
+        const container = document.getElementById('importResult');
+        const percent = total ? Math.round(done * 100 / total) : 0;
+        container.className = 'mt-5 rounded-[24px] border border-blue-200 bg-blue-50 p-4';
+        container.innerHTML = `
+            <div class="text-sm font-bold text-slate-900">Импорт қилинмоқда: ${escapeHtml(done)} / ${escapeHtml(total)}</div>
+            <div class="mt-3 h-2 overflow-hidden rounded-full bg-blue-100">
+                <div class="h-2 rounded-full bg-[var(--info)] transition-all" style="width: ${percent}%"></div>
+            </div>
+            <div class="mt-2 text-xs text-slate-500">Ойнани ёпманг: ҳар бир ходимга логин ва парол яратилмоқда.</div>`;
+        container.classList.remove('hidden');
+    }
+
+    async function startExcelImport() {
+        if (!importCheck || importInProgress) {
+            return;
+        }
+        const { rows, tabelHeader, images } = importCheck;
+        const submitButton = document.getElementById('importExcelSubmitButton');
+        const created = [];
+        const warnings = [];
+        const createdDepartments = [];
+        const createdSections = [];
+        let withImages = 0;
+        let failure = null;
+
+        importInProgress = true;
+        submitButton.disabled = true;
+        renderImportProgress(0, rows.length);
+        try {
+            for (let start = 0; start < rows.length; start += IMPORT_BATCH_SIZE) {
+                const batch = rows.slice(start, start + IMPORT_BATCH_SIZE);
+                const formData = new FormData();
+                formData.append('rows', JSON.stringify(batch));
+                batch.forEach(row => {
+                    const image = images.get(importRowTabel(row, tabelHeader));
+                    if (image) formData.append('images', image.blob, image.name);
+                });
+                try {
+                    const payload = await apiRequest('/template/employees/import-excel/', { method: 'POST', body: formData });
+                    created.push(...(payload.employees || []));
+                    warnings.push(...(payload.warnings || []));
+                    createdDepartments.push(...(payload.created_departments || []));
+                    createdSections.push(...(payload.created_sections || []).map(item => `${item.department} / ${item.section}`));
+                    withImages += payload.imported_with_images || 0;
+                } catch (error) {
+                    failure = error.responseData || { message: error.message };
+                    break;
                 }
-            };
-            reader.readAsArrayBuffer(file);
-        });
+                renderImportProgress(Math.min(start + batch.length, rows.length), rows.length);
+            }
+        } finally {
+            importInProgress = false;
+            submitButton.disabled = false;
+            importCheck = null;
+        }
+
+        importReport = { employees: created, errors: failure?.errors || [] };
+        renderImportFinished({ created, total: rows.length, warnings, createdDepartments, createdSections, withImages, failure });
+        if (!failure) {
+            document.getElementById('importExcelInput').value = '';
+            document.getElementById('importEmployeeImagesInput').value = '';
+            showToast(`Импорт якунланди. Қўшилган ходимлар: ${created.length}.`);
+        }
+        if (created.length) {
+            await Promise.all([loadStats(), loadDirectoryData(), loadEmployees(1)]);
+        }
+    }
+
+    function importCredentialsHtml(employees) {
+        if (!employees.length) return '';
+        return `
+            <div class="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3">
+                    <span class="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Яратилган логин ва пароллар</span>
+                    <button onclick="downloadImportCredentials()"
+                        class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700">
+                        <i class="fas fa-file-arrow-down"></i>
+                        Excel га юклаб олиш
+                    </button>
+                </div>
+                <div class="px-4 py-2 text-xs font-semibold text-amber-700">Пароллар қайта кўрсатилмайди: ойнани ёпишдан олдин юклаб олинг.</div>
+                <div class="max-h-72 overflow-auto">
+                    <table class="min-w-full text-sm">
+                        <thead class="sticky top-0 bg-white text-left text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                            <tr>
+                                <th class="px-4 py-3">Табель</th>
+                                <th class="px-4 py-3">Ходим</th>
+                                <th class="px-4 py-3">Логин</th>
+                                <th class="px-4 py-3">Парол</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 bg-white">
+                            ${employees.map(item => `
+                                <tr>
+                                    <td class="px-4 py-2 font-semibold text-slate-700">${escapeHtml(item.tabel_number || '—')}</td>
+                                    <td class="px-4 py-2 text-slate-600">${escapeHtml(item.full_name || '—')}</td>
+                                    <td class="px-4 py-2 font-mono text-slate-900">${escapeHtml(item.login || '—')}</td>
+                                    <td class="px-4 py-2 font-mono text-slate-900">${escapeHtml(item.generated_password || '—')}</td>
+                                </tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>`;
+    }
+
+    function renderImportFinished({ created, total, warnings, createdDepartments, createdSections, withImages, failure }) {
+        const container = document.getElementById('importResult');
+        const ok = !failure;
+        const title = ok
+            ? `Импорт якунланди. Қўшилган ходимлар: ${created.length}.`
+            : `Импорт тўхтади: ${created.length} та ходим қўшилди, қолган ${total - created.length} таси қўшилмади.`;
+        container.className = `mt-5 rounded-[24px] border p-4 ${ok ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}`;
+        container.innerHTML = `
+            <div class="flex items-start gap-3">
+                <div class="mt-0.5 text-lg ${ok ? 'text-emerald-600' : 'text-red-600'}">
+                    <i class="fas ${ok ? 'fa-circle-check' : 'fa-circle-exclamation'}"></i>
+                </div>
+                <div class="min-w-0 flex-1">
+                    <div class="text-sm font-bold text-slate-900">${escapeHtml(title)}</div>
+                    ${withImages ? `<div class="mt-1 text-sm text-slate-600">Бириктирилган фотосуратлар: ${escapeHtml(withImages)}</div>` : ''}
+                    ${importListHtml('Янги цехлар яратилди:', createdDepartments, 'slate')}
+                    ${importListHtml('Янги бўлимлар яратилди:', createdSections, 'slate')}
+                    ${importListHtml('Эътибор беринг:', warnings, 'amber')}
+                    ${failure ? importErrorsHtml(failure) : ''}
+                    ${importCredentialsHtml(created)}
+                </div>
+            </div>`;
+        container.classList.remove('hidden');
+    }
+
+    function importErrorLabel(item) {
+        return [
+            item?.row ? `Қатор ${item.row}` : '',
+            item?.tabel_number ? `табель ${item.tabel_number}` : '',
+            item?.column || '',
+        ].filter(Boolean).join(' · ');
+    }
+
+    function importErrorsHtml(payload) {
+        const errors = Array.isArray(payload?.errors) ? payload.errors : [];
+        const total = payload?.error_count || errors.length;
+        const rows = errors.slice(0, IMPORT_SHOWN_ERRORS).map(item => `
+            <li class="rounded-xl border border-red-100 bg-white px-3 py-2">
+                <div class="text-xs font-bold text-red-700">${escapeHtml(importErrorLabel(item) || 'Файл')}</div>
+                <div class="mt-0.5 text-sm text-slate-700">${escapeHtml(item?.message || 'Текширув хатоси')}</div>
+            </li>`).join('');
+        const more = total > Math.min(errors.length, IMPORT_SHOWN_ERRORS)
+            ? `<div class="mt-2 text-xs font-semibold text-slate-500">Жами ${escapeHtml(total)} та хато, дастлабки ${escapeHtml(Math.min(errors.length, IMPORT_SHOWN_ERRORS))} таси кўрсатилган.</div>`
+            : '';
+        return `
+            ${payload?.message ? `<div class="mt-2 text-sm text-slate-700">${escapeHtml(payload.message)}</div>` : ''}
+            ${errors.length ? `
+                <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+                    <span class="text-xs font-bold uppercase tracking-[0.18em] text-red-700">Хатолар (${escapeHtml(total)})</span>
+                    <button onclick="downloadImportErrors()"
+                        class="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-50">
+                        <i class="fas fa-file-arrow-down"></i>
+                        Хатолар рўйхатини юклаб олиш
+                    </button>
+                </div>
+                <ul class="mt-2 grid max-h-80 gap-2 overflow-auto">${rows}</ul>${more}` : ''}`;
+    }
+
+    function renderImportErrors(payload) {
+        importReport = { employees: [], errors: Array.isArray(payload?.errors) ? payload.errors : [] };
+        const container = document.getElementById('importResult');
+        container.className = 'mt-5 rounded-[24px] border border-red-200 bg-red-50 p-4';
+        container.innerHTML = `
+            <div class="flex items-start gap-3">
+                <div class="mt-0.5 text-lg text-red-600"><i class="fas fa-circle-exclamation"></i></div>
+                <div class="min-w-0 flex-1">
+                    <div class="text-sm font-bold text-slate-900">Файл импорт қилинмади — ҳеч ким қўшилмади.</div>
+                    ${importErrorsHtml(payload)}
+                </div>
+            </div>`;
+        container.classList.remove('hidden');
+    }
+
+    function importStamp() {
+        const now = new Date();
+        return `${now.getFullYear()}-${padTwo(now.getMonth() + 1)}-${padTwo(now.getDate())}_${padTwo(now.getHours())}-${padTwo(now.getMinutes())}`;
+    }
+
+    function writeImportSheet(rows, widths, sheetName, fileName) {
+        const ws = XLSX.utils.json_to_sheet(rows);
+        ws['!cols'] = widths.map(wch => ({ wch }));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        XLSX.writeFile(wb, fileName);
+    }
+
+    async function downloadImportCredentials() {
+        if (!importReport.employees.length) return;
+        await loadXlsx();
+        writeImportSheet(importReport.employees.map((item, index) => ({
+            '№': index + 1,
+            'Табель рақами': item.tabel_number || '',
+            'Ф.И.Ш.': item.full_name || '',
+            'Логин': item.login || '',
+            'Парол': item.generated_password || '',
+        })), [5, 16, 40, 30, 14], 'Логин ва пароллар', `импорт_логин_парол_${importStamp()}.xlsx`);
+    }
+
+    async function downloadImportErrors() {
+        if (!importReport.errors.length) return;
+        await loadXlsx();
+        writeImportSheet(importReport.errors.map(item => ({
+            'Қатор': item.row || '',
+            'Табель рақами': item.tabel_number || '',
+            'Устун': item.column || '',
+            'Хато': item.message || '',
+        })), [8, 16, 26, 100], 'Хатолар', `импорт_хатолари_${importStamp()}.xlsx`);
     }
 
     function openPhoneImportModal() {
